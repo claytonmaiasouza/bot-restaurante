@@ -7,7 +7,7 @@ WORKDIR /app
 
 # Copia manifesto de dependências primeiro (cache de camadas)
 COPY package*.json ./
-RUN npm ci --omit=dev
+RUN npm install --omit=dev
 
 # Copia schema do Prisma e gera o client
 COPY prisma ./prisma/

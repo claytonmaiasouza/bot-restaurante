@@ -46,6 +46,7 @@ services:
       LOG_BAILEYS: error
       DEL_INSTANCE: "false"
       DATABASE_ENABLED: "true"
+      DATABASE_PROVIDER: postgresql
       DATABASE_CONNECTION_URI: postgresql://${DB_USER:-user}:${DB_PASSWORD:-pass}@postgres:5432/${DB_NAME:-botrestaurante}
       DATABASE_CONNECTION_CLIENT_NAME: evolution_api
       DATABASE_SAVE_DATA_INSTANCE: "true"

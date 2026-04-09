@@ -1,0 +1,23 @@
+{
+  "name": "bot-restaurante-cms",
+  "version": "0.1.0",
+  "description": "CMS do Bot Restaurante — Strapi v5",
+  "private": true,
+  "scripts": {
+    "develop": "strapi develop",
+    "start": "strapi start",
+    "build": "strapi build",
+    "strapi": "strapi",
+    "seed": "node scripts/seed.js"
+  },
+  "dependencies": {
+    "@strapi/strapi": "5.14.0",
+    "@strapi/plugin-users-permissions": "5.14.0",
+    "@strapi/plugin-i18n": "5.14.0",
+    "better-sqlite3": "9.4.3"
+  },
+  "engines": {
+    "node": ">=18.0.0 <=22.x.x",
+    "npm": ">=6.0.0"
+  }
+}

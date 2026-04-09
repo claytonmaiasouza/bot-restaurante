@@ -1,0 +1,39 @@
+{
+  "kind": "collectionType",
+  "collectionName": "categorias",
+  "info": {
+    "singularName": "categoria",
+    "pluralName": "categorias",
+    "displayName": "Categoria",
+    "description": "Categoria de produtos do cardápio"
+  },
+  "options": {
+    "draftAndPublish": false
+  },
+  "attributes": {
+    "nome": {
+      "type": "string",
+      "required": true
+    },
+    "emoji": {
+      "type": "string",
+      "comment": "Emoji representativo, ex: 🍕"
+    },
+    "ordem": {
+      "type": "integer",
+      "default": 0
+    },
+    "cardapio": {
+      "type": "relation",
+      "relation": "manyToOne",
+      "target": "api::cardapio.cardapio",
+      "inversedBy": "categorias"
+    },
+    "produtos": {
+      "type": "relation",
+      "relation": "oneToMany",
+      "target": "api::produto.produto",
+      "mappedBy": "categoria"
+    }
+  }
+}

@@ -1,0 +1,54 @@
+{
+  "kind": "collectionType",
+  "collectionName": "restaurantes",
+  "info": {
+    "singularName": "restaurante",
+    "pluralName": "restaurantes",
+    "displayName": "Restaurante",
+    "description": "Restaurante cliente do SaaS"
+  },
+  "options": {
+    "draftAndPublish": false
+  },
+  "attributes": {
+    "nome": {
+      "type": "string",
+      "required": true
+    },
+    "slugWhatsapp": {
+      "type": "string",
+      "unique": true,
+      "required": true,
+      "comment": "Número WhatsApp com DDI, ex: 5511999999999"
+    },
+    "donoWhatsapp": {
+      "type": "string",
+      "required": true,
+      "comment": "Número que recebe notificação de novos pedidos"
+    },
+    "descricao": {
+      "type": "text"
+    },
+    "ativo": {
+      "type": "boolean",
+      "default": true
+    },
+    "plano": {
+      "type": "enumeration",
+      "enum": ["basico", "profissional", "premium"],
+      "default": "basico"
+    },
+    "dataVencimento": {
+      "type": "date"
+    },
+    "logoUrl": {
+      "type": "string"
+    },
+    "cardapios": {
+      "type": "relation",
+      "relation": "oneToMany",
+      "target": "api::cardapio.cardapio",
+      "mappedBy": "restaurante"
+    }
+  }
+}

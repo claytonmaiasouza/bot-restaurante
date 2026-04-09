@@ -1,0 +1,43 @@
+{
+  "kind": "collectionType",
+  "collectionName": "produtos",
+  "info": {
+    "singularName": "produto",
+    "pluralName": "produtos",
+    "displayName": "Produto",
+    "description": "Item do cardápio"
+  },
+  "options": {
+    "draftAndPublish": false
+  },
+  "attributes": {
+    "nome": {
+      "type": "string",
+      "required": true
+    },
+    "descricao": {
+      "type": "text"
+    },
+    "preco": {
+      "type": "decimal",
+      "required": true
+    },
+    "emoji": {
+      "type": "string"
+    },
+    "disponivel": {
+      "type": "boolean",
+      "default": true
+    },
+    "destaque": {
+      "type": "boolean",
+      "default": false
+    },
+    "categoria": {
+      "type": "relation",
+      "relation": "manyToOne",
+      "target": "api::categoria.categoria",
+      "inversedBy": "produtos"
+    }
+  }
+}

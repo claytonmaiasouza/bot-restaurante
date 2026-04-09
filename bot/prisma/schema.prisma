@@ -1,0 +1,73 @@
+// This is your Prisma schema file,
+// learn more about it in the docs: https://pris.ly/d/prisma-schema
+
+generator client {
+  provider = "prisma-client-js"
+}
+
+datasource db {
+  provider = "postgresql"
+  url      = env("DATABASE_URL")
+}
+
+model Restaurante {
+  id           String   @id @default(uuid())
+  nome         String
+  slugWhatsapp String   @unique // número WhatsApp deste restaurante
+  donoWhatsapp String // número que recebe os pedidos
+  strapiId     Int      @unique // ID no Strapi
+  ativo        Boolean  @default(true)
+  sessoes      Sessao[]
+  pedidos      Pedido[]
+  createdAt    DateTime @default(now())
+}
+
+model Sessao {
+  id              String      @id @default(uuid())
+  clienteNumero   String // número WhatsApp do cliente
+  clienteNome     String?
+  restauranteId   String
+  restaurante     Restaurante @relation(fields: [restauranteId], references: [id])
+  estado          String      @default("INICIO")
+  // estados: INICIO, VENDO_CARDAPIO, ADICIONANDO_ITEM, CONFIRMANDO_PEDIDO, AGUARDANDO_LOCALIZACAO, FINALIZADO
+  carrinho        Json        @default("[]")
+  mensagens       Mensagem[]
+  pedido          Pedido?
+  ultimaAtividade DateTime    @default(now())
+  createdAt       DateTime    @default(now())
+}
+
+model Mensagem {
+  id        String   @id @default(uuid())
+  sessaoId  String
+  sessao    Sessao   @relation(fields: [sessaoId], references: [id])
+  role      String // "cliente" ou "bot"
+  conteudo  String
+  createdAt DateTime @default(now())
+}
+
+model Pedido {
+  id            String      @id @default(uuid())
+  sessaoId      String      @unique
+  sessao        Sessao      @relation(fields: [sessaoId], references: [id])
+  restauranteId String
+  restaurante   Restaurante @relation(fields: [restauranteId], references: [id])
+  clienteNumero String
+  clienteNome   String?
+  itens         Json // [{nome, preco, quantidade}]
+  total         Float
+  localizacao   String? // link Google Maps ou texto do endereço
+  status        String      @default("NOVO") // NOVO, CONFIRMADO, CANCELADO
+  createdAt     DateTime    @default(now())
+}
+
+model ClienteFidelidade {
+  id           String    @id @default(uuid())
+  numero       String    @unique // WhatsApp do cliente
+  nome         String?
+  totalPedidos Int       @default(0)
+  totalGasto   Float     @default(0)
+  ultimoPedido DateTime?
+  restaurantes Json      @default("[]") // histórico por restaurante
+  createdAt    DateTime  @default(now())
+}

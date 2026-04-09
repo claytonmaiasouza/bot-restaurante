@@ -1,0 +1,35 @@
+{
+  "kind": "collectionType",
+  "collectionName": "cardapios",
+  "info": {
+    "singularName": "cardapio",
+    "pluralName": "cardapios",
+    "displayName": "Cardápio",
+    "description": "Cardápio de um restaurante"
+  },
+  "options": {
+    "draftAndPublish": false
+  },
+  "attributes": {
+    "nome": {
+      "type": "string",
+      "required": true
+    },
+    "ativo": {
+      "type": "boolean",
+      "default": true
+    },
+    "restaurante": {
+      "type": "relation",
+      "relation": "manyToOne",
+      "target": "api::restaurante.restaurante",
+      "inversedBy": "cardapios"
+    },
+    "categorias": {
+      "type": "relation",
+      "relation": "oneToMany",
+      "target": "api::categoria.categoria",
+      "mappedBy": "cardapio"
+    }
+  }
+}

@@ -1,0 +1,35 @@
+# Credenciais — NUNCA commitar
+.env
+.env.production
+bot/.env
+strapi/.env
+
+# Dependências
+node_modules/
+bot/node_modules/
+strapi/node_modules/
+
+# Build do Strapi
+strapi/.cache/
+strapi/build/
+strapi/.tmp/
+
+# Banco SQLite do Strapi
+strapi/.tmp/data.db
+
+# Logs
+logs/
+*.log
+bot/logs/
+
+# Prisma
+bot/prisma/migrations/
+
+# Sistema operacional
+.DS_Store
+Thumbs.db
+
+# Editor
+.vscode/
+.idea/
+*.swp

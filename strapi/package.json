@@ -11,10 +11,10 @@
     "seed": "node scripts/seed.js"
   },
   "dependencies": {
-    "@strapi/strapi": "5.14.0",
-    "@strapi/plugin-users-permissions": "5.14.0",
-    "@strapi/plugin-i18n": "5.14.0",
-    "better-sqlite3": "9.4.3"
+    "@strapi/strapi": "^5.0.0",
+    "@strapi/plugin-users-permissions": "^5.0.0",
+    "@strapi/plugin-i18n": "^5.0.0",
+    "better-sqlite3": "^9.4.3"
   },
   "engines": {
     "node": ">=18.0.0 <=22.x.x",

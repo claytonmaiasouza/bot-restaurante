@@ -1,8 +1,16 @@
-const Anthropic = require("@anthropic-ai/sdk");
+const axios = require("axios");
 
-const client = new Anthropic({ apiKey: process.env.ANTHROPIC_API_KEY });
+const MODEL = "anthropic/claude-sonnet-4-5";
 
-const MODEL = "claude-sonnet-4-5";
+const openRouterClient = axios.create({
+  baseURL: "https://openrouter.ai/api/v1",
+  headers: {
+    Authorization: `Bearer ${process.env.OPENROUTER_API_KEY}`,
+    "Content-Type": "application/json",
+    "HTTP-Referer": process.env.BOT_PUBLIC_URL || "https://bot-restaurante.app",
+    "X-Title": "Bot Restaurante",
+  },
+});
 
 // ── Monta system prompt dinâmico ─────────────────────────────────────────────
 function montarSystemPrompt(restaurante, cardapio) {
@@ -55,15 +63,11 @@ Ao final de CADA resposta, inclua obrigatoriamente um bloco JSON no seguinte for
 - "pedidoPronto" deve ser true APENAS quando o cliente fornecer o endereço/localização`;
 }
 
-// ── Extrai o JSON estruturado da resposta do Claude ──────────────────────────
+// ── Extrai o JSON estruturado da resposta ────────────────────────────────────
 function extrairDadosEstruturados(texto) {
   const regex = /\|\|\|JSON\|\|\|([\s\S]*?)\|\|\|FIM\|\|\|/;
   const match = texto.match(regex);
-
-  if (!match) {
-    return { estado: null, carrinho: [], pedidoPronto: false };
-  }
-
+  if (!match) return { estado: null, carrinho: [], pedidoPronto: false };
   try {
     return JSON.parse(match[1].trim());
   } catch {
@@ -76,9 +80,8 @@ function limparResposta(texto) {
   return texto.replace(/\|\|\|JSON\|\|\|[\s\S]*?\|\|\|FIM\|\|\|/g, "").trim();
 }
 
-// ── Monta histórico de mensagens para a API ──────────────────────────────────
+// ── Monta histórico de mensagens ─────────────────────────────────────────────
 function montarHistorico(mensagens) {
-  // Últimas 20 mensagens, convertidas para o formato Anthropic
   return mensagens.slice(-20).map((m) => ({
     role: m.role === "cliente" ? "user" : "assistant",
     content: m.conteudo,
@@ -86,25 +89,10 @@ function montarHistorico(mensagens) {
 }
 
 // ── Função principal ─────────────────────────────────────────────────────────
-/**
- * Processa uma mensagem do cliente e retorna a resposta do bot.
- *
- * @param {object} sessao - Sessão atual (com .mensagens e .carrinho)
- * @param {string} mensagemCliente - Texto enviado pelo cliente
- * @param {object} restaurante - Dados do restaurante
- * @param {Array}  cardapio - Cardápio formatado do Strapi
- * @returns {{ resposta: string, novoEstado: string, carrinhoAtualizado: Array, pedidoPronto: boolean }}
- */
-async function processarMensagem(
-  sessao,
-  mensagemCliente,
-  restaurante,
-  cardapio
-) {
+async function processarMensagem(sessao, mensagemCliente, restaurante, cardapio) {
   const systemPrompt = montarSystemPrompt(restaurante, cardapio);
   const historico = montarHistorico(sessao.mensagens || []);
 
-  // Adiciona contexto do carrinho atual se não estiver vazio
   let mensagemEnriquecida = mensagemCliente;
   const carrinhoAtual = sessao.carrinho || [];
   if (carrinhoAtual.length > 0) {
@@ -114,19 +102,17 @@ async function processarMensagem(
     mensagemEnriquecida = `${mensagemCliente}\n\n[Estado atual do carrinho: ${resumoCarrinho}]`;
   }
 
-  const messages = [
-    ...historico,
-    { role: "user", content: mensagemEnriquecida },
-  ];
-
-  const response = await client.messages.create({
+  const { data } = await openRouterClient.post("/chat/completions", {
     model: MODEL,
     max_tokens: 1024,
-    system: systemPrompt,
-    messages,
+    messages: [
+      { role: "system", content: systemPrompt },
+      ...historico,
+      { role: "user", content: mensagemEnriquecida },
+    ],
   });
 
-  const textoCompleto = response.content[0].text;
+  const textoCompleto = data.choices[0].message.content;
   const dados = extrairDadosEstruturados(textoCompleto);
   const resposta = limparResposta(textoCompleto);
 

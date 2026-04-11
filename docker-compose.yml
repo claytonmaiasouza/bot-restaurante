@@ -29,58 +29,6 @@ services:
     networks:
       - internal
 
-  # ── Evolution API ─────────────────────────────────────────────────────────────
-  evolution-api:
-    image: atendai/evolution-api:latest
-    container_name: bot-evolution
-    restart: always
-    environment:
-      SERVER_TYPE: http
-      SERVER_PORT: 8080
-      SERVER_URL: https://bot.guiafinanceiro.pro
-      CORS_ORIGIN: "*"
-      CORS_METHODS: GET,POST,PUT,DELETE
-      CORS_CREDENTIALS: "true"
-      LOG_LEVEL: ERROR
-      LOG_COLOR: "false"
-      LOG_BAILEYS: error
-      DEL_INSTANCE: "false"
-      DATABASE_ENABLED: "true"
-      DATABASE_PROVIDER: postgresql
-      DATABASE_CONNECTION_URI: postgresql://${DB_USER:-user}:${DB_PASSWORD:-pass}@postgres:5432/${DB_NAME:-botrestaurante}
-      DATABASE_CONNECTION_CLIENT_NAME: evolution_api
-      DATABASE_SAVE_DATA_INSTANCE: "true"
-      DATABASE_SAVE_DATA_NEW_MESSAGE: "true"
-      DATABASE_SAVE_MESSAGE_UPDATE: "true"
-      DATABASE_SAVE_DATA_CONTACTS: "true"
-      DATABASE_SAVE_DATA_CHATS: "true"
-      AUTHENTICATION_TYPE: apikey
-      AUTHENTICATION_API_KEY: ${EVOLUTION_API_KEY}
-      AUTHENTICATION_EXPOSE_IN_FETCH_INSTANCES: "true"
-      QRCODE_LIMIT: 30
-      QRCODE_COLOR: "#198754"
-      WEBHOOK_GLOBAL_ENABLED: "false"
-      CONFIG_SESSION_PHONE_CLIENT: BotRestaurante
-      CONFIG_SESSION_PHONE_NAME: Chrome
-      CACHE_REDIS_ENABLED: "false"
-    volumes:
-      - evolution_data:/evolution/instances
-    depends_on:
-      postgres:
-        condition: service_healthy
-    labels:
-      - "traefik.enable=true"
-      - "traefik.http.routers.evolution.rule=Host(`bot.guiafinanceiro.pro`) && PathPrefix(`/evolution`)"
-      - "traefik.http.routers.evolution.entrypoints=websecure"
-      - "traefik.http.routers.evolution.tls.certresolver=letsencrypt"
-      - "traefik.http.middlewares.evolution-strip.stripprefix.prefixes=/evolution"
-      - "traefik.http.routers.evolution.middlewares=evolution-strip"
-      - "traefik.http.services.evolution.loadbalancer.server.port=8080"
-      - "traefik.docker.network=fintrack_default"
-    networks:
-      - internal
-      - traefik
-
   # ── Bot (Node.js) ─────────────────────────────────────────────────────────────
   bot:
     build:
@@ -93,7 +41,7 @@ services:
       PORT: 3000
       DATABASE_URL: postgresql://${DB_USER:-user}:${DB_PASSWORD:-pass}@postgres:5432/${DB_NAME:-botrestaurante}
       OPENROUTER_API_KEY: ${OPENROUTER_API_KEY}
-      EVOLUTION_API_URL: http://evolution-api:8080
+      EVOLUTION_API_URL: ${EVOLUTION_API_URL}
       EVOLUTION_API_KEY: ${EVOLUTION_API_KEY}
       STRAPI_URL: ${STRAPI_URL}
       STRAPI_TOKEN: ${STRAPI_TOKEN}
@@ -104,8 +52,6 @@ services:
     depends_on:
       postgres:
         condition: service_healthy
-      evolution-api:
-        condition: service_started
     healthcheck:
       test: ["CMD-SHELL", "wget -qO- http://localhost:3000/health || exit 1"]
       interval: 30s
@@ -125,8 +71,6 @@ services:
 
 volumes:
   postgres_data:
-    driver: local
-  evolution_data:
     driver: local
   bot_logs:
     driver: local

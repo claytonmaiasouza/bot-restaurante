@@ -77,8 +77,13 @@ async function criarInstancia(restaurante) {
     console.log(`[evolution] instância criada: ${restaurante.slugWhatsapp}`);
     return data;
   } catch (err) {
-    // Ignora erro se a instância já existe
-    if (err.response?.status === 409 || err.response?.data?.error?.includes("already exists")) {
+    // Ignora erro se a instância já existe (409 ou 403 dependendo da versão da Evolution)
+    const jaExiste =
+      err.response?.status === 409 ||
+      err.response?.status === 403 ||
+      err.response?.data?.response?.message?.some?.((m) => m.includes("already in use")) ||
+      err.response?.data?.error?.includes?.("already exists");
+    if (jaExiste) {
       console.log(`[evolution] instância já existe: ${restaurante.slugWhatsapp}`);
       return { instanceName: restaurante.slugWhatsapp, exists: true };
     }
@@ -150,6 +155,9 @@ async function configurarWebhook(instanceName, webhookUrl) {
           "MESSAGES_UPSERT",
           "CONNECTION_UPDATE",
         ],
+        headers: {
+          apikey: process.env.EVOLUTION_API_KEY,
+        },
       },
     });
     console.log(`[evolution] webhook configurado: ${instanceName} → ${url}`);

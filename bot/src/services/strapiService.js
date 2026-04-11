@@ -67,11 +67,8 @@ async function buscarCardapio(strapiRestauranteId) {
   try {
     const { data } = await strapiClient.get("/api/categorias", {
       params: {
-        "filters[restaurante][id][$eq]": strapiRestauranteId,
-        "populate[produtos][filters][disponivel][$eq]": true,
-        "populate[produtos][fields]": "nome,preco,descricao",
+        "populate": "produtos",
         "fields": "nome",
-        sort: "nome:asc",
       },
     });
 
@@ -88,9 +85,10 @@ async function buscarCardapio(strapiRestauranteId) {
             nome: pa.nome,
             preco: parseFloat(pa.preco) || 0,
             descricao: pa.descricao || null,
+            disponivel: pa.disponivel,
           };
         })
-        .filter((p) => p.nome && p.preco > 0);
+        .filter((p) => p.nome && p.preco > 0 && p.disponivel !== false);
 
       return {
         nome: attrs.nome,

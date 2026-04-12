@@ -1,7 +1,8 @@
 const { processarMensagem } = require("../services/claudeService");
 const { criarOuBuscarSessao, atualizarSessao, salvarMensagem } = require("../services/sessaoService");
-const { enviarMensagem, enviarMensagemFormatada } = require("../services/evolutionService");
+const { enviarMensagem, enviarMensagemFormatada, baixarMidiaBase64 } = require("../services/evolutionService");
 const { finalizarPedido } = require("../services/pedidoService");
+const { transcreverAudio } = require("../services/transcricaoService");
 
 // ── Detectores de localização ─────────────────────────────────────────────────
 
@@ -108,8 +109,18 @@ async function receberMensagem(req, res) {
       return;
     }
 
-    // ── c) Mensagem de texto → Claude ─────────────────────────────────────────
-    const textoCliente = extrairTexto(mensagem);
+    // ── c) Texto ou áudio → Claude ────────────────────────────────────────────
+    let textoCliente = extrairTexto(mensagem);
+
+    if (!textoCliente && ["audioMessage", "pttMessage"].includes(mensagem.messageType)) {
+      const { base64, mimeType } = await baixarMidiaBase64(instanceName, mensagem);
+      if (base64) {
+        console.log(`[webhook] transcrevendo áudio de ${clienteNumero}...`);
+        textoCliente = await transcreverAudio(base64, mimeType);
+        console.log(`[webhook] transcrição: "${textoCliente}"`);
+      }
+    }
+
     if (!textoCliente) return;
 
     const { resposta, novoEstado, carrinhoAtualizado, pedidoPronto } =

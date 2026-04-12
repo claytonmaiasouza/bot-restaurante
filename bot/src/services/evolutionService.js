@@ -196,10 +196,24 @@ async function excluirInstancia(instanceName) {
   }
 }
 
+async function baixarMidiaBase64(instanceName, mensagem) {
+  try {
+    const { data } = await evolutionClient.post(
+      `/chat/getBase64FromMediaMessage/${instanceName}`,
+      { message: mensagem }
+    );
+    return { base64: data?.base64 || null, mimeType: data?.mimetype || "audio/ogg" };
+  } catch (err) {
+    console.error("[evolution] erro ao baixar mídia:", err.message);
+    return { base64: null, mimeType: null };
+  }
+}
+
 module.exports = {
   // Mensagens
   enviarMensagem,
   enviarMensagemFormatada,
+  baixarMidiaBase64,
   // Instâncias
   criarInstancia,
   obterQRCode,

@@ -67,6 +67,7 @@ async function buscarCardapio(strapiRestauranteId) {
   try {
     const { data } = await strapiClient.get("/api/categorias", {
       params: {
+        "filters[cardapio][restaurante][id][$eq]": strapiRestauranteId,
         "populate": "produtos",
         "fields": "nome",
       },

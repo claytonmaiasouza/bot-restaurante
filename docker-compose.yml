@@ -41,6 +41,7 @@ services:
       PORT: 3000
       DATABASE_URL: postgresql://${DB_USER:-user}:${DB_PASSWORD:-pass}@postgres:5432/${DB_NAME:-botrestaurante}
       OPENROUTER_API_KEY: ${OPENROUTER_API_KEY}
+      OPENAI_API_KEY: ${OPENAI_API_KEY}
       EVOLUTION_API_URL: ${EVOLUTION_API_URL}
       EVOLUTION_API_KEY: ${EVOLUTION_API_KEY}
       STRAPI_URL: ${STRAPI_URL}

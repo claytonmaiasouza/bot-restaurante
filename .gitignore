@@ -22,8 +22,6 @@ logs/
 *.log
 bot/logs/
 
-# Prisma
-bot/prisma/migrations/
 
 # Sistema operacional
 .DS_Store

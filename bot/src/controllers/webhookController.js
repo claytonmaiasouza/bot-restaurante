@@ -157,28 +157,75 @@ async function receberMensagem(req, res) {
 
     if (!textoCliente && !eMensagemDeLocalizacao(mensagem)) return;
 
-    // ── d) Localização → finalizar pedido ─────────────────────────────────────
+    // ── d) Localização → guardar e perguntar pagamento ───────────────────────
     if (
       sessao.estado === "AGUARDANDO_LOCALIZACAO" &&
       eMensagemDeLocalizacao(mensagem)
     ) {
       const localizacao = extrairLocalizacao(mensagem);
 
-      const { resposta } = await processarMensagem(
-        sessao,
-        `Minha localização: ${localizacao}`,
-        restaurante,
-        cardapio,
-        fidelidade
-      );
-
-      const pedido = await finalizarPedido(sessao.id, localizacao, "delivery");
-
       await salvarMensagem(sessao.id, "cliente", `[localização] ${localizacao}`);
-      await salvarMensagem(sessao.id, "bot", resposta);
+      await atualizarSessao(sessao.id, {
+        estado: "AGUARDANDO_PAGAMENTO",
+        localizacaoPendente: localizacao,
+      });
 
-      await enviarMensagem(clienteNumero, resposta, instanceName);
+      const msgPagamento =
+        `📍 Localização recebida!\n\n` +
+        `Qual será a forma de pagamento?\n\n` +
+        `💵 *Dinheiro*\n` +
+        `💳 *Cartão* (maquininha)\n` +
+        `🏦 *Transferência* (PIX/transferência bancária)`;
 
+      await salvarMensagem(sessao.id, "bot", msgPagamento);
+      io?.to("admin").emit("conversa:mensagem", {
+        sessaoId: sessao.id,
+        mensagem: { role: "bot", conteudo: msgPagamento, createdAt: new Date() },
+      });
+      await enviarMensagem(clienteNumero, msgPagamento, instanceName);
+      return;
+    }
+
+    // ── e) Pagamento → finalizar pedido ──────────────────────────────────────
+    if (sessao.estado === "AGUARDANDO_PAGAMENTO" && textoCliente) {
+      const texto = textoCliente.toLowerCase();
+      let metodoPagamento = null;
+      if (/dinheiro|efectivo|cash|billete/i.test(texto)) metodoPagamento = "Dinheiro";
+      else if (/cart[aã]o|m[aá]quina|tarjeta|d[eé]bito|cr[eé]dito/i.test(texto)) metodoPagamento = "Cartão";
+      else if (/transfer[eê]ncia|pix|banco/i.test(texto)) metodoPagamento = "Transferência";
+
+      if (!metodoPagamento) {
+        const msg =
+          `Não entendi. Por favor, escolha uma das formas de pagamento:\n\n` +
+          `💵 *Dinheiro*\n` +
+          `💳 *Cartão* (maquininha)\n` +
+          `🏦 *Transferência* (PIX/transferência bancária)`;
+        await salvarMensagem(sessao.id, "cliente", textoCliente);
+        await salvarMensagem(sessao.id, "bot", msg);
+        io?.to("admin").emit("conversa:mensagem", {
+          sessaoId: sessao.id,
+          mensagem: { role: "cliente", conteudo: textoCliente, createdAt: new Date() },
+        });
+        io?.to("admin").emit("conversa:mensagem", {
+          sessaoId: sessao.id,
+          mensagem: { role: "bot", conteudo: msg, createdAt: new Date() },
+        });
+        await enviarMensagem(clienteNumero, msg, instanceName);
+        return;
+      }
+
+      const localizacao = sessao.localizacaoPendente || "Retirada no balcão";
+      const tipoEntrega = localizacao === "retirada" ? "retirada" : "delivery";
+
+      const pedido = await finalizarPedido(sessao.id, localizacao, tipoEntrega, metodoPagamento);
+
+      await salvarMensagem(sessao.id, "cliente", textoCliente);
+
+      io?.to("admin").emit("conversa:mensagem", {
+        sessaoId: sessao.id,
+        mensagem: { role: "cliente", conteudo: textoCliente, createdAt: new Date() },
+      });
+      io?.to("admin").emit("conversa:encerrada", { sessaoId: sessao.id });
       io?.to(`restaurante:${restaurante.slugWhatsapp}`).emit("pedido:novo", {
         restauranteId: restaurante.id,
         pedido,
@@ -215,17 +262,29 @@ async function receberMensagem(req, res) {
     // ── f) Responder ao cliente ───────────────────────────────────────────────
     await enviarMensagem(clienteNumero, resposta, instanceName);
 
-    // ── g) Pedido pronto via texto ────────────────────────────────────────────
+    // ── g) Pedido pronto → perguntar pagamento antes de finalizar ────────────
     if (pedidoPronto && novoEstado === "FINALIZADO") {
       sessao.carrinho = carrinhoAtualizado;
-      const localizacao = tipoEntrega === "retirada" ? "Retirada no balcão" : textoCliente;
-      const pedido = await finalizarPedido(sessao.id, localizacao, tipoEntrega || "delivery");
-      io?.to(`restaurante:${restaurante.slugWhatsapp}`).emit("pedido:novo", {
-        restauranteId: restaurante.id,
-        pedido,
+      const localizacao = tipoEntrega === "retirada" ? "retirada" : textoCliente;
+
+      // Guarda localização e muda estado para aguardar pagamento
+      await atualizarSessao(sessao.id, {
+        estado: "AGUARDANDO_PAGAMENTO",
+        localizacaoPendente: localizacao,
       });
-      // Notifica painel que a conversa foi encerrada
-      io?.to("admin").emit("conversa:encerrada", { sessaoId: sessao.id });
+
+      const msgPagamento =
+        `\n\nQual será a forma de pagamento?\n\n` +
+        `💵 *Dinheiro*\n` +
+        `💳 *Cartão* (maquininha)\n` +
+        `🏦 *Transferência* (PIX/transferência bancária)`;
+
+      await salvarMensagem(sessao.id, "bot", msgPagamento);
+      io?.to("admin").emit("conversa:mensagem", {
+        sessaoId: sessao.id,
+        mensagem: { role: "bot", conteudo: msgPagamento, createdAt: new Date() },
+      });
+      await enviarMensagem(clienteNumero, msgPagamento, instanceName);
     }
   } catch (err) {
     console.error(`[webhook] erro (${restaurante.slugWhatsapp}):`, err.message);

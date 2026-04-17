@@ -69,9 +69,10 @@ model Sessao {
   estado          String      @default("INICIO")
   // estados: INICIO, VENDO_CARDAPIO, ADICIONANDO_ITEM, CONFIRMANDO_PEDIDO, AGUARDANDO_LOCALIZACAO, FINALIZADO
   carrinho        Json        @default("[]")
-  botPausado      Boolean     @default(false)
-  mensagens       Mensagem[]
-  pedido          Pedido?
+  botPausado          Boolean     @default(false)
+  localizacaoPendente String?
+  mensagens           Mensagem[]
+  pedido              Pedido?
   ultimaAtividade DateTime    @default(now())
   createdAt       DateTime    @default(now())
 }
@@ -95,7 +96,8 @@ model Pedido {
   clienteNome   String?
   itens         Json // [{nome, preco, quantidade}]
   total         Float
-  localizacao   String? // link Google Maps ou texto do endereço
+  localizacao      String? // link Google Maps ou texto do endereço
+  metodoPagamento  String? // Dinheiro | Cartão | Transferência
   status        String      @default("NOVO") // NOVO, CONFIRMADO, PAGO, PREPARANDO, SAIU_PARA_ENTREGA, PRONTO_PARA_RETIRADA, ENTREGUE, CANCELADO
   pago          Boolean     @default(false)
   createdAt     DateTime    @default(now())

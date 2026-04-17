@@ -30,7 +30,7 @@ function formatarHorario(date) {
  * @param {string} localizacao - Endereço ou link Google Maps
  * @returns {object}           - Pedido criado (com itens e total)
  */
-async function finalizarPedido(sessaoId, localizacao, tipoEntrega = "delivery") {
+async function finalizarPedido(sessaoId, localizacao, tipoEntrega = "delivery", metodoPagamento = null) {
   // a) Buscar sessão e carrinho
   const sessao = await prisma.sessao.findUnique({
     where: { id: sessaoId },
@@ -63,6 +63,7 @@ async function finalizarPedido(sessaoId, localizacao, tipoEntrega = "delivery") 
         itens: carrinho,
         total,
         localizacao,
+        metodoPagamento: metodoPagamento || null,
         status: "NOVO",
       },
     }),
@@ -124,11 +125,13 @@ async function enviarPedidoParaDono(pedido, restaurante, tipoEntrega = "delivery
     ? "\n🏪 *Retirada no balcão*"
     : taxaEntrega > 0 ? `\n🚚 *Taxa de entrega: ${fmt(taxaEntrega)}*` : "";
 
+  const pagamentoLinha = pedido.metodoPagamento ? `\n💳 *Pagamento: ${pedido.metodoPagamento}*` : "";
+
   const mensagem =
     `🛵 *NOVO PEDIDO #${idCurto(pedido.id)}*\n\n` +
     `👤 Cliente: ${pedido.clienteNome || "Não identificado"} (${pedido.clienteNumero})\n\n` +
     `🛒 *Itens:*\n${itensFormatados}${taxaLinha}\n\n` +
-    `💰 *Total: ${fmt(pedido.total)}*\n\n` +
+    `💰 *Total: ${fmt(pedido.total)}*${pagamentoLinha}\n\n` +
     `📍 *Localização:*\n${pedido.localizacao || "Não informada"}\n\n` +
     `⏰ ${formatarHorario(pedido.createdAt)}`;
 

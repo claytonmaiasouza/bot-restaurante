@@ -1019,6 +1019,10 @@ function obterAcoes(pedido) {
 
 // ── Atualizar status ──────────────────────────────────────────────────────────
 async function atualizarStatus(id, status) {
+  // Desabilita todos os botões do card imediatamente para evitar duplo clique
+  const card = document.getElementById(`card-${id}`);
+  if (card) card.querySelectorAll('button').forEach(b => { b.disabled = true; b.style.opacity = '0.5'; });
+
   const res = await fetch(`/admin/pedidos/${id}/status`, {
     method: 'PATCH',
     headers: getHeaders({ 'Content-Type': 'application/json' }),
@@ -1026,8 +1030,9 @@ async function atualizarStatus(id, status) {
   });
   if (!res.ok) { mostrarToast('Erro ao atualizar status'); return; }
   const { data } = await res.json();
-  atualizarCardNaTela(data);
-  carregarStats();
+  // Pequeno delay antes de re-renderizar para evitar que o novo botão
+  // capture o evento de mouse ainda "descendo" do clique anterior
+  setTimeout(() => { atualizarCardNaTela(data); carregarStats(); }, 150);
 }
 
 async function marcarPago(id) {

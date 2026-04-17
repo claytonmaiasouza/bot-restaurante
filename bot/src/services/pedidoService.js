@@ -97,7 +97,7 @@ async function finalizarPedido(sessaoId, localizacao, tipoEntrega = "delivery", 
   const instanceName = sessao.restaurante.slugWhatsapp;
   await enviarMensagem(
     sessao.clienteNumero,
-    `✅ *Pedido #${idCurto(pedido.id)} confirmado!*\n\n💰 *Total: ${fmtValor(total, sessao.restaurante.moeda || "R$")}*\n\nRecebemos seu pedido e já notificamos o restaurante. Em breve entraremos em contato sobre o tempo de entrega. 🍽️${mensagemExtra}\n\nObrigado pela preferência! 😊`,
+    `✅ *Pedido #${idCurto(pedido.id)} confirmado!*\n\nRecebemos seu pedido e já notificamos o restaurante. Em breve entraremos em contato sobre o tempo de entrega. 🍽️${mensagemExtra}\n\n💰 *Total: ${fmtValor(total, sessao.restaurante.moeda || "R$")}*\n\nObrigado pela preferência! 😊`,
     instanceName
   );
 

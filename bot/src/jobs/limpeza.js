@@ -3,7 +3,6 @@ const fs = require("fs");
 const path = require("path");
 const { PrismaClient } = require("@prisma/client");
 const { encerrarSessoesInativas } = require("../services/sessaoService");
-const { sincronizarRestaurantes } = require("../services/tenantService");
 
 const prisma = new PrismaClient();
 
@@ -131,28 +130,11 @@ async function gerarRelatorio(inicio, fim) {
   console.log(relatorio);
 }
 
-// ── Job 3: Sincronização de restaurantes (a cada 10 min) ─────────────────────
-
-function iniciarJobSincronizacao() {
-  cron.schedule("*/10 * * * *", async () => {
-    log("sincronizando restaurantes com Strapi...");
-    try {
-      const total = await sincronizarRestaurantes();
-      log(`sincronização concluída: ${total} restaurante(s)`);
-    } catch (err) {
-      log(`ERRO na sincronização com Strapi: ${err.message}`);
-    }
-  });
-
-  log("job de sincronização de restaurantes agendado (*/10 * * * *)");
-}
-
 // ── Exporta e inicializa ──────────────────────────────────────────────────────
 
 function iniciarJobs() {
   iniciarJobSessoes();
   iniciarJobRelatorio();
-  iniciarJobSincronizacao();
 }
 
 module.exports = { iniciarJobs, gerarRelatorio };

@@ -30,7 +30,7 @@ function formatarHorario(date) {
  * @param {string} localizacao - Endereço ou link Google Maps
  * @returns {object}           - Pedido criado (com itens e total)
  */
-async function finalizarPedido(sessaoId, localizacao) {
+async function finalizarPedido(sessaoId, localizacao, tipoEntrega = "delivery") {
   // a) Buscar sessão e carrinho
   const sessao = await prisma.sessao.findUnique({
     where: { id: sessaoId },
@@ -44,11 +44,13 @@ async function finalizarPedido(sessaoId, localizacao) {
     throw new Error("Carrinho vazio — não é possível finalizar o pedido");
   }
 
-  // b) Calcular total
-  const total = carrinho.reduce(
+  // b) Calcular total (inclui taxa de entrega para bater com o faturamento)
+  const subtotal = carrinho.reduce(
     (acc, item) => acc + item.preco * (item.quantidade || 1),
     0
   );
+  const taxaEntrega = tipoEntrega === "retirada" ? 0 : (sessao.restaurante.taxaEntrega || 0);
+  const total = subtotal + taxaEntrega;
 
   // c) Criar pedido + marcar sessão como FINALIZADO (transação atômica)
   const [pedido] = await prisma.$transaction([
@@ -70,7 +72,7 @@ async function finalizarPedido(sessaoId, localizacao) {
     }),
   ]);
 
-  const pedidoCompleto = { ...pedido, itens: carrinho, total };
+  const pedidoCompleto = { ...pedido, itens: carrinho, total, subtotal, taxaEntrega };
 
   // d) Atualizar fidelidade
   await atualizarFidelidade(
@@ -81,7 +83,7 @@ async function finalizarPedido(sessaoId, localizacao) {
   );
 
   // e) Notificar dono do restaurante
-  await enviarPedidoParaDono(pedidoCompleto, sessao.restaurante);
+  await enviarPedidoParaDono(pedidoCompleto, sessao.restaurante, tipoEntrega);
 
   // f) Confirmar ao cliente
   const instanceName = sessao.restaurante.slugWhatsapp;
@@ -102,20 +104,31 @@ async function finalizarPedido(sessaoId, localizacao) {
  * @param {object} pedido      - Pedido com itens, total, localizacao, etc.
  * @param {object} restaurante - Dados do restaurante (slugWhatsapp, donoWhatsapp)
  */
-async function enviarPedidoParaDono(pedido, restaurante) {
+async function enviarPedidoParaDono(pedido, restaurante, tipoEntrega = "delivery") {
+  const moeda = restaurante.moeda || "R$";
+  const temDecimal = ["R$", "$", "€"].includes(moeda);
+  const fmt = (v) =>
+    temDecimal ? `${moeda} ${v.toFixed(2)}` : `${moeda} ${Math.round(v).toLocaleString()}`;
+
+  // total já inclui a taxa de entrega (calculada em finalizarPedido)
+  const taxaEntrega = pedido.taxaEntrega ?? (tipoEntrega === "retirada" ? 0 : (restaurante.taxaEntrega || 0));
+
   const itensFormatados = pedido.itens
     .map((i) => {
       const qtd = i.quantidade || 1;
-      const subtotal = (i.preco * qtd).toFixed(2);
-      return `• ${qtd}x ${i.nome} — R$ ${subtotal}`;
+      return `• ${qtd}x ${i.nome} — ${fmt(i.preco * qtd)}`;
     })
     .join("\n");
+
+  const taxaLinha = tipoEntrega === "retirada"
+    ? "\n🏪 *Retirada no balcão*"
+    : taxaEntrega > 0 ? `\n🚚 *Taxa de entrega: ${fmt(taxaEntrega)}*` : "";
 
   const mensagem =
     `🛵 *NOVO PEDIDO #${idCurto(pedido.id)}*\n\n` +
     `👤 Cliente: ${pedido.clienteNome || "Não identificado"} (${pedido.clienteNumero})\n\n` +
-    `🛒 *Itens:*\n${itensFormatados}\n\n` +
-    `💰 *Total: R$ ${pedido.total.toFixed(2)}*\n\n` +
+    `🛒 *Itens:*\n${itensFormatados}${taxaLinha}\n\n` +
+    `💰 *Total: ${fmt(pedido.total)}*\n\n` +
     `📍 *Localização:*\n${pedido.localizacao || "Não informada"}\n\n` +
     `⏰ ${formatarHorario(pedido.createdAt)}`;
 

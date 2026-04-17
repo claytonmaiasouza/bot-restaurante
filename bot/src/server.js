@@ -1,11 +1,13 @@
 require("dotenv").config();
 const express = require("express");
 const cors = require("cors");
+const path = require("path");
 const { createServer } = require("http");
 const { Server } = require("socket.io");
 
 const webhookController = require("./controllers/webhookController");
 const adminRoutes = require("./routes/admin");
+const authRoutes = require("./routes/auth");
 const onboardingRoutes = require("./routes/onboarding");
 const { tenantMiddleware } = require("./middleware/tenantMiddleware");
 const { iniciarJobs } = require("./jobs/limpeza");
@@ -18,6 +20,7 @@ const io = new Server(httpServer, {
 
 app.use(cors());
 app.use(express.json());
+app.use(express.static(path.join(__dirname, "..", "public")));
 
 // Expõe o io para uso nos controllers
 app.set("io", io);
@@ -47,6 +50,9 @@ app.post(
   webhookController.receberMensagem
 );
 
+// Autenticação (login do dono do restaurante)
+app.use("/auth", authRoutes);
+
 // Onboarding de novos restaurantes
 app.use("/onboarding", onboardingRoutes);
 
@@ -61,6 +67,27 @@ io.on("connection", (socket) => {
   socket.on("assinar", (slug) => {
     socket.join(`restaurante:${slug}`);
     console.log(`[socket] ${socket.id} assinou restaurante:${slug}`);
+  });
+
+  socket.on("assinar:admin", (adminToken) => {
+    if (adminToken === process.env.ADMIN_TOKEN) {
+      socket.join("admin");
+    }
+  });
+
+  // Dono do restaurante assina a sala admin para receber eventos em tempo real
+  socket.on("assinar:restaurante", (jwtToken) => {
+    try {
+      const jwt = require("jsonwebtoken");
+      const secret = process.env.JWT_SECRET || process.env.ADMIN_TOKEN;
+      const payload = jwt.verify(jwtToken, secret);
+      if (payload.role === "restaurante") {
+        socket.join("admin"); // recebe os mesmos eventos, o front filtra por restauranteId
+        socket.join(`restaurante:${payload.slug}`);
+      }
+    } catch {
+      // token inválido — ignora silenciosamente
+    }
   });
 
   socket.on("disconnect", () => {

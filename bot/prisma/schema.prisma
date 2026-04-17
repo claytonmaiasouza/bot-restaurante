@@ -11,15 +11,53 @@ datasource db {
 }
 
 model Restaurante {
-  id           String   @id @default(uuid())
+  id           String      @id @default(uuid())
   nome         String
-  slugWhatsapp String   @unique // número WhatsApp deste restaurante
-  donoWhatsapp String // número que recebe os pedidos
-  strapiId     Int      @unique // ID no Strapi
-  ativo        Boolean  @default(true)
-  sessoes      Sessao[]
-  pedidos      Pedido[]
-  createdAt    DateTime @default(now())
+  slugWhatsapp String      @unique
+  donoWhatsapp String
+  strapiId     Int?        @unique // legado — null para restaurantes criados pelo painel
+  ativo        Boolean     @default(true)
+  moeda        String      @default("R$")
+  taxaEntrega  Float       @default(0)
+  email               String?     @unique
+  senhaHash           String?
+  horarioAtendimento  String?     // JSON: { ativo, descricao, dias: { "0": { aberto, abertura, fechamento }, ... } }
+  sessoes              Sessao[]
+  pedidos              Pedido[]
+  categorias           Categoria[]
+  programasFidelidade  ProgramaFidelidade[]
+  createdAt            DateTime    @default(now())
+}
+
+model Categoria {
+  id            String      @id @default(uuid())
+  nome          String
+  ordem         Int         @default(0)
+  restauranteId String
+  restaurante   Restaurante @relation(fields: [restauranteId], references: [id], onDelete: Cascade)
+  produtos      Produto[]
+  createdAt     DateTime    @default(now())
+}
+
+model Produto {
+  id          String    @id @default(uuid())
+  nome        String
+  descricao   String?
+  preco       Float     @default(0)
+  ativo       Boolean   @default(true)
+  categoriaId String
+  categoria   Categoria @relation(fields: [categoriaId], references: [id], onDelete: Cascade)
+  tamanhos    Tamanho[]
+  createdAt   DateTime  @default(now())
+}
+
+model Tamanho {
+  id            String  @id @default(uuid())
+  nome          String
+  preco         Float
+  precoComBorda Float?
+  produtoId     String
+  produto       Produto @relation(fields: [produtoId], references: [id], onDelete: Cascade)
 }
 
 model Sessao {
@@ -31,6 +69,7 @@ model Sessao {
   estado          String      @default("INICIO")
   // estados: INICIO, VENDO_CARDAPIO, ADICIONANDO_ITEM, CONFIRMANDO_PEDIDO, AGUARDANDO_LOCALIZACAO, FINALIZADO
   carrinho        Json        @default("[]")
+  botPausado      Boolean     @default(false)
   mensagens       Mensagem[]
   pedido          Pedido?
   ultimaAtividade DateTime    @default(now())
@@ -57,7 +96,8 @@ model Pedido {
   itens         Json // [{nome, preco, quantidade}]
   total         Float
   localizacao   String? // link Google Maps ou texto do endereço
-  status        String      @default("NOVO") // NOVO, CONFIRMADO, CANCELADO
+  status        String      @default("NOVO") // NOVO, CONFIRMADO, PAGO, PREPARANDO, SAIU_PARA_ENTREGA, PRONTO_PARA_RETIRADA, ENTREGUE, CANCELADO
+  pago          Boolean     @default(false)
   createdAt     DateTime    @default(now())
 }
 
@@ -70,4 +110,27 @@ model ClienteFidelidade {
   ultimoPedido DateTime?
   restaurantes Json      @default("[]") // histórico por restaurante
   createdAt    DateTime  @default(now())
+}
+
+model ProgramaFidelidade {
+  id            String               @id @default(uuid())
+  restauranteId String
+  restaurante   Restaurante          @relation(fields: [restauranteId], references: [id], onDelete: Cascade)
+  nome          String
+  descricao     String?
+  tipo          String               @default("PEDIDOS") // PEDIDOS | VALOR
+  meta          Float                // ex: 10 pedidos, ou R$ 500 em gastos
+  ativo         Boolean              @default(true)
+  resgates      ResgateFidelidade[]
+  createdAt     DateTime             @default(now())
+}
+
+model ResgateFidelidade {
+  id            String             @id @default(uuid())
+  programaId    String
+  programa      ProgramaFidelidade @relation(fields: [programaId], references: [id], onDelete: Cascade)
+  clienteNumero String
+  clienteNome   String?
+  registradoPor String             @default("admin")
+  createdAt     DateTime           @default(now())
 }

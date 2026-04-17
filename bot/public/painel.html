@@ -1,0 +1,2509 @@
+<!DOCTYPE html>
+<html lang="pt-BR">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>Painel de Pedidos</title>
+  <script src="https://cdn.tailwindcss.com"></script>
+  <style>
+    .card-new { animation: slideDown 0.3s ease; }
+    @keyframes slideDown { from { opacity:0; transform:translateY(-12px); } to { opacity:1; transform:translateY(0); } }
+    .tab-active { @apply bg-white shadow text-gray-800; }
+    ::-webkit-scrollbar { height: 4px; }
+    ::-webkit-scrollbar-thumb { background: #d1d5db; border-radius: 9999px; }
+  </style>
+</head>
+<body class="bg-gray-100 min-h-screen">
+
+<!-- LOGIN -->
+<div id="login" class="flex items-center justify-center min-h-screen">
+  <div class="bg-white rounded-2xl shadow-xl p-8 w-full max-w-sm mx-4">
+    <div class="text-center mb-6">
+      <div class="text-5xl mb-3">🍕</div>
+      <h1 class="text-2xl font-bold text-gray-800">Painel de Pedidos</h1>
+      <p class="text-gray-500 text-sm mt-1" id="login-subtitulo">Acesse com seu email e senha</p>
+    </div>
+
+    <!-- Modo email/senha (padrão) -->
+    <div id="login-email-mode">
+      <input id="email-input" type="email" placeholder="Seu email"
+        class="w-full border border-gray-300 rounded-lg px-4 py-2.5 mb-2 focus:outline-none focus:ring-2 focus:ring-orange-400 text-sm"
+        onkeydown="if(event.key==='Enter') entrarComEmail()">
+      <input id="senha-input" type="password" placeholder="Sua senha"
+        class="w-full border border-gray-300 rounded-lg px-4 py-2.5 mb-3 focus:outline-none focus:ring-2 focus:ring-orange-400 text-sm"
+        onkeydown="if(event.key==='Enter') entrarComEmail()">
+      <button onclick="entrarComEmail()"
+        class="w-full bg-orange-500 hover:bg-orange-600 text-white rounded-lg py-2.5 font-semibold transition text-sm">
+        Entrar
+      </button>
+      <button onclick="mostrarModoToken()"
+        class="w-full mt-2 text-xs text-gray-400 hover:text-gray-600 transition py-1">
+        Acesso de administrador →
+      </button>
+    </div>
+
+    <!-- Modo token admin (secundário) -->
+    <div id="login-token-mode" class="hidden">
+      <input id="token-input" type="password" placeholder="Token de administrador"
+        class="w-full border border-gray-300 rounded-lg px-4 py-2.5 mb-3 focus:outline-none focus:ring-2 focus:ring-orange-400 text-sm"
+        onkeydown="if(event.key==='Enter') entrarComToken()">
+      <button onclick="entrarComToken()"
+        class="w-full bg-gray-800 hover:bg-gray-900 text-white rounded-lg py-2.5 font-semibold transition text-sm">
+        Entrar como administrador
+      </button>
+      <button onclick="mostrarModoEmail()"
+        class="w-full mt-2 text-xs text-gray-400 hover:text-gray-600 transition py-1">
+        ← Voltar
+      </button>
+    </div>
+
+    <p id="login-erro" class="text-red-500 text-sm mt-2 text-center hidden">Credenciais inválidas</p>
+  </div>
+</div>
+
+<!-- DASHBOARD -->
+<div id="app" class="hidden">
+
+  <!-- Header -->
+  <header class="bg-white shadow-sm sticky top-0 z-20">
+    <div class="max-w-7xl mx-auto px-4 py-3 flex items-center justify-between gap-3">
+      <div class="flex items-center gap-2 shrink-0">
+        <span class="text-xl">🍕</span>
+        <button onclick="mostrarSecao('pedidos')" id="nav-pedidos" class="font-bold text-gray-800 hidden sm:block hover:text-orange-500 transition">Pedidos</button>
+        <button onclick="mostrarSecao('conversas')" id="nav-conversas" class="font-medium text-gray-400 hidden sm:block hover:text-orange-500 transition">Conversas</button>
+        <button onclick="mostrarSecao('clientes')" id="nav-clientes" class="font-medium text-gray-400 hidden sm:block hover:text-orange-500 transition">Clientes</button>
+        <button onclick="mostrarSecao('cardapio')" id="nav-cardapio" class="font-medium text-gray-400 hidden sm:block hover:text-orange-500 transition">Cardápio</button>
+        <button onclick="mostrarSecao('configuracoes')" id="nav-configuracoes" class="font-medium text-gray-400 hidden sm:block hover:text-orange-500 transition">Configurações</button>
+      </div>
+      <select id="restaurante-filter" onchange="trocarRestaurante()"
+        class="border border-gray-300 rounded-lg px-3 py-1.5 text-sm focus:outline-none focus:ring-2 focus:ring-orange-400 flex-1 max-w-xs">
+        <option value="">Todos os restaurantes</option>
+      </select>
+      <div class="flex items-center gap-3 shrink-0">
+        <button id="btn-novo-restaurante" onclick="abrirModalNovoRestaurante()"
+          class="hidden bg-orange-500 hover:bg-orange-600 text-white text-xs font-semibold px-3 py-1.5 rounded-lg transition">
+          + Restaurante
+        </button>
+        <span id="indicador-socket" class="w-2 h-2 rounded-full bg-gray-300" title="Desconectado"></span>
+        <span id="user-label" class="text-xs text-gray-400 hidden sm:block"></span>
+        <button onclick="sair()" class="text-sm text-gray-400 hover:text-gray-600">Sair</button>
+      </div>
+    </div>
+  </header>
+
+  <!-- Stats -->
+  <div class="max-w-7xl mx-auto px-4 pt-4">
+    <div class="grid grid-cols-2 md:grid-cols-4 gap-3 mb-4">
+      <div class="bg-white rounded-xl p-4 shadow-sm">
+        <p class="text-xs text-gray-400 mb-1">Pedidos hoje</p>
+        <p id="stat-hoje" class="text-2xl font-bold text-gray-800">—</p>
+      </div>
+      <div class="bg-white rounded-xl p-4 shadow-sm">
+        <p class="text-xs text-gray-400 mb-1">Faturamento hoje</p>
+        <p id="stat-fat" class="text-2xl font-bold text-gray-800">—</p>
+      </div>
+      <div class="bg-white rounded-xl p-4 shadow-sm">
+        <p class="text-xs text-gray-400 mb-1">Em aberto</p>
+        <p id="stat-aberto" class="text-2xl font-bold text-orange-500">—</p>
+      </div>
+      <div class="bg-white rounded-xl p-4 shadow-sm">
+        <p class="text-xs text-gray-400 mb-1">Sessões ativas</p>
+        <p id="stat-sessoes" class="text-2xl font-bold text-gray-800">—</p>
+      </div>
+    </div>
+
+    <!-- Tabs -->
+    <div class="bg-gray-200 rounded-xl p-1 flex gap-1 overflow-x-auto mb-4" id="tabs"></div>
+
+    <!-- Orders -->
+    <div id="secao-pedidos">
+      <div id="orders" class="grid grid-cols-1 md:grid-cols-2 xl:grid-cols-3 gap-4 pb-8"></div>
+      <div id="empty" class="hidden text-center py-16 text-gray-400">
+        <p class="text-4xl mb-2">📭</p>
+        <p class="text-sm">Nenhum pedido nesta categoria</p>
+      </div>
+    </div>
+
+    <!-- Clientes -->
+    <div id="secao-clientes" class="hidden pb-8">
+      <!-- Sub-tabs -->
+      <div class="flex gap-2 mb-4">
+        <button id="sub-tab-btn-clientes" onclick="mostrarSubTab('clientes')"
+          class="px-4 py-2 rounded-lg text-sm font-semibold bg-white shadow text-gray-800 transition">Clientes</button>
+        <button id="sub-tab-btn-fidelidade" onclick="mostrarSubTab('fidelidade')"
+          class="px-4 py-2 rounded-lg text-sm font-semibold text-gray-500 hover:text-gray-700 transition">Programas de Fidelidade</button>
+      </div>
+
+      <!-- Sub: Clientes -->
+      <div id="sub-clientes">
+        <div class="bg-white rounded-2xl shadow-sm overflow-hidden">
+          <div class="p-4 border-b border-gray-100 flex items-center justify-between gap-3 flex-wrap">
+            <span class="font-semibold text-gray-700">Cadastro de clientes</span>
+            <div class="flex items-center gap-2 flex-wrap">
+              <input id="clientes-busca" type="text" placeholder="Buscar por nome ou número..."
+                class="border border-gray-300 rounded-lg px-3 py-1.5 text-sm focus:outline-none focus:ring-2 focus:ring-orange-400 w-56"
+                oninput="buscarClientes()">
+              <span id="clientes-total" class="text-xs text-gray-400"></span>
+              <button onclick="abrirModalDisparar()"
+                class="bg-orange-500 hover:bg-orange-600 text-white text-xs font-semibold px-3 py-1.5 rounded-lg transition flex items-center gap-1">
+                📢 Mensagem em massa
+              </button>
+            </div>
+          </div>
+          <div class="overflow-x-auto">
+            <table class="w-full text-sm">
+              <thead class="bg-gray-50 text-xs text-gray-400 uppercase">
+                <tr>
+                  <th class="text-left px-4 py-3">Cliente</th>
+                  <th class="text-left px-4 py-3">Número</th>
+                  <th class="text-center px-4 py-3">Pedidos</th>
+                  <th class="text-right px-4 py-3">Total gasto</th>
+                  <th class="text-left px-4 py-3">Último pedido</th>
+                  <th class="px-4 py-3"></th>
+                </tr>
+              </thead>
+              <tbody id="clientes-tbody" class="divide-y divide-gray-50"></tbody>
+            </table>
+          </div>
+          <div id="clientes-paginacao" class="p-3 flex items-center justify-center gap-2"></div>
+        </div>
+      </div>
+
+      <!-- Sub: Fidelidade -->
+      <div id="sub-fidelidade" class="hidden">
+        <div class="bg-white rounded-2xl shadow-sm overflow-hidden">
+          <div class="p-4 border-b border-gray-100 flex items-center justify-between">
+            <span class="font-semibold text-gray-700">Programas de Fidelidade</span>
+            <button onclick="abrirModalFidelidade()"
+              class="bg-orange-500 hover:bg-orange-600 text-white text-xs font-semibold px-3 py-1.5 rounded-lg transition">
+              + Novo Programa
+            </button>
+          </div>
+          <div id="fidelidade-lista" class="divide-y divide-gray-100"></div>
+        </div>
+      </div>
+    </div>
+
+    <!-- Conversas -->
+    <div id="secao-conversas" class="hidden pb-8">
+      <div class="flex gap-4 h-[70vh]">
+        <!-- Lista de sessões -->
+        <div class="w-72 shrink-0 bg-white rounded-2xl shadow-sm overflow-y-auto">
+          <div class="p-3 border-b border-gray-100">
+            <div class="flex items-center justify-between mb-2">
+              <span class="font-semibold text-sm text-gray-700">Conversas</span>
+              <div class="flex items-center gap-1">
+                <button onclick="abrirModalDisparar()" class="text-xs bg-orange-100 text-orange-700 hover:bg-orange-200 px-2 py-1 rounded-lg transition font-medium" title="Mensagem em massa">📢</button>
+                <button onclick="carregarConversas()" class="text-xs text-gray-400 hover:text-gray-600">↺</button>
+              </div>
+            </div>
+            <div class="flex gap-1">
+              <button id="btn-ativas" onclick="filtroConversa='ativas'; carregarConversas()"
+                class="flex-1 text-xs py-1 rounded-lg bg-orange-500 text-white font-medium transition">Ativas</button>
+              <button id="btn-encerradas" onclick="filtroConversa='encerradas'; carregarConversas()"
+                class="flex-1 text-xs py-1 rounded-lg text-gray-500 hover:bg-gray-100 transition">Encerradas</button>
+            </div>
+          </div>
+          <div id="lista-conversas"></div>
+        </div>
+        <!-- Chat -->
+        <div class="flex-1 bg-white rounded-2xl shadow-sm flex flex-col overflow-hidden">
+          <div id="chat-header" class="p-4 border-b border-gray-100 hidden">
+            <div class="flex items-center justify-between">
+              <div>
+                <p id="chat-nome" class="font-semibold text-gray-800 text-sm"></p>
+                <p id="chat-numero" class="text-xs text-gray-400"></p>
+              </div>
+              <button id="btn-pausar" onclick="togglePausar()"
+                class="text-xs font-medium px-3 py-1.5 rounded-lg transition">
+              </button>
+            </div>
+          </div>
+          <div id="chat-mensagens" class="flex-1 overflow-y-auto p-4 flex flex-col gap-2"></div>
+          <div id="chat-input" class="hidden p-3 border-t border-gray-100 flex gap-2">
+            <input id="chat-texto" type="text" placeholder="Digite uma mensagem..."
+              class="flex-1 border border-gray-300 rounded-lg px-3 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-orange-400"
+              onkeydown="if(event.key==='Enter') enviarMensagemAdmin()">
+            <button onclick="enviarMensagemAdmin()"
+              class="bg-orange-500 hover:bg-orange-600 text-white text-sm font-medium px-4 py-2 rounded-lg transition">
+              Enviar
+            </button>
+          </div>
+          <div id="chat-vazio" class="flex-1 flex items-center justify-center text-gray-300">
+            <p class="text-sm">Selecione uma conversa</p>
+          </div>
+        </div>
+      </div>
+    </div>
+    <!-- Configurações -->
+    <div id="secao-configuracoes" class="hidden pb-8">
+      <div class="max-w-2xl">
+        <h2 class="font-bold text-gray-800 mb-4">Configurações do Restaurante</h2>
+
+        <!-- Seletor de restaurante (só admin quando há vários) -->
+        <div id="cfg-restaurante-selector" class="hidden mb-4">
+          <label class="text-xs text-gray-500 mb-1 block">Restaurante</label>
+          <select id="cfg-restaurante-select" onchange="carregarConfiguracoes()"
+            class="w-full border border-gray-300 rounded-lg px-3 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-orange-400">
+          </select>
+        </div>
+
+        <div id="cfg-form" class="hidden">
+          <div class="bg-white rounded-2xl shadow-sm divide-y divide-gray-100">
+
+            <!-- Dados básicos -->
+            <div class="p-5">
+              <h3 class="font-semibold text-gray-700 text-sm mb-3">Dados do restaurante</h3>
+              <div class="grid grid-cols-1 sm:grid-cols-2 gap-3">
+                <div class="sm:col-span-2">
+                  <label class="text-xs text-gray-500 mb-1 block">Nome do restaurante</label>
+                  <input id="cfg-nome" type="text"
+                    class="w-full border border-gray-300 rounded-lg px-3 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-orange-400">
+                </div>
+                <div>
+                  <label class="text-xs text-gray-500 mb-1 block">Número WhatsApp do bot</label>
+                  <input id="cfg-slug" type="text" disabled
+                    class="w-full border border-gray-200 bg-gray-50 rounded-lg px-3 py-2 text-sm text-gray-400 cursor-not-allowed"
+                    title="Número do WhatsApp conectado ao bot — não editável">
+                  <p class="text-xs text-gray-400 mt-0.5">Número conectado ao bot (não editável)</p>
+                </div>
+                <div>
+                  <label class="text-xs text-gray-500 mb-1 block">WhatsApp do dono (recebe pedidos)</label>
+                  <input id="cfg-dono" type="text" placeholder="5511999999999"
+                    class="w-full border border-gray-300 rounded-lg px-3 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-orange-400">
+                </div>
+                <div>
+                  <label class="text-xs text-gray-500 mb-1 block">Moeda</label>
+                  <select id="cfg-moeda"
+                    class="w-full border border-gray-300 rounded-lg px-3 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-orange-400">
+                    <option value="R$">R$ (Real)</option>
+                    <option value="$">$ (Dólar)</option>
+                    <option value="€">€ (Euro)</option>
+                    <option value="G$">G$ (Guarani)</option>
+                  </select>
+                </div>
+                <div>
+                  <label class="text-xs text-gray-500 mb-1 block">Taxa de entrega</label>
+                  <input id="cfg-taxa" type="number" min="0" step="0.01"
+                    class="w-full border border-gray-300 rounded-lg px-3 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-orange-400">
+                </div>
+              </div>
+            </div>
+
+            <!-- Acesso ao painel -->
+            <div class="p-5">
+              <h3 class="font-semibold text-gray-700 text-sm mb-3">Acesso ao painel</h3>
+              <div class="grid grid-cols-1 sm:grid-cols-2 gap-3">
+                <div>
+                  <label class="text-xs text-gray-500 mb-1 block">Email de login</label>
+                  <input id="cfg-email" type="email"
+                    class="w-full border border-gray-300 rounded-lg px-3 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-orange-400">
+                </div>
+                <div>
+                  <label class="text-xs text-gray-500 mb-1 block">Nova senha <span class="text-gray-300">(deixe vazio para não alterar)</span></label>
+                  <input id="cfg-senha" type="password" placeholder="••••••••"
+                    class="w-full border border-gray-300 rounded-lg px-3 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-orange-400">
+                </div>
+              </div>
+            </div>
+
+            <!-- Horário de atendimento -->
+            <div class="p-5">
+              <div class="flex items-center justify-between mb-3">
+                <h3 class="font-semibold text-gray-700 text-sm">Horário de atendimento</h3>
+                <label class="flex items-center gap-2 text-sm text-gray-600 cursor-pointer">
+                  <input id="cfg-horario-ativo" type="checkbox" class="rounded" onchange="toggleHorarioUI()">
+                  Ativar controle de horário
+                </label>
+              </div>
+              <div id="cfg-horario-wrapper" class="hidden">
+                <div class="mb-3">
+                  <label class="text-xs text-gray-500 mb-1 block">Descrição exibida ao cliente quando fechado</label>
+                  <textarea id="cfg-horario-descricao" rows="2" placeholder="Ex: Seg a Sex: 11h às 22h | Sáb e Dom: 12h às 23h"
+                    class="w-full border border-gray-300 rounded-lg px-3 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-orange-400 resize-none"></textarea>
+                </div>
+                <div class="overflow-x-auto">
+                  <table class="w-full text-sm border-collapse">
+                    <thead>
+                      <tr class="text-xs text-gray-400 uppercase">
+                        <th class="text-left py-2 pr-3 font-medium">Dia</th>
+                        <th class="text-center py-2 px-2 font-medium">Aberto</th>
+                        <th class="text-center py-2 px-2 font-medium">Abertura</th>
+                        <th class="text-center py-2 px-2 font-medium">Fechamento</th>
+                      </tr>
+                    </thead>
+                    <tbody id="cfg-horario-dias" class="divide-y divide-gray-100"></tbody>
+                  </table>
+                </div>
+                <p class="text-xs text-gray-400 mt-2">* "00:00" no fechamento significa que fecha à meia-noite.</p>
+              </div>
+            </div>
+
+            <!-- Status (somente admin) -->
+            <div id="cfg-status-wrapper" class="hidden p-5">
+              <h3 class="font-semibold text-gray-700 text-sm mb-3">Status</h3>
+              <label class="flex items-center gap-2 text-sm text-gray-600 cursor-pointer">
+                <input id="cfg-ativo" type="checkbox" class="rounded">
+                Restaurante ativo (aceita pedidos via WhatsApp)
+              </label>
+            </div>
+
+          </div>
+
+          <p id="cfg-erro" class="text-red-500 text-sm mt-3 hidden"></p>
+          <p id="cfg-sucesso" class="text-green-600 text-sm mt-3 hidden">✅ Configurações salvas com sucesso!</p>
+
+          <div class="flex gap-3 mt-4">
+            <button onclick="salvarConfiguracoes()"
+              class="bg-orange-500 hover:bg-orange-600 text-white px-6 py-2.5 rounded-lg font-semibold text-sm transition">
+              Salvar alterações
+            </button>
+          </div>
+        </div>
+
+        <div id="cfg-vazio" class="text-sm text-gray-400 py-6">Selecione um restaurante para ver as configurações.</div>
+      </div>
+    </div>
+
+    <!-- Cardápio -->
+    <div id="secao-cardapio" class="hidden pb-8">
+      <div class="flex items-center justify-between mb-4">
+        <h2 class="font-bold text-gray-800">Cardápio</h2>
+        <div class="flex gap-2">
+          <button onclick="abrirModalImportarPDF()"
+            class="bg-gray-100 hover:bg-gray-200 text-gray-700 text-sm font-semibold px-4 py-2 rounded-lg transition flex items-center gap-1.5">
+            📄 Importar PDF
+          </button>
+          <button onclick="abrirModalCategoria()"
+            class="bg-orange-500 hover:bg-orange-600 text-white text-sm font-semibold px-4 py-2 rounded-lg transition">
+            + Categoria
+          </button>
+        </div>
+      </div>
+      <div id="cardapio-lista" class="flex flex-col gap-4"></div>
+    </div>
+
+  </div>
+</div>
+
+<!-- MODAL NOVO RESTAURANTE -->
+<div id="modal-restaurante" class="hidden fixed inset-0 bg-black/50 z-50 flex items-center justify-center p-4">
+  <div class="bg-white rounded-2xl shadow-2xl w-full max-w-lg max-h-[90vh] overflow-y-auto">
+    <div class="p-6">
+      <div class="flex items-center justify-between mb-5">
+        <h2 class="text-lg font-bold text-gray-800">Novo Restaurante</h2>
+        <button onclick="fecharModalRestaurante()" class="text-gray-400 hover:text-gray-600 text-xl">✕</button>
+      </div>
+
+      <div id="modal-restaurante-form">
+        <div class="grid grid-cols-2 gap-3 mb-3">
+          <div class="col-span-2">
+            <label class="text-xs text-gray-500 mb-1 block">Nome do restaurante *</label>
+            <input id="nr-nome" type="text" class="w-full border border-gray-300 rounded-lg px-3 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-orange-400">
+          </div>
+          <div>
+            <label class="text-xs text-gray-500 mb-1 block">Número WhatsApp (com DDI) *</label>
+            <input id="nr-slug" type="text" placeholder="5511999999999" class="w-full border border-gray-300 rounded-lg px-3 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-orange-400">
+          </div>
+          <div>
+            <label class="text-xs text-gray-500 mb-1 block">WhatsApp do dono (recebe pedidos) *</label>
+            <input id="nr-dono" type="text" placeholder="5511988888888" class="w-full border border-gray-300 rounded-lg px-3 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-orange-400">
+          </div>
+          <div>
+            <label class="text-xs text-gray-500 mb-1 block">Moeda</label>
+            <select id="nr-moeda" class="w-full border border-gray-300 rounded-lg px-3 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-orange-400">
+              <option value="R$">R$ (Real)</option>
+              <option value="$">$ (Dólar)</option>
+              <option value="€">€ (Euro)</option>
+              <option value="G$">G$ (Guarani)</option>
+            </select>
+          </div>
+          <div>
+            <label class="text-xs text-gray-500 mb-1 block">Taxa de entrega</label>
+            <input id="nr-taxa" type="number" value="0" min="0" class="w-full border border-gray-300 rounded-lg px-3 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-orange-400">
+          </div>
+          <div>
+            <label class="text-xs text-gray-500 mb-1 block">Email de acesso ao painel</label>
+            <input id="nr-email" type="email" class="w-full border border-gray-300 rounded-lg px-3 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-orange-400">
+          </div>
+          <div>
+            <label class="text-xs text-gray-500 mb-1 block">Senha inicial</label>
+            <input id="nr-senha" type="password" class="w-full border border-gray-300 rounded-lg px-3 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-orange-400">
+          </div>
+        </div>
+        <p id="nr-erro" class="text-red-500 text-sm mb-3 hidden"></p>
+        <button onclick="criarRestaurante()"
+          class="w-full bg-orange-500 hover:bg-orange-600 text-white rounded-lg py-2.5 font-semibold transition text-sm">
+          Criar Restaurante e Gerar QR Code
+        </button>
+      </div>
+
+      <!-- QR Code após criação -->
+      <div id="modal-restaurante-qr" class="hidden text-center">
+        <div class="bg-green-50 rounded-xl p-4 mb-4">
+          <p class="text-green-700 font-semibold text-sm">✅ Restaurante criado com sucesso!</p>
+          <p id="nr-qr-nome" class="text-green-600 text-xs mt-1"></p>
+        </div>
+        <p class="text-sm text-gray-600 mb-3">Escaneie o QR code com o WhatsApp Business do restaurante:</p>
+        <div id="nr-qr-imagem" class="flex justify-center mb-4"></div>
+        <p class="text-xs text-gray-400">Configurações → Dispositivos conectados → Conectar dispositivo</p>
+        <button onclick="fecharModalRestaurante()"
+          class="mt-4 w-full bg-gray-100 hover:bg-gray-200 text-gray-700 rounded-lg py-2.5 font-semibold transition text-sm">
+          Fechar
+        </button>
+      </div>
+    </div>
+  </div>
+</div>
+
+<!-- MODAL CATEGORIA -->
+<div id="modal-categoria" class="hidden fixed inset-0 bg-black/50 z-50 flex items-center justify-center p-4">
+  <div class="bg-white rounded-2xl shadow-2xl w-full max-w-sm">
+    <div class="p-6">
+      <div class="flex items-center justify-between mb-4">
+        <h2 id="modal-categoria-titulo" class="text-lg font-bold text-gray-800">Nova Categoria</h2>
+        <button onclick="fecharModalCategoria()" class="text-gray-400 hover:text-gray-600 text-xl">✕</button>
+      </div>
+      <input id="cat-nome" type="text" placeholder="Nome da categoria"
+        class="w-full border border-gray-300 rounded-lg px-3 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-orange-400 mb-3">
+      <input type="hidden" id="cat-id">
+      <button onclick="salvarCategoria()"
+        class="w-full bg-orange-500 hover:bg-orange-600 text-white rounded-lg py-2.5 font-semibold transition text-sm">
+        Salvar
+      </button>
+    </div>
+  </div>
+</div>
+
+<!-- MODAL PRODUTO -->
+<div id="modal-produto" class="hidden fixed inset-0 bg-black/50 z-50 flex items-center justify-center p-4">
+  <div class="bg-white rounded-2xl shadow-2xl w-full max-w-md max-h-[90vh] overflow-y-auto">
+    <div class="p-6">
+      <div class="flex items-center justify-between mb-4">
+        <h2 id="modal-produto-titulo" class="text-lg font-bold text-gray-800">Novo Produto</h2>
+        <button onclick="fecharModalProduto()" class="text-gray-400 hover:text-gray-600 text-xl">✕</button>
+      </div>
+      <div class="flex flex-col gap-3">
+        <input id="prod-nome" type="text" placeholder="Nome do produto *"
+          class="w-full border border-gray-300 rounded-lg px-3 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-orange-400">
+        <input id="prod-descricao" type="text" placeholder="Descrição (opcional)"
+          class="w-full border border-gray-300 rounded-lg px-3 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-orange-400">
+        <div id="prod-preco-wrapper">
+          <label class="text-xs text-gray-500 mb-1 block">Preço</label>
+          <input id="prod-preco" type="number" min="0" step="0.01" value="0"
+            class="w-full border border-gray-300 rounded-lg px-3 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-orange-400">
+        </div>
+        <label class="flex items-center gap-2 text-sm text-gray-600 cursor-pointer">
+          <input id="prod-tem-tamanhos" type="checkbox" class="rounded" onchange="toggleTamanhos()">
+          Produto com tamanhos (ex: pizzas P, M, G)
+        </label>
+        <div id="prod-tamanhos-wrapper" class="hidden flex flex-col gap-2">
+          <div class="grid grid-cols-3 gap-2 text-xs text-gray-400 font-medium px-1">
+            <span>Tamanho</span>
+            <span>Sem borda</span>
+            <span>Com borda</span>
+          </div>
+          <div id="prod-tamanhos-lista" class="flex flex-col gap-2"></div>
+          <button onclick="adicionarLinhaTamanho()" type="button"
+            class="text-xs text-orange-500 hover:text-orange-700 text-left transition">+ Adicionar tamanho</button>
+        </div>
+        <input type="hidden" id="prod-id">
+        <input type="hidden" id="prod-categoria-id">
+      </div>
+      <button onclick="salvarProduto()"
+        class="mt-4 w-full bg-orange-500 hover:bg-orange-600 text-white rounded-lg py-2.5 font-semibold transition text-sm">
+        Salvar
+      </button>
+    </div>
+  </div>
+</div>
+
+<!-- MODAL IMPORTAR PDF -->
+<div id="modal-pdf" class="hidden fixed inset-0 bg-black/50 z-50 flex items-center justify-center p-4">
+  <div class="bg-white rounded-2xl shadow-2xl w-full max-w-2xl max-h-[90vh] overflow-y-auto">
+    <div class="p-6">
+      <div class="flex items-center justify-between mb-5">
+        <h2 class="text-lg font-bold text-gray-800">Importar Cardápio via PDF</h2>
+        <button onclick="fecharModalPDF()" class="text-gray-400 hover:text-gray-600 text-xl">✕</button>
+      </div>
+
+      <!-- Etapa 1: upload -->
+      <div id="pdf-etapa-upload">
+        <div id="pdf-dropzone"
+          class="border-2 border-dashed border-gray-300 rounded-xl p-8 text-center cursor-pointer hover:border-orange-400 hover:bg-orange-50 transition"
+          onclick="document.getElementById('pdf-input').click()">
+          <p class="text-4xl mb-3">📄</p>
+          <p class="text-gray-600 font-medium">Clique para selecionar o PDF do cardápio</p>
+          <p class="text-gray-400 text-sm mt-1">Tamanho máximo: 10MB</p>
+          <p id="pdf-nome-arquivo" class="text-orange-600 text-sm mt-2 font-medium"></p>
+        </div>
+        <input id="pdf-input" type="file" accept=".pdf" class="hidden" onchange="selecionarPDF(this)">
+
+        <div class="mt-4 bg-blue-50 rounded-xl p-4 text-sm text-blue-700">
+          <p class="font-semibold mb-1">Como funciona:</p>
+          <ol class="list-decimal list-inside space-y-1 text-blue-600">
+            <li>Faça upload do PDF com o cardápio</li>
+            <li>A IA interpreta categorias, produtos e preços automaticamente</li>
+            <li>Você revisa o resultado antes de salvar</li>
+          </ol>
+        </div>
+
+        <p id="pdf-erro" class="text-red-500 text-sm mt-3 hidden"></p>
+
+        <button onclick="processarPDF()"
+          class="mt-4 w-full bg-orange-500 hover:bg-orange-600 text-white rounded-lg py-2.5 font-semibold transition text-sm disabled:opacity-50">
+          Processar com IA
+        </button>
+      </div>
+
+      <!-- Etapa 2: carregando -->
+      <div id="pdf-etapa-loading" class="hidden text-center py-10">
+        <div class="text-5xl mb-4 animate-pulse">🤖</div>
+        <p class="text-gray-700 font-semibold">Analisando o cardápio...</p>
+        <p class="text-gray-400 text-sm mt-1">A IA está interpretando categorias, produtos e preços</p>
+      </div>
+
+      <!-- Etapa 3: preview -->
+      <div id="pdf-etapa-preview" class="hidden">
+        <div class="bg-green-50 rounded-xl p-3 mb-4 flex items-center gap-2">
+          <span class="text-green-600 text-lg">✅</span>
+          <div>
+            <p class="text-green-700 font-semibold text-sm">Cardápio interpretado com sucesso!</p>
+            <p id="pdf-resumo" class="text-green-600 text-xs"></p>
+          </div>
+        </div>
+
+        <div id="pdf-preview-lista" class="flex flex-col gap-3 mb-4 max-h-80 overflow-y-auto"></div>
+
+        <div class="bg-amber-50 rounded-xl p-3 mb-4">
+          <label class="flex items-center gap-2 text-sm text-amber-700 cursor-pointer">
+            <input id="pdf-substituir" type="checkbox" class="rounded">
+            <span><strong>Substituir cardápio atual</strong> (remove tudo que existe e importa este)</span>
+          </label>
+          <p class="text-xs text-amber-600 mt-1 ml-6">Se desmarcado, as categorias serão adicionadas ao cardápio existente.</p>
+        </div>
+
+        <div class="flex gap-3">
+          <button onclick="voltarUpload()"
+            class="flex-1 bg-gray-100 hover:bg-gray-200 text-gray-700 rounded-lg py-2.5 font-semibold transition text-sm">
+            ← Voltar
+          </button>
+          <button onclick="confirmarImportacao()"
+            class="flex-1 bg-orange-500 hover:bg-orange-600 text-white rounded-lg py-2.5 font-semibold transition text-sm">
+            Salvar Cardápio
+          </button>
+        </div>
+      </div>
+    </div>
+  </div>
+</div>
+
+<!-- MODAL EDITAR CLIENTE -->
+<div id="modal-editar-cliente" class="hidden fixed inset-0 bg-black/50 z-50 flex items-center justify-center p-4">
+  <div class="bg-white rounded-2xl shadow-2xl w-full max-w-sm">
+    <div class="p-6">
+      <div class="flex items-center justify-between mb-4">
+        <h2 class="text-lg font-bold text-gray-800">Editar Cliente</h2>
+        <button onclick="fecharModalEditarCliente()" class="text-gray-400 hover:text-gray-600 text-xl">✕</button>
+      </div>
+      <input type="hidden" id="edit-cliente-id">
+      <div class="mb-3">
+        <label class="text-xs text-gray-500 mb-1 block">Número</label>
+        <input id="edit-cliente-numero" type="text" disabled
+          class="w-full border border-gray-200 bg-gray-50 rounded-lg px-3 py-2 text-sm text-gray-400">
+      </div>
+      <div class="mb-4">
+        <label class="text-xs text-gray-500 mb-1 block">Nome</label>
+        <input id="edit-cliente-nome" type="text" placeholder="Nome do cliente"
+          class="w-full border border-gray-300 rounded-lg px-3 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-orange-400"
+          onkeydown="if(event.key==='Enter') salvarClienteEdit()">
+      </div>
+      <button onclick="salvarClienteEdit()"
+        class="w-full bg-orange-500 hover:bg-orange-600 text-white rounded-lg py-2.5 font-semibold transition text-sm">
+        Salvar
+      </button>
+    </div>
+  </div>
+</div>
+
+<!-- MODAL DISPARAR MENSAGEM EM MASSA -->
+<div id="modal-disparar" class="hidden fixed inset-0 bg-black/50 z-50 flex items-center justify-center p-4">
+  <div class="bg-white rounded-2xl shadow-2xl w-full max-w-lg">
+    <div class="p-6">
+      <div class="flex items-center justify-between mb-5">
+        <h2 class="text-lg font-bold text-gray-800">📢 Mensagem em Massa</h2>
+        <button onclick="fecharModalDisparar()" class="text-gray-400 hover:text-gray-600 text-xl">✕</button>
+      </div>
+
+      <div id="disparar-form">
+        <div class="mb-3">
+          <label class="text-xs text-gray-500 mb-1 block">Destinatários</label>
+          <select id="disparar-filtro"
+            class="w-full border border-gray-300 rounded-lg px-3 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-orange-400">
+            <option value="todos">Todos os clientes do restaurante</option>
+          </select>
+        </div>
+        <div class="mb-4">
+          <label class="text-xs text-gray-500 mb-1 block">Mensagem</label>
+          <textarea id="disparar-mensagem" rows="5" placeholder="Digite a mensagem a ser enviada..."
+            class="w-full border border-gray-300 rounded-lg px-3 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-orange-400 resize-none"></textarea>
+          <p class="text-xs text-gray-400 mt-1">Dica: use *texto* para negrito e _texto_ para itálico no WhatsApp.</p>
+        </div>
+        <p id="disparar-erro" class="text-red-500 text-sm mb-3 hidden"></p>
+        <button onclick="enviarDisparar()"
+          class="w-full bg-orange-500 hover:bg-orange-600 text-white rounded-lg py-2.5 font-semibold transition text-sm">
+          Enviar mensagem
+        </button>
+      </div>
+
+      <div id="disparar-resultado" class="hidden text-center py-4">
+        <div class="text-4xl mb-3" id="disparar-icone">✅</div>
+        <p id="disparar-resultado-texto" class="text-gray-700 font-semibold"></p>
+        <p id="disparar-resultado-detalhe" class="text-gray-400 text-sm mt-1"></p>
+        <button onclick="fecharModalDisparar()"
+          class="mt-4 w-full bg-gray-100 hover:bg-gray-200 text-gray-700 rounded-lg py-2.5 font-semibold transition text-sm">
+          Fechar
+        </button>
+      </div>
+    </div>
+  </div>
+</div>
+
+<!-- MODAL HISTÓRICO DE RESGATES -->
+<div id="modal-historico-resgates" class="hidden fixed inset-0 bg-black/50 z-50 flex items-center justify-center p-4">
+  <div class="bg-white rounded-2xl shadow-2xl w-full max-w-2xl max-h-[85vh] flex flex-col">
+    <div class="p-5 border-b border-gray-100 flex items-center justify-between shrink-0">
+      <div>
+        <h2 class="text-lg font-bold text-gray-800">Histórico de Resgates</h2>
+        <p id="historico-programa-nome" class="text-sm text-gray-400 mt-0.5"></p>
+      </div>
+      <button onclick="fecharModalHistorico()" class="text-gray-400 hover:text-gray-600 text-xl">✕</button>
+    </div>
+    <div class="overflow-y-auto flex-1">
+      <div id="historico-lista" class="divide-y divide-gray-100"></div>
+      <div id="historico-vazio" class="hidden text-center py-12 text-gray-400">
+        <p class="text-3xl mb-2">📋</p>
+        <p class="text-sm">Nenhum resgate registrado ainda</p>
+      </div>
+    </div>
+    <div id="historico-paginacao" class="p-3 border-t border-gray-100 flex items-center justify-center gap-2 shrink-0"></div>
+  </div>
+</div>
+
+<!-- MODAL PROGRAMA FIDELIDADE -->
+<div id="modal-fidelidade" class="hidden fixed inset-0 bg-black/50 z-50 flex items-center justify-center p-4">
+  <div class="bg-white rounded-2xl shadow-2xl w-full max-w-md">
+    <div class="p-6">
+      <div class="flex items-center justify-between mb-4">
+        <h2 id="modal-fidelidade-titulo" class="text-lg font-bold text-gray-800">Novo Programa</h2>
+        <button onclick="fecharModalFidelidade()" class="text-gray-400 hover:text-gray-600 text-xl">✕</button>
+      </div>
+      <input type="hidden" id="fid-id">
+      <div class="flex flex-col gap-3">
+        <div>
+          <label class="text-xs text-gray-500 mb-1 block">Nome do programa *</label>
+          <input id="fid-nome" type="text" placeholder='Ex: "Décima pizza grátis"'
+            class="w-full border border-gray-300 rounded-lg px-3 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-orange-400">
+        </div>
+        <div>
+          <label class="text-xs text-gray-500 mb-1 block">Descrição (exibida para o time)</label>
+          <input id="fid-descricao" type="text" placeholder='Ex: "A cada 10 pedidos, ganhe uma pizza grátis"'
+            class="w-full border border-gray-300 rounded-lg px-3 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-orange-400">
+        </div>
+        <div class="grid grid-cols-2 gap-3">
+          <div>
+            <label class="text-xs text-gray-500 mb-1 block">Tipo de meta</label>
+            <select id="fid-tipo"
+              class="w-full border border-gray-300 rounded-lg px-3 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-orange-400">
+              <option value="PEDIDOS">Nº de pedidos</option>
+              <option value="VALOR">Valor gasto (R$)</option>
+            </select>
+          </div>
+          <div>
+            <label class="text-xs text-gray-500 mb-1 block" id="fid-meta-label">Meta (pedidos)</label>
+            <input id="fid-meta" type="number" min="1" step="1" placeholder="10"
+              class="w-full border border-gray-300 rounded-lg px-3 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-orange-400">
+          </div>
+        </div>
+      </div>
+      <p id="fid-erro" class="text-red-500 text-sm mt-3 hidden"></p>
+      <button onclick="salvarFidelidade()"
+        class="mt-4 w-full bg-orange-500 hover:bg-orange-600 text-white rounded-lg py-2.5 font-semibold transition text-sm">
+        Salvar
+      </button>
+    </div>
+  </div>
+</div>
+
+<!-- TOAST -->
+<div id="toast" class="hidden fixed bottom-4 right-4 bg-gray-900 text-white px-4 py-3 rounded-xl shadow-xl text-sm max-w-xs z-50 cursor-pointer" onclick="this.classList.add('hidden')"></div>
+
+<script src="/socket.io/socket.io.js"></script>
+<script>
+const TABS = ['Todos','NOVO','CONFIRMADO','PAGO','PREPARANDO','SAIU_PARA_ENTREGA','PRONTO_PARA_RETIRADA','ENTREGUE','CANCELADO'];
+const LABELS = { Todos:'Todos', NOVO:'Novo', CONFIRMADO:'Confirmado', PAGO:'Pago', PREPARANDO:'Preparando', SAIU_PARA_ENTREGA:'Em entrega', PRONTO_PARA_RETIRADA:'Pronto p/ retirada', ENTREGUE:'Entregue', CANCELADO:'Cancelado' };
+const CORES_BADGE = { NOVO:'bg-orange-100 text-orange-700', CONFIRMADO:'bg-blue-100 text-blue-700', PAGO:'bg-cyan-100 text-cyan-700', PREPARANDO:'bg-amber-100 text-amber-700', SAIU_PARA_ENTREGA:'bg-purple-100 text-purple-700', PRONTO_PARA_RETIRADA:'bg-indigo-100 text-indigo-700', ENTREGUE:'bg-green-100 text-green-700', CANCELADO:'bg-red-100 text-red-700' };
+const ACOES = {
+  NOVO: [{ label:'✓ Confirmar', status:'CONFIRMADO', cor:'bg-blue-500 hover:bg-blue-600' }, { label:'✗ Cancelar', status:'CANCELADO', cor:'bg-red-100 hover:bg-red-200 text-red-700' }],
+  CONFIRMADO: [{ label:'👨‍🍳 Iniciar preparo', status:'PREPARANDO', cor:'bg-amber-500 hover:bg-amber-600' }, { label:'✗ Cancelar', status:'CANCELADO', cor:'bg-red-100 hover:bg-red-200 text-red-700' }],
+  PAGO: [{ label:'👨‍🍳 Iniciar preparo', status:'PREPARANDO', cor:'bg-amber-500 hover:bg-amber-600' }, { label:'✗ Cancelar', status:'CANCELADO', cor:'bg-red-100 hover:bg-red-200 text-red-700' }],
+  SAIU_PARA_ENTREGA: [{ label:'✅ Entregue', status:'ENTREGUE', cor:'bg-green-500 hover:bg-green-600' }],
+  PRONTO_PARA_RETIRADA: [{ label:'✅ Confirmado retirada', status:'ENTREGUE', cor:'bg-green-500 hover:bg-green-600' }],
+};
+
+let token = '';       // admin token
+let jwtToken = '';    // JWT do dono do restaurante
+let userRole = '';    // 'admin' | 'restaurante'
+let restauranteInfo = null; // { id, nome, slug } para role restaurante
+let tabAtual = 'Todos';
+let restauranteAtual = '';
+let restaurantes = [];
+let pedidos = [];
+let socket = null;
+
+// ── Auth helpers ──────────────────────────────────────────────────────────────
+function getHeaders(extra = {}) {
+  const base = userRole === 'restaurante'
+    ? { 'Authorization': `Bearer ${jwtToken}` }
+    : { 'x-admin-token': token };
+  return { ...base, ...extra };
+}
+
+function mostrarModoToken() {
+  document.getElementById('login-email-mode').classList.add('hidden');
+  document.getElementById('login-token-mode').classList.remove('hidden');
+  document.getElementById('login-subtitulo').textContent = 'Acesso restrito ao administrador';
+  document.getElementById('login-erro').classList.add('hidden');
+}
+
+function mostrarModoEmail() {
+  document.getElementById('login-token-mode').classList.add('hidden');
+  document.getElementById('login-email-mode').classList.remove('hidden');
+  document.getElementById('login-subtitulo').textContent = 'Acesse com seu email e senha';
+  document.getElementById('login-erro').classList.add('hidden');
+}
+
+async function entrarComEmail() {
+  const email = document.getElementById('email-input').value.trim();
+  const senha = document.getElementById('senha-input').value;
+  if (!email || !senha) return;
+  document.getElementById('login-erro').classList.add('hidden');
+
+  const res = await fetch('/auth/login', {
+    method: 'POST',
+    headers: { 'Content-Type': 'application/json' },
+    body: JSON.stringify({ email, senha }),
+  });
+
+  if (res.ok) {
+    const { token: jwt, restaurante } = await res.json();
+    jwtToken = jwt;
+    userRole = 'restaurante';
+    restauranteInfo = restaurante;
+    localStorage.setItem('jwt_token', jwt);
+    localStorage.setItem('user_role', 'restaurante');
+    iniciarDashboard();
+  } else {
+    document.getElementById('login-erro').classList.remove('hidden');
+  }
+}
+
+async function entrarComToken() {
+  const input = document.getElementById('token-input').value.trim();
+  if (!input) return;
+  const res = await fetch('/admin/stats', { headers: { 'x-admin-token': input } });
+  if (res.ok) {
+    token = input;
+    userRole = 'admin';
+    localStorage.setItem('admin_token', input);
+    localStorage.setItem('user_role', 'admin');
+    iniciarDashboard();
+  } else {
+    document.getElementById('login-erro').classList.remove('hidden');
+  }
+}
+
+// Mantém compatibilidade com botão "Entrar" genérico (não usado mais, mas por segurança)
+function entrar() { entrarComToken(); }
+
+function sair() {
+  localStorage.removeItem('admin_token');
+  localStorage.removeItem('jwt_token');
+  localStorage.removeItem('user_role');
+  location.reload();
+}
+
+// ── Init ──────────────────────────────────────────────────────────────────────
+async function iniciarDashboard() {
+  document.getElementById('login').classList.add('hidden');
+  document.getElementById('app').classList.remove('hidden');
+
+  // Configura UI baseada no papel do usuário
+  if (userRole === 'restaurante') {
+    document.getElementById('restaurante-filter').classList.add('hidden');
+    document.getElementById('user-label').textContent = restauranteInfo?.nome || '';
+    document.getElementById('user-label').classList.remove('hidden');
+    restauranteAtual = restauranteInfo?.id || '';
+  } else {
+    document.getElementById('user-label').textContent = 'Super Admin';
+    document.getElementById('user-label').classList.remove('hidden');
+    document.getElementById('btn-novo-restaurante').classList.remove('hidden');
+  }
+
+  renderizarTabs();
+  await Promise.all([carregarRestaurantes(), carregarPedidos(), carregarStats()]);
+  iniciarSocket();
+  setInterval(() => { carregarPedidos(); carregarStats(); }, 30000);
+}
+
+// ── Restaurantes ──────────────────────────────────────────────────────────────
+async function carregarRestaurantes() {
+  const res = await fetch('/admin/restaurantes', { headers: getHeaders() });
+  if (!res.ok) return;
+  const { data } = await res.json();
+  restaurantes = data;
+
+  if (userRole === 'admin') {
+    const sel = document.getElementById('restaurante-filter');
+    data.forEach(r => {
+      const opt = document.createElement('option');
+      opt.value = r.id;
+      opt.textContent = r.nome;
+      sel.appendChild(opt);
+    });
+  }
+}
+
+function trocarRestaurante() {
+  restauranteAtual = document.getElementById('restaurante-filter').value;
+  carregarPedidos();
+  carregarStats();
+}
+
+function getMoeda() {
+  if (!restauranteAtual) return null;
+  return restaurantes.find(r => r.id === restauranteAtual)?.moeda || null;
+}
+
+// ── Stats ─────────────────────────────────────────────────────────────────────
+async function carregarStats() {
+  const params = restauranteAtual ? `?restauranteId=${restauranteAtual}` : '';
+  const res = await fetch(`/admin/stats${params}`, { headers: getHeaders() });
+  if (!res.ok) return;
+  const { data } = await res.json();
+  document.getElementById('stat-hoje').textContent = data.pedidosHoje;
+  document.getElementById('stat-aberto').textContent = data.emAberto;
+  document.getElementById('stat-sessoes').textContent = data.sessoesAtivas;
+  const moeda = getMoeda();
+  document.getElementById('stat-fat').textContent = moeda ? formatarPreco(data.faturamentoHoje, moeda) : '—';
+}
+
+// ── Pedidos ───────────────────────────────────────────────────────────────────
+async function carregarPedidos() {
+  const params = new URLSearchParams();
+  if (restauranteAtual) params.set('restauranteId', restauranteAtual);
+  if (tabAtual !== 'Todos') params.set('status', tabAtual);
+  const res = await fetch(`/admin/pedidos?${params}`, { headers: getHeaders() });
+  if (!res.ok) return;
+  const { data } = await res.json();
+  pedidos = data;
+  renderizarPedidos();
+}
+
+function renderizarPedidos() {
+  const grid = document.getElementById('orders');
+  const empty = document.getElementById('empty');
+  grid.innerHTML = '';
+  if (!pedidos.length) { empty.classList.remove('hidden'); return; }
+  empty.classList.add('hidden');
+  pedidos.forEach(p => grid.appendChild(criarCard(p)));
+}
+
+// ── Tabs ──────────────────────────────────────────────────────────────────────
+function renderizarTabs() {
+  const container = document.getElementById('tabs');
+  container.innerHTML = '';
+  TABS.forEach(t => {
+    const btn = document.createElement('button');
+    btn.textContent = LABELS[t];
+    btn.className = `px-3 py-1.5 rounded-lg text-sm font-medium transition whitespace-nowrap ${t === tabAtual ? 'bg-white shadow text-gray-800' : 'text-gray-500 hover:text-gray-700'}`;
+    btn.onclick = () => { tabAtual = t; renderizarTabs(); carregarPedidos(); };
+    container.appendChild(btn);
+  });
+}
+
+// ── Card ──────────────────────────────────────────────────────────────────────
+function criarCard(pedido) {
+  const moeda = pedido.restaurante?.moeda || 'R$';
+  const isRetirada = pedido.localizacao === 'Retirada no balcão';
+  // total já inclui a taxa de entrega (salvo assim desde pedidoService)
+  const totalComTaxa = pedido.total;
+
+  const itens = Array.isArray(pedido.itens) ? pedido.itens : [];
+  const itensTexto = itens.slice(0, 3).map(i => `${i.quantidade || 1}x ${i.nome}`).join(', ') + (itens.length > 3 ? ` e mais ${itens.length - 3}...` : '');
+
+  const acoes = obterAcoes(pedido);
+
+  const div = document.createElement('div');
+  div.id = `card-${pedido.id}`;
+  div.className = 'bg-white rounded-2xl shadow-sm p-4 flex flex-col gap-3';
+
+  div.innerHTML = `
+    <div class="flex items-start justify-between gap-2">
+      <div>
+        <span class="font-bold text-gray-800 text-sm">#${pedido.id.split('-')[0].toUpperCase()}</span>
+        <span class="text-xs text-gray-400 ml-2">${tempoAtras(pedido.createdAt)}</span>
+      </div>
+      <div class="flex items-center gap-1 flex-wrap justify-end">
+        ${pedido.pago ? '<span class="px-2 py-0.5 rounded-full text-xs font-semibold bg-green-100 text-green-700">✓ Pago</span>' : ''}
+        <span class="px-2 py-0.5 rounded-full text-xs font-semibold ${CORES_BADGE[pedido.status] || 'bg-gray-100 text-gray-600'}">${LABELS[pedido.status] || pedido.status}</span>
+      </div>
+    </div>
+
+    <div>
+      <p class="font-semibold text-gray-800 text-sm">${pedido.clienteNome || 'Cliente'}</p>
+      <p class="text-xs text-gray-400">${pedido.clienteNumero}</p>
+    </div>
+
+    <div class="bg-gray-50 rounded-lg p-2 text-xs text-gray-600 leading-relaxed">${itensTexto}</div>
+
+    <div class="flex items-center justify-between text-sm">
+      <span>${isRetirada ? '🏪 Retirada' : '🛵 Entrega'}</span>
+      <span class="font-bold text-gray-800">${formatarPreco(totalComTaxa, moeda)}</span>
+    </div>
+
+    ${pedido.localizacao && !isRetirada ? `<p class="text-xs text-gray-400 truncate">📍 ${pedido.localizacao}</p>` : ''}
+
+    <div class="flex gap-2 flex-wrap">
+      ${!pedido.pago && pedido.status !== 'CANCELADO'
+        ? `<button onclick="marcarPago('${pedido.id}')" class="bg-green-500 hover:bg-green-600 text-white text-xs font-medium px-3 py-1.5 rounded-lg transition">💳 Pago</button>`
+        : ''}
+      ${acoes.map(a => `<button onclick="atualizarStatus('${pedido.id}', '${a.status}')"
+        class="${a.cor} text-white text-xs font-medium px-3 py-1.5 rounded-lg transition">${a.label}</button>`).join('')}
+    </div>
+  `;
+
+  return div;
+}
+
+function obterAcoes(pedido) {
+  if (pedido.status === 'PREPARANDO') {
+    const isRetirada = pedido.localizacao === 'Retirada no balcão';
+    return [
+      { label: isRetirada ? '🏪 Pronto p/ retirada' : '🛵 Saiu p/ entrega', status: isRetirada ? 'PRONTO_PARA_RETIRADA' : 'SAIU_PARA_ENTREGA', cor: 'bg-purple-500 hover:bg-purple-600' },
+      { label: '✗ Cancelar', status: 'CANCELADO', cor: 'bg-red-100 hover:bg-red-200 text-red-700' },
+    ];
+  }
+  return ACOES[pedido.status] || [];
+}
+
+// ── Atualizar status ──────────────────────────────────────────────────────────
+async function atualizarStatus(id, status) {
+  const res = await fetch(`/admin/pedidos/${id}/status`, {
+    method: 'PATCH',
+    headers: getHeaders({ 'Content-Type': 'application/json' }),
+    body: JSON.stringify({ status }),
+  });
+  if (!res.ok) { mostrarToast('Erro ao atualizar status'); return; }
+  const { data } = await res.json();
+  atualizarCardNaTela(data);
+  carregarStats();
+}
+
+async function marcarPago(id) {
+  const res = await fetch(`/admin/pedidos/${id}/pago`, {
+    method: 'PATCH',
+    headers: getHeaders(),
+  });
+  if (!res.ok) { mostrarToast('Erro ao registrar pagamento'); return; }
+  const { data } = await res.json();
+  atualizarCardNaTela(data);
+  mostrarToast('💳 Pagamento registrado!');
+}
+
+function atualizarCardNaTela(pedido) {
+  const card = document.getElementById(`card-${pedido.id}`);
+  if (card) {
+    const novo = criarCard(pedido);
+    card.replaceWith(novo);
+    // Remove do grid se não combina com o tab atual
+    if (tabAtual !== 'Todos' && pedido.status !== tabAtual) {
+      novo.remove();
+      if (!document.getElementById('orders').children.length) {
+        document.getElementById('empty').classList.remove('hidden');
+      }
+    }
+  }
+}
+
+// ── Socket.IO ─────────────────────────────────────────────────────────────────
+function assinarSalas() {
+  if (userRole === 'restaurante') {
+    socket.emit('assinar:restaurante', jwtToken);
+  } else {
+    socket.emit('assinar:admin', token);
+    restaurantes.forEach(r => socket.emit('assinar', r.slugWhatsapp));
+  }
+}
+
+function iniciarSocket() {
+  socket = io();
+  assinarSalas();
+
+  socket.on('connect', () => {
+    document.getElementById('indicador-socket').className = 'w-2 h-2 rounded-full bg-green-400';
+    assinarSalas();
+  });
+
+  socket.on('disconnect', () => {
+    document.getElementById('indicador-socket').className = 'w-2 h-2 rounded-full bg-red-400';
+  });
+
+  socket.on('pedido:novo', ({ pedido }) => {
+    if (!pedido) return;
+    if (restauranteAtual && pedido.restauranteId !== restauranteAtual) return;
+    pedidos.unshift(pedido);
+    tocarSom();
+    mostrarToast(`🔔 Novo pedido #${pedido.id.split('-')[0].toUpperCase()} de ${pedido.clienteNome || pedido.clienteNumero}`);
+    if (tabAtual === 'Todos' || tabAtual === 'NOVO') {
+      const card = criarCard(pedido);
+      card.classList.add('card-new');
+      document.getElementById('orders').prepend(card);
+      document.getElementById('empty').classList.add('hidden');
+    }
+    carregarStats();
+  });
+
+  socket.on('pedido:atualizado', (pedido) => {
+    if (!pedido) return;
+    const idx = pedidos.findIndex(p => p.id === pedido.id);
+    if (idx >= 0) pedidos[idx] = pedido;
+    atualizarCardNaTela(pedido);
+  });
+
+  socket.on('conversa:mensagem', ({ sessaoId, mensagem }) => {
+    if (!mensagem) return;
+    const idx = conversas.findIndex(s => s.id === sessaoId);
+    if (idx >= 0) {
+      // Atualiza prévia na lista apenas com mensagem do cliente (não do bot)
+      if (mensagem.role === 'cliente') conversas[idx].mensagens = [mensagem];
+      if (secaoAtual === 'conversas') renderizarConversas();
+    } else if (mensagem.role === 'cliente' && filtroConversa === 'ativas') {
+      // Nova conversa que ainda não está na lista — recarrega
+      carregarConversas();
+    }
+    // Se a conversa estiver aberta, adiciona a mensagem no chat
+    if (sessaoAberta === sessaoId) {
+      adicionarMensagemNoChat(mensagem);
+    } else if (mensagem.role === 'cliente') {
+      tocarSom();
+      mostrarToast(`💬 Nova mensagem de ${conversas[idx]?.clienteNome || conversas[idx]?.clienteNumero || '...'}`);
+    }
+  });
+
+  socket.on('conversa:encerrada', ({ sessaoId }) => {
+    if (filtroConversa === 'ativas') {
+      // Remove da lista ativas e fecha chat se estava aberto
+      conversas = conversas.filter(s => s.id !== sessaoId);
+      if (sessaoAberta === sessaoId) {
+        sessaoAberta = null;
+        document.getElementById('chat-header').classList.add('hidden');
+        document.getElementById('chat-input').classList.add('hidden');
+        document.getElementById('chat-mensagens').innerHTML = '';
+        document.getElementById('chat-vazio').classList.remove('hidden');
+      }
+      if (secaoAtual === 'conversas') renderizarConversas();
+    } else if (filtroConversa === 'encerradas') {
+      // Recarrega para incluir a conversa recém-encerrada
+      carregarConversas();
+    }
+  });
+
+  socket.on('conversa:atualizada', ({ id, botPausado }) => {
+    const idx = conversas.findIndex(s => s.id === id);
+    if (idx >= 0) conversas[idx].botPausado = botPausado;
+    if (secaoAtual === 'conversas') renderizarConversas();
+  });
+}
+
+// ── Helpers ───────────────────────────────────────────────────────────────────
+function formatarPreco(valor, moeda) {
+  const temDecimal = ['R$', '$', '€'].includes(moeda);
+  if (temDecimal) return `${moeda} ${Number(valor).toFixed(2).replace('.', ',')}`;
+  return `${moeda} ${Math.round(valor).toLocaleString('pt-BR')}`;
+}
+
+function tempoAtras(data) {
+  const diff = Math.floor((Date.now() - new Date(data)) / 60000);
+  if (diff < 1) return 'agora';
+  if (diff < 60) return `${diff} min`;
+  return `${Math.floor(diff / 60)}h${diff % 60 ? String(diff % 60).padStart(2,'0') + 'm' : ''}`;
+}
+
+function mostrarToast(msg) {
+  const t = document.getElementById('toast');
+  t.textContent = msg;
+  t.classList.remove('hidden');
+  clearTimeout(t._timer);
+  t._timer = setTimeout(() => t.classList.add('hidden'), 5000);
+}
+
+function tocarSom() {
+  try {
+    const ctx = new (window.AudioContext || window.webkitAudioContext)();
+    [880, 1100].forEach((freq, i) => {
+      const osc = ctx.createOscillator();
+      const gain = ctx.createGain();
+      osc.connect(gain); gain.connect(ctx.destination);
+      osc.frequency.value = freq;
+      gain.gain.setValueAtTime(0.2, ctx.currentTime + i * 0.15);
+      gain.gain.exponentialRampToValueAtTime(0.001, ctx.currentTime + i * 0.15 + 0.3);
+      osc.start(ctx.currentTime + i * 0.15);
+      osc.stop(ctx.currentTime + i * 0.15 + 0.3);
+    });
+  } catch (e) {}
+}
+
+// ── Navegação entre seções ────────────────────────────────────────────────────
+let secaoAtual = 'pedidos';
+
+function mostrarSecao(secao) {
+  secaoAtual = secao;
+  ['pedidos', 'conversas', 'clientes', 'cardapio', 'configuracoes'].forEach(s => {
+    document.getElementById(`secao-${s}`).classList.toggle('hidden', secao !== s);
+  });
+  document.getElementById('tabs').classList.toggle('hidden', secao !== 'pedidos');
+
+  const navAtivo = 'font-medium text-orange-500 hidden sm:block transition';
+  const navInativo = 'font-medium text-gray-400 hidden sm:block hover:text-orange-500 transition';
+  document.getElementById('nav-pedidos').className = secao === 'pedidos'
+    ? 'font-bold text-orange-500 hidden sm:block transition'
+    : 'font-bold text-gray-800 hidden sm:block hover:text-orange-500 transition';
+  ['conversas', 'clientes', 'cardapio', 'configuracoes'].forEach(s => {
+    document.getElementById(`nav-${s}`).className = secao === s ? navAtivo : navInativo;
+  });
+
+  if (secao === 'conversas') carregarConversas();
+  if (secao === 'clientes') carregarClientes();
+  if (secao === 'cardapio') carregarCardapio();
+  if (secao === 'configuracoes') iniciarConfiguracoes();
+}
+
+// ── Conversas ─────────────────────────────────────────────────────────────────
+let conversas = [];
+let sessaoAberta = null;
+let filtroConversa = 'ativas';
+
+async function carregarConversas() {
+  const params = new URLSearchParams();
+  if (restauranteAtual) params.set('restauranteId', restauranteAtual);
+  if (filtroConversa === 'encerradas') params.set('encerradas', 'true');
+  const res = await fetch(`/admin/conversas?${params}`, { headers: getHeaders() });
+  if (!res.ok) return;
+  const { data } = await res.json();
+  conversas = data;
+
+  // Atualiza estilos dos botões de filtro
+  document.getElementById('btn-ativas').className = `flex-1 text-xs py-1 rounded-lg transition font-medium ${filtroConversa === 'ativas' ? 'bg-orange-500 text-white' : 'text-gray-500 hover:bg-gray-100'}`;
+  document.getElementById('btn-encerradas').className = `flex-1 text-xs py-1 rounded-lg transition font-medium ${filtroConversa === 'encerradas' ? 'bg-orange-500 text-white' : 'text-gray-500 hover:bg-gray-100'}`;
+
+  renderizarConversas();
+}
+
+function renderizarConversas() {
+  const lista = document.getElementById('lista-conversas');
+  lista.innerHTML = '';
+  if (!conversas.length) {
+    lista.innerHTML = '<p class="text-xs text-gray-400 text-center p-4">Nenhuma conversa ativa</p>';
+    return;
+  }
+  conversas.forEach(s => {
+    const div = document.createElement('div');
+    div.id = `sessao-${s.id}`;
+    div.className = `p-3 cursor-pointer hover:bg-gray-50 border-b border-gray-50 transition ${sessaoAberta === s.id ? 'bg-orange-50' : ''}`;
+    div.onclick = () => abrirConversa(s);
+    const ultima = s.mensagens?.[0];
+    div.innerHTML = `
+      <div class="flex items-center justify-between gap-1 mb-0.5">
+        <span class="font-medium text-sm text-gray-800 truncate">${s.clienteNome || s.clienteNumero}</span>
+        ${s.botPausado ? '<span class="text-xs bg-red-100 text-red-600 px-1.5 py-0.5 rounded-full shrink-0">Pausado</span>' : ''}
+      </div>
+      <p class="text-xs text-gray-400 truncate">${ultima?.conteudo?.slice(0, 50) || '...'}</p>
+      <p class="text-xs text-gray-300 mt-0.5">${s.restaurante?.nome || ''}</p>
+    `;
+    lista.appendChild(div);
+  });
+}
+
+async function abrirConversa(sessao) {
+  sessaoAberta = sessao.id;
+  renderizarConversas();
+
+  document.getElementById('chat-vazio').classList.add('hidden');
+  document.getElementById('chat-header').classList.remove('hidden');
+  document.getElementById('chat-input').classList.remove('hidden');
+  document.getElementById('chat-nome').textContent = sessao.clienteNome || sessao.clienteNumero;
+  document.getElementById('chat-numero').textContent = sessao.clienteNumero;
+
+  atualizarBotaoPausar(sessao.botPausado);
+
+  const res = await fetch(`/admin/conversas/${sessao.id}/mensagens`, { headers: getHeaders() });
+  if (!res.ok) return;
+  const { data } = await res.json();
+  renderizarMensagens(data);
+}
+
+function renderizarMensagens(msgs) {
+  const container = document.getElementById('chat-mensagens');
+  container.innerHTML = '';
+  msgs.forEach(m => adicionarMensagemNoChat(m));
+  container.scrollTop = container.scrollHeight;
+}
+
+function adicionarMensagemNoChat(m) {
+  const container = document.getElementById('chat-mensagens');
+  const isBot = m.role === 'bot';
+  const isAdmin = m.conteudo?.startsWith('[admin]');
+  const div = document.createElement('div');
+  div.className = `flex ${isBot ? 'justify-end' : 'justify-start'}`;
+  const cor = isAdmin ? 'bg-blue-500 text-white' : isBot ? 'bg-orange-100 text-gray-800' : 'bg-gray-100 text-gray-800';
+  const label = isAdmin ? '👤 Admin' : isBot ? '🤖 Bot' : '💬 Cliente';
+  div.innerHTML = `
+    <div class="max-w-[75%]">
+      <p class="text-xs text-gray-400 mb-0.5 ${isBot ? 'text-right' : ''}">${label}</p>
+      <div class="${cor} rounded-2xl px-3 py-2 text-sm leading-relaxed whitespace-pre-wrap">${m.conteudo?.replace('[admin] ', '') || ''}</div>
+    </div>
+  `;
+  container.appendChild(div);
+  container.scrollTop = container.scrollHeight;
+}
+
+function atualizarBotaoPausar(pausado) {
+  const btn = document.getElementById('btn-pausar');
+  if (pausado) {
+    btn.textContent = '▶ Retomar bot';
+    btn.className = 'text-xs font-medium px-3 py-1.5 rounded-lg transition bg-green-500 hover:bg-green-600 text-white';
+  } else {
+    btn.textContent = '⏸ Pausar bot';
+    btn.className = 'text-xs font-medium px-3 py-1.5 rounded-lg transition bg-red-100 hover:bg-red-200 text-red-700';
+  }
+}
+
+async function togglePausar() {
+  if (!sessaoAberta) return;
+  const res = await fetch(`/admin/conversas/${sessaoAberta}/pausar`, {
+    method: 'PATCH',
+    headers: getHeaders(),
+  });
+  if (!res.ok) return;
+  const { data } = await res.json();
+  atualizarBotaoPausar(data.botPausado);
+  const idx = conversas.findIndex(s => s.id === sessaoAberta);
+  if (idx >= 0) conversas[idx].botPausado = data.botPausado;
+  renderizarConversas();
+  mostrarToast(data.botPausado ? '⏸ Bot pausado — você assumiu a conversa' : '▶ Bot retomado');
+}
+
+async function enviarMensagemAdmin() {
+  if (!sessaoAberta) return;
+  const input = document.getElementById('chat-texto');
+  const texto = input.value.trim();
+  if (!texto) return;
+  input.value = '';
+
+  const res = await fetch(`/admin/conversas/${sessaoAberta}/mensagem`, {
+    method: 'POST',
+    headers: getHeaders({ 'Content-Type': 'application/json' }),
+    body: JSON.stringify({ mensagem: texto }),
+  });
+  if (!res.ok) { mostrarToast('Erro ao enviar mensagem'); return; }
+  const { data } = await res.json();
+  adicionarMensagemNoChat(data);
+}
+
+// ── Clientes ──────────────────────────────────────────────────────────────────
+let clientesPagina = 1;
+let clientesBusca = '';
+let clientesTimer = null;
+let clientesTotal = 0;
+
+async function carregarClientes() {
+  const params = new URLSearchParams({ pagina: clientesPagina });
+  if (clientesBusca) params.set('busca', clientesBusca);
+  const res = await fetch(`/admin/clientes?${params}`, { headers: getHeaders() });
+  if (!res.ok) return;
+  const { data, meta } = await res.json();
+  clientesTotal = meta.total;
+  document.getElementById('clientes-total').textContent = `${meta.total} cliente${meta.total !== 1 ? 's' : ''}`;
+  renderizarClientes(data, meta);
+}
+
+function renderizarClientes(clientes, meta) {
+  const tbody = document.getElementById('clientes-tbody');
+  tbody.innerHTML = '';
+
+  if (!clientes.length) {
+    tbody.innerHTML = '<tr><td colspan="5" class="text-center py-8 text-gray-400 text-sm">Nenhum cliente encontrado</td></tr>';
+  } else {
+    clientes.forEach(c => {
+      const tr = document.createElement('tr');
+      tr.className = 'hover:bg-gray-50 transition';
+      const ultimoPedido = c.ultimoPedido ? new Date(c.ultimoPedido).toLocaleDateString('pt-BR') : '—';
+      // Usa moeda do restaurante selecionado, ou infere pelo histórico do cliente
+      let moedaCliente = getMoeda();
+      if (!moedaCliente && Array.isArray(c.restaurantes) && c.restaurantes.length > 0) {
+        const rid = c.restaurantes[0]?.restauranteId;
+        moedaCliente = restaurantes.find(r => r.id === rid)?.moeda || 'R$';
+      }
+      const totalGasto = formatarPreco(c.totalGasto, moedaCliente || 'R$');
+      const nomeEscapado = (c.nome || '').replace(/'/g, "\\'");
+      tr.innerHTML = `
+        <td class="px-4 py-3 font-medium text-gray-800">${c.nome || '<span class="text-gray-400 italic">Sem nome</span>'}</td>
+        <td class="px-4 py-3 text-gray-600">${c.numero}</td>
+        <td class="px-4 py-3 text-center">
+          <span class="bg-orange-100 text-orange-700 text-xs font-semibold px-2 py-0.5 rounded-full">${c.totalPedidos}</span>
+        </td>
+        <td class="px-4 py-3 text-right font-semibold text-gray-800">${totalGasto}</td>
+        <td class="px-4 py-3 text-gray-400 text-xs">${ultimoPedido}</td>
+        <td class="px-4 py-3 text-right">
+          <button onclick="abrirModalEditarCliente('${c.id}', '${nomeEscapado}', '${c.numero}')"
+            class="text-xs text-gray-400 hover:text-gray-600 transition" title="Editar">✏️</button>
+        </td>
+      `;
+      tbody.appendChild(tr);
+    });
+  }
+
+  // Paginação
+  const pag = document.getElementById('clientes-paginacao');
+  pag.innerHTML = '';
+  if (meta.paginas > 1) {
+    const prev = document.createElement('button');
+    prev.textContent = '← Anterior';
+    prev.disabled = meta.pagina <= 1;
+    prev.className = `text-xs px-3 py-1.5 rounded-lg border transition ${meta.pagina <= 1 ? 'text-gray-300 border-gray-200 cursor-not-allowed' : 'text-gray-600 border-gray-300 hover:bg-gray-50'}`;
+    prev.onclick = () => { clientesPagina--; carregarClientes(); };
+
+    const info = document.createElement('span');
+    info.className = 'text-xs text-gray-400';
+    info.textContent = `Página ${meta.pagina} de ${meta.paginas}`;
+
+    const next = document.createElement('button');
+    next.textContent = 'Próxima →';
+    next.disabled = meta.pagina >= meta.paginas;
+    next.className = `text-xs px-3 py-1.5 rounded-lg border transition ${meta.pagina >= meta.paginas ? 'text-gray-300 border-gray-200 cursor-not-allowed' : 'text-gray-600 border-gray-300 hover:bg-gray-50'}`;
+    next.onclick = () => { clientesPagina++; carregarClientes(); };
+
+    pag.appendChild(prev);
+    pag.appendChild(info);
+    pag.appendChild(next);
+  }
+}
+
+function buscarClientes() {
+  clearTimeout(clientesTimer);
+  clientesTimer = setTimeout(() => {
+    clientesBusca = document.getElementById('clientes-busca').value.trim();
+    clientesPagina = 1;
+    carregarClientes();
+  }, 400);
+}
+
+// ── Importar PDF ─────────────────────────────────────────────────────────────
+let pdfArquivo = null;
+let pdfCardapioInterpretado = null;
+
+function abrirModalImportarPDF() {
+  pdfArquivo = null;
+  pdfCardapioInterpretado = null;
+  document.getElementById('pdf-nome-arquivo').textContent = '';
+  document.getElementById('pdf-erro').classList.add('hidden');
+  document.getElementById('pdf-input').value = '';
+  mostrarEtapaPDF('upload');
+  document.getElementById('modal-pdf').classList.remove('hidden');
+}
+
+function fecharModalPDF() {
+  document.getElementById('modal-pdf').classList.add('hidden');
+}
+
+function mostrarEtapaPDF(etapa) {
+  ['upload', 'loading', 'preview'].forEach(e => {
+    document.getElementById(`pdf-etapa-${e}`).classList.toggle('hidden', e !== etapa);
+  });
+}
+
+function selecionarPDF(input) {
+  pdfArquivo = input.files[0];
+  if (pdfArquivo) {
+    document.getElementById('pdf-nome-arquivo').textContent = `📎 ${pdfArquivo.name}`;
+    document.getElementById('pdf-dropzone').classList.add('border-orange-400', 'bg-orange-50');
+  }
+}
+
+async function processarPDF() {
+  if (!pdfArquivo) {
+    const el = document.getElementById('pdf-erro');
+    el.textContent = 'Selecione um arquivo PDF primeiro.';
+    el.classList.remove('hidden');
+    return;
+  }
+
+  const rid = cardapioRestauranteId || restauranteAtual || restaurantes[0]?.id;
+  if (!rid) { mostrarToast('Selecione um restaurante primeiro'); return; }
+
+  mostrarEtapaPDF('loading');
+
+  const formData = new FormData();
+  formData.append('pdf', pdfArquivo);
+
+  try {
+    const res = await fetch(`/admin/cardapio/${rid}/importar-pdf`, {
+      method: 'POST',
+      headers: { ...getHeaders() },
+      body: formData,
+    });
+
+    const json = await res.json();
+
+    if (!res.ok) {
+      mostrarEtapaPDF('upload');
+      const el = document.getElementById('pdf-erro');
+      el.textContent = json.error || 'Erro ao processar PDF.';
+      el.classList.remove('hidden');
+      return;
+    }
+
+    pdfCardapioInterpretado = json.data;
+    document.getElementById('pdf-resumo').textContent =
+      `${json.totalCategorias} categoria(s) e ${json.totalProdutos} produto(s) encontrados`;
+
+    renderizarPreviewPDF(json.data);
+    mostrarEtapaPDF('preview');
+  } catch (err) {
+    mostrarEtapaPDF('upload');
+    const el = document.getElementById('pdf-erro');
+    el.textContent = 'Erro de conexão. Tente novamente.';
+    el.classList.remove('hidden');
+  }
+}
+
+function renderizarPreviewPDF(categorias) {
+  const lista = document.getElementById('pdf-preview-lista');
+  lista.innerHTML = '';
+  const moeda = getMoeda() || 'R$';
+
+  categorias.forEach((cat) => {
+    const div = document.createElement('div');
+    div.className = 'bg-gray-50 rounded-xl overflow-hidden';
+    const produtos = cat.produtos.map((p) => {
+      let precoTexto = '';
+      if (p.tamanhos?.length) {
+        precoTexto = p.tamanhos.map(t => `${t.nome}: ${formatarPreco(t.preco, moeda)}`).join(' / ');
+      } else {
+        precoTexto = formatarPreco(p.preco || 0, moeda);
+      }
+      return `<div class="px-4 py-2 border-t border-gray-100 flex items-center justify-between gap-2">
+        <div>
+          <span class="text-sm text-gray-800">${p.nome}</span>
+          ${p.descricao ? `<span class="text-xs text-gray-400 ml-1">— ${p.descricao}</span>` : ''}
+        </div>
+        <span class="text-xs text-orange-600 shrink-0">${precoTexto}</span>
+      </div>`;
+    }).join('');
+
+    div.innerHTML = `
+      <div class="px-4 py-2.5 bg-gray-100 flex items-center justify-between">
+        <span class="font-semibold text-sm text-gray-700">${cat.nome}</span>
+        <span class="text-xs text-gray-400">${cat.produtos.length} produto(s)</span>
+      </div>
+      ${produtos}
+    `;
+    lista.appendChild(div);
+  });
+}
+
+function voltarUpload() {
+  mostrarEtapaPDF('upload');
+}
+
+async function confirmarImportacao() {
+  const rid = cardapioRestauranteId || restauranteAtual || restaurantes[0]?.id;
+  const substituir = document.getElementById('pdf-substituir').checked;
+
+  const res = await fetch(`/admin/cardapio/${rid}/confirmar-importacao`, {
+    method: 'POST',
+    headers: getHeaders({ 'Content-Type': 'application/json' }),
+    body: JSON.stringify({ cardapio: pdfCardapioInterpretado, substituir }),
+  });
+
+  if (res.ok) {
+    fecharModalPDF();
+    carregarCardapio();
+    mostrarToast(`✅ Cardápio importado com sucesso!`);
+  } else {
+    const json = await res.json();
+    mostrarToast(json.error || 'Erro ao salvar cardápio');
+  }
+}
+
+// ── Novo Restaurante ──────────────────────────────────────────────────────────
+function abrirModalNovoRestaurante() {
+  document.getElementById('modal-restaurante').classList.remove('hidden');
+  document.getElementById('modal-restaurante-form').classList.remove('hidden');
+  document.getElementById('modal-restaurante-qr').classList.add('hidden');
+  document.getElementById('nr-erro').classList.add('hidden');
+}
+
+function fecharModalRestaurante() {
+  document.getElementById('modal-restaurante').classList.add('hidden');
+  carregarRestaurantes();
+}
+
+async function criarRestaurante() {
+  const nome = document.getElementById('nr-nome').value.trim();
+  const slugWhatsapp = document.getElementById('nr-slug').value.trim();
+  const donoWhatsapp = document.getElementById('nr-dono').value.trim();
+  const moeda = document.getElementById('nr-moeda').value;
+  const taxaEntrega = parseFloat(document.getElementById('nr-taxa').value) || 0;
+  const email = document.getElementById('nr-email').value.trim();
+  const senha = document.getElementById('nr-senha').value;
+
+  if (!nome || !slugWhatsapp || !donoWhatsapp) {
+    const el = document.getElementById('nr-erro');
+    el.textContent = 'Nome, número WhatsApp e WhatsApp do dono são obrigatórios.';
+    el.classList.remove('hidden');
+    return;
+  }
+
+  const res = await fetch('/admin/restaurantes', {
+    method: 'POST',
+    headers: getHeaders({ 'Content-Type': 'application/json' }),
+    body: JSON.stringify({ nome, slugWhatsapp, donoWhatsapp, moeda, taxaEntrega, email: email || undefined, senha: senha || undefined }),
+  });
+
+  const json = await res.json();
+
+  if (!res.ok) {
+    const el = document.getElementById('nr-erro');
+    el.textContent = json.error || 'Erro ao criar restaurante.';
+    el.classList.remove('hidden');
+    return;
+  }
+
+  document.getElementById('modal-restaurante-form').classList.add('hidden');
+  document.getElementById('modal-restaurante-qr').classList.remove('hidden');
+  document.getElementById('nr-qr-nome').textContent = json.data.nome;
+
+  const qrContainer = document.getElementById('nr-qr-imagem');
+  qrContainer.innerHTML = '';
+  const qrcode = json.qrcode?.qrcode;
+  if (qrcode) {
+    const src = qrcode.startsWith('data:') ? qrcode : `data:image/png;base64,${qrcode}`;
+    const img = document.createElement('img');
+    img.src = src;
+    img.className = 'w-48 h-48 rounded-lg border border-gray-200';
+    qrContainer.appendChild(img);
+  } else {
+    qrContainer.innerHTML = '<p class="text-sm text-gray-400">QR code ainda não disponível — tente conectar pela seção de instâncias.</p>';
+  }
+
+  mostrarToast(`✅ Restaurante "${json.data.nome}" criado!`);
+}
+
+// ── Cardápio ──────────────────────────────────────────────────────────────────
+let cardapioRestauranteId = '';
+let cardapioModalCatId = null;
+let cardapioData = [];
+
+async function carregarCardapio() {
+  const rid = restauranteAtual || (restaurantes[0]?.id || '');
+  if (!rid) {
+    document.getElementById('cardapio-lista').innerHTML = '<p class="text-sm text-gray-400">Selecione um restaurante.</p>';
+    return;
+  }
+  cardapioRestauranteId = rid;
+  const res = await fetch(`/admin/cardapio/${rid}`, { headers: getHeaders() });
+  if (!res.ok) return;
+  const { data } = await res.json();
+  cardapioData = data;
+  renderizarCardapio(data);
+}
+
+function renderizarCardapio(categorias) {
+  const lista = document.getElementById('cardapio-lista');
+  lista.innerHTML = '';
+
+  if (!categorias.length) {
+    lista.innerHTML = '<p class="text-sm text-gray-400 text-center py-8">Nenhuma categoria cadastrada. Clique em "+ Categoria" para começar.</p>';
+    return;
+  }
+
+  categorias.forEach((cat) => {
+    const div = document.createElement('div');
+    div.className = 'bg-white rounded-2xl shadow-sm overflow-hidden';
+    div.innerHTML = `
+      <div class="flex items-center justify-between px-4 py-3 border-b border-gray-100">
+        <span class="font-semibold text-gray-800">${cat.nome}</span>
+        <div class="flex gap-2">
+          <button onclick="abrirModalProduto('${cat.id}')"
+            class="text-xs bg-orange-100 hover:bg-orange-200 text-orange-700 px-3 py-1 rounded-lg transition">+ Produto</button>
+          <button onclick="editarCategoria('${cat.id}', '${cat.nome.replace(/'/g, "\\'")}')"
+            class="text-xs text-gray-400 hover:text-gray-600 transition">✏️</button>
+          <button onclick="confirmarDeletarCategoria('${cat.id}', '${cat.nome.replace(/'/g, "\\'")}')"
+            class="text-xs text-red-400 hover:text-red-600 transition">🗑</button>
+        </div>
+      </div>
+      <div class="divide-y divide-gray-50">
+        ${cat.produtos.length
+          ? cat.produtos.map((p) => renderizarProdutoLinha(p)).join('')
+          : '<p class="text-xs text-gray-400 px-4 py-3">Nenhum produto nesta categoria.</p>'
+        }
+      </div>
+    `;
+    lista.appendChild(div);
+  });
+}
+
+function renderizarProdutoLinha(p) {
+  const moeda = getMoeda() || 'R$';
+  let precoTexto = '';
+  if (p.tamanhos?.length) {
+    precoTexto = `${p.tamanhos.map(t => `${t.nome}: ${formatarPreco(t.preco, moeda)}`).join(' / ')}`;
+  } else {
+    precoTexto = formatarPreco(p.preco, moeda);
+  }
+  return `
+    <div class="flex items-center justify-between px-4 py-2.5 hover:bg-gray-50 transition">
+      <div>
+        <span class="text-sm text-gray-800 font-medium">${p.nome}</span>
+        ${p.descricao ? `<span class="text-xs text-gray-400 ml-2">— ${p.descricao}</span>` : ''}
+        <p class="text-xs text-orange-600 mt-0.5">${precoTexto}</p>
+      </div>
+      <div class="flex gap-2 shrink-0 ml-2">
+        <button onclick="editarProduto('${p.id}')" class="text-xs text-gray-400 hover:text-gray-600 transition">✏️</button>
+        <button onclick="deletarProduto('${p.id}')" class="text-xs text-red-400 hover:text-red-600 transition">🗑</button>
+      </div>
+    </div>
+  `;
+}
+
+// ── Modal Categoria ───────────────────────────────────────────────────────────
+function abrirModalCategoria() {
+  cardapioModalCatId = null;
+  document.getElementById('modal-categoria-titulo').textContent = 'Nova Categoria';
+  document.getElementById('cat-nome').value = '';
+  document.getElementById('cat-id').value = '';
+  document.getElementById('modal-categoria').classList.remove('hidden');
+}
+
+function editarCategoria(id, nome) {
+  cardapioModalCatId = id;
+  document.getElementById('modal-categoria-titulo').textContent = 'Editar Categoria';
+  document.getElementById('cat-nome').value = nome;
+  document.getElementById('cat-id').value = id;
+  document.getElementById('modal-categoria').classList.remove('hidden');
+}
+
+function fecharModalCategoria() {
+  document.getElementById('modal-categoria').classList.add('hidden');
+}
+
+async function salvarCategoria() {
+  const nome = document.getElementById('cat-nome').value.trim();
+  const id = document.getElementById('cat-id').value;
+  if (!nome) return;
+
+  if (id) {
+    await fetch(`/admin/cardapio/categorias/${id}`, {
+      method: 'PATCH',
+      headers: getHeaders({ 'Content-Type': 'application/json' }),
+      body: JSON.stringify({ nome }),
+    });
+  } else {
+    await fetch(`/admin/cardapio/${cardapioRestauranteId}/categorias`, {
+      method: 'POST',
+      headers: getHeaders({ 'Content-Type': 'application/json' }),
+      body: JSON.stringify({ nome }),
+    });
+  }
+
+  fecharModalCategoria();
+  carregarCardapio();
+}
+
+async function confirmarDeletarCategoria(id, nome) {
+  if (!confirm(`Deletar categoria "${nome}" e todos os seus produtos?`)) return;
+  await fetch(`/admin/cardapio/categorias/${id}`, { method: 'DELETE', headers: getHeaders() });
+  carregarCardapio();
+}
+
+// ── Modal Produto ─────────────────────────────────────────────────────────────
+let prodCategoriaId = null;
+
+function abrirModalProduto(categoriaId) {
+  prodCategoriaId = categoriaId;
+  document.getElementById('modal-produto-titulo').textContent = 'Novo Produto';
+  document.getElementById('prod-nome').value = '';
+  document.getElementById('prod-descricao').value = '';
+  document.getElementById('prod-preco').value = '0';
+  document.getElementById('prod-id').value = '';
+  document.getElementById('prod-categoria-id').value = categoriaId;
+  document.getElementById('prod-tem-tamanhos').checked = false;
+  document.getElementById('prod-tamanhos-wrapper').classList.add('hidden');
+  document.getElementById('prod-preco-wrapper').classList.remove('hidden');
+  document.getElementById('prod-tamanhos-lista').innerHTML = '';
+  document.getElementById('modal-produto').classList.remove('hidden');
+}
+
+function fecharModalProduto() {
+  document.getElementById('modal-produto').classList.add('hidden');
+}
+
+function toggleTamanhos() {
+  const temTamanhos = document.getElementById('prod-tem-tamanhos').checked;
+  document.getElementById('prod-tamanhos-wrapper').classList.toggle('hidden', !temTamanhos);
+  document.getElementById('prod-preco-wrapper').classList.toggle('hidden', temTamanhos);
+  if (temTamanhos && !document.getElementById('prod-tamanhos-lista').children.length) {
+    adicionarLinhaTamanho();
+  }
+}
+
+function adicionarLinhaTamanho() {
+  const lista = document.getElementById('prod-tamanhos-lista');
+  const div = document.createElement('div');
+  div.className = 'flex gap-2 items-center';
+  div.innerHTML = `
+    <input type="text" placeholder="Ex: Grande" class="tamanho-nome flex-1 border border-gray-300 rounded-lg px-2 py-1.5 text-sm focus:outline-none focus:ring-1 focus:ring-orange-400">
+    <input type="number" placeholder="0.00" min="0" step="0.01" class="tamanho-preco w-28 border border-gray-300 rounded-lg px-2 py-1.5 text-sm focus:outline-none focus:ring-1 focus:ring-orange-400">
+    <input type="number" placeholder="opcional" min="0" step="0.01" class="tamanho-borda w-28 border border-gray-300 rounded-lg px-2 py-1.5 text-sm focus:outline-none focus:ring-1 focus:ring-orange-400">
+    <button onclick="this.parentElement.remove()" class="text-red-400 hover:text-red-600 text-sm">✕</button>
+  `;
+  lista.appendChild(div);
+}
+
+function editarProduto(id) {
+  const produto = cardapioData.flatMap(c => c.produtos).find(p => p.id === id);
+  if (!produto) return;
+
+  document.getElementById('modal-produto-titulo').textContent = 'Editar Produto';
+  document.getElementById('prod-id').value = produto.id;
+  document.getElementById('prod-categoria-id').value = ''; // não usado no PATCH
+  document.getElementById('prod-nome').value = produto.nome;
+  document.getElementById('prod-descricao').value = produto.descricao || '';
+
+  const temTamanhos = produto.tamanhos?.length > 0;
+  document.getElementById('prod-tem-tamanhos').checked = temTamanhos;
+  document.getElementById('prod-tamanhos-wrapper').classList.toggle('hidden', !temTamanhos);
+  document.getElementById('prod-preco-wrapper').classList.toggle('hidden', temTamanhos);
+
+  if (temTamanhos) {
+    const lista = document.getElementById('prod-tamanhos-lista');
+    lista.innerHTML = '';
+    produto.tamanhos.forEach((t) => {
+      adicionarLinhaTamanho();
+      const ultima = lista.lastElementChild;
+      ultima.querySelector('.tamanho-nome').value = t.nome;
+      ultima.querySelector('.tamanho-preco').value = t.preco;
+      if (t.precoComBorda) ultima.querySelector('.tamanho-borda').value = t.precoComBorda;
+    });
+  } else {
+    document.getElementById('prod-preco').value = produto.preco || 0;
+    document.getElementById('prod-tamanhos-lista').innerHTML = '';
+  }
+
+  document.getElementById('modal-produto').classList.remove('hidden');
+}
+
+async function salvarProduto() {
+  const nome = document.getElementById('prod-nome').value.trim();
+  const descricao = document.getElementById('prod-descricao').value.trim();
+  const categoriaId = document.getElementById('prod-categoria-id').value;
+  const prodId = document.getElementById('prod-id').value;
+  const temTamanhos = document.getElementById('prod-tem-tamanhos').checked;
+
+  if (!nome) { mostrarToast('Nome do produto é obrigatório'); return; }
+
+  let dados = { nome, descricao: descricao || null };
+
+  if (temTamanhos) {
+    const linhas = document.getElementById('prod-tamanhos-lista').children;
+    const tamanhos = Array.from(linhas).map((linha) => ({
+      nome: linha.querySelector('.tamanho-nome').value.trim(),
+      preco: parseFloat(linha.querySelector('.tamanho-preco').value) || 0,
+      precoComBorda: parseFloat(linha.querySelector('.tamanho-borda').value) || null,
+    })).filter((t) => t.nome);
+    dados.tamanhos = tamanhos;
+  } else {
+    dados.preco = parseFloat(document.getElementById('prod-preco').value) || 0;
+  }
+
+  if (prodId) {
+    // Edição
+    await fetch(`/admin/cardapio/produtos/${prodId}`, {
+      method: 'PATCH',
+      headers: getHeaders({ 'Content-Type': 'application/json' }),
+      body: JSON.stringify(dados),
+    });
+  } else {
+    // Criação
+    await fetch(`/admin/cardapio/categorias/${categoriaId}/produtos`, {
+      method: 'POST',
+      headers: getHeaders({ 'Content-Type': 'application/json' }),
+      body: JSON.stringify(dados),
+    });
+  }
+
+  fecharModalProduto();
+  carregarCardapio();
+}
+
+async function deletarProduto(id) {
+  if (!confirm('Deletar este produto?')) return;
+  await fetch(`/admin/cardapio/produtos/${id}`, { method: 'DELETE', headers: getHeaders() });
+  carregarCardapio();
+}
+
+// ── Configurações do restaurante ─────────────────────────────────────────────
+let cfgRestauranteId = null;
+
+function iniciarConfiguracoes() {
+  const selector = document.getElementById('cfg-restaurante-selector');
+  const sel = document.getElementById('cfg-restaurante-select');
+
+  if (userRole === 'admin' && restaurantes.length > 1) {
+    // Admin com vários restaurantes: mostra selector
+    selector.classList.remove('hidden');
+    sel.innerHTML = '<option value="">Selecione um restaurante...</option>';
+    restaurantes.forEach(r => {
+      const opt = document.createElement('option');
+      opt.value = r.id;
+      opt.textContent = r.nome;
+      // Pré-seleciona o filtro atual
+      if (r.id === restauranteAtual) opt.selected = true;
+      sel.appendChild(opt);
+    });
+    if (restauranteAtual) {
+      cfgRestauranteId = restauranteAtual;
+      carregarConfiguracoes();
+    }
+  } else {
+    // Restaurante owner ou admin com único restaurante
+    selector.classList.add('hidden');
+    cfgRestauranteId = restauranteAtual || restauranteInfo?.id || restaurantes[0]?.id;
+    if (cfgRestauranteId) carregarConfiguracoes();
+  }
+}
+
+const DIAS_SEMANA = ['Domingo','Segunda','Terça','Quarta','Quinta','Sexta','Sábado'];
+
+function renderizarHorarioDias(diasConfig) {
+  const tbody = document.getElementById('cfg-horario-dias');
+  tbody.innerHTML = '';
+  for (let d = 0; d <= 6; d++) {
+    const cfg = diasConfig?.[String(d)] || { aberto: false, abertura: '11:00', fechamento: '22:00' };
+    const tr = document.createElement('tr');
+    tr.innerHTML = `
+      <td class="py-2 pr-3 text-gray-700 font-medium">${DIAS_SEMANA[d]}</td>
+      <td class="py-2 px-2 text-center">
+        <input type="checkbox" id="dia-aberto-${d}" class="rounded" ${cfg.aberto ? 'checked' : ''}
+          onchange="toggleDiaHorario(${d})">
+      </td>
+      <td class="py-2 px-2">
+        <input type="time" id="dia-abertura-${d}" value="${cfg.abertura || '11:00'}"
+          class="border border-gray-300 rounded-lg px-2 py-1 text-sm focus:outline-none focus:ring-1 focus:ring-orange-400 w-28"
+          ${cfg.aberto ? '' : 'disabled'}>
+      </td>
+      <td class="py-2 px-2">
+        <input type="time" id="dia-fechamento-${d}" value="${cfg.fechamento || '22:00'}"
+          class="border border-gray-300 rounded-lg px-2 py-1 text-sm focus:outline-none focus:ring-1 focus:ring-orange-400 w-28"
+          ${cfg.aberto ? '' : 'disabled'}>
+      </td>
+    `;
+    tbody.appendChild(tr);
+  }
+}
+
+function toggleDiaHorario(d) {
+  const aberto = document.getElementById(`dia-aberto-${d}`).checked;
+  document.getElementById(`dia-abertura-${d}`).disabled = !aberto;
+  document.getElementById(`dia-fechamento-${d}`).disabled = !aberto;
+}
+
+function toggleHorarioUI() {
+  const ativo = document.getElementById('cfg-horario-ativo').checked;
+  document.getElementById('cfg-horario-wrapper').classList.toggle('hidden', !ativo);
+}
+
+function lerHorarioForm() {
+  const ativo = document.getElementById('cfg-horario-ativo').checked;
+  if (!ativo) return null;
+
+  const descricao = document.getElementById('cfg-horario-descricao').value.trim();
+  const dias = {};
+  for (let d = 0; d <= 6; d++) {
+    dias[String(d)] = {
+      aberto: document.getElementById(`dia-aberto-${d}`).checked,
+      abertura: document.getElementById(`dia-abertura-${d}`).value || '11:00',
+      fechamento: document.getElementById(`dia-fechamento-${d}`).value || '22:00',
+    };
+  }
+  return { ativo: true, descricao, dias };
+}
+
+function preencherHorarioForm(horarioAtendimento) {
+  let config = null;
+  try { config = horarioAtendimento ? JSON.parse(horarioAtendimento) : null; } catch {}
+
+  const ativo = config?.ativo || false;
+  document.getElementById('cfg-horario-ativo').checked = ativo;
+  document.getElementById('cfg-horario-wrapper').classList.toggle('hidden', !ativo);
+  document.getElementById('cfg-horario-descricao').value = config?.descricao || '';
+  renderizarHorarioDias(config?.dias || {});
+}
+
+async function carregarConfiguracoes() {
+  const selEl = document.getElementById('cfg-restaurante-select');
+  if (selEl && selEl.value) cfgRestauranteId = selEl.value;
+  if (!cfgRestauranteId) {
+    document.getElementById('cfg-form').classList.add('hidden');
+    document.getElementById('cfg-vazio').classList.remove('hidden');
+    return;
+  }
+
+  const res = await fetch('/admin/restaurantes', { headers: getHeaders() });
+  if (!res.ok) return;
+  const { data } = await res.json();
+  const r = data.find(x => x.id === cfgRestauranteId) || data[0];
+  if (!r) return;
+
+  cfgRestauranteId = r.id;
+  document.getElementById('cfg-nome').value  = r.nome || '';
+  document.getElementById('cfg-slug').value  = r.slugWhatsapp || '';
+  document.getElementById('cfg-dono').value  = r.donoWhatsapp || '';
+  document.getElementById('cfg-moeda').value = r.moeda || 'R$';
+  document.getElementById('cfg-taxa').value  = r.taxaEntrega ?? 0;
+  document.getElementById('cfg-email').value = r.email || '';
+  document.getElementById('cfg-senha').value = '';
+
+  // Status só aparece para admin
+  const statusWrapper = document.getElementById('cfg-status-wrapper');
+  if (userRole === 'admin') {
+    statusWrapper.classList.remove('hidden');
+    document.getElementById('cfg-ativo').checked = r.ativo;
+  } else {
+    statusWrapper.classList.add('hidden');
+  }
+
+  preencherHorarioForm(r.horarioAtendimento);
+
+  document.getElementById('cfg-erro').classList.add('hidden');
+  document.getElementById('cfg-sucesso').classList.add('hidden');
+  document.getElementById('cfg-vazio').classList.add('hidden');
+  document.getElementById('cfg-form').classList.remove('hidden');
+}
+
+async function salvarConfiguracoes() {
+  if (!cfgRestauranteId) return;
+
+  const nome       = document.getElementById('cfg-nome').value.trim();
+  const donoWhatsapp = document.getElementById('cfg-dono').value.trim();
+  const moeda      = document.getElementById('cfg-moeda').value;
+  const taxaEntrega = parseFloat(document.getElementById('cfg-taxa').value) || 0;
+  const email      = document.getElementById('cfg-email').value.trim();
+  const senha      = document.getElementById('cfg-senha').value;
+
+  const erroEl   = document.getElementById('cfg-erro');
+  const sucessoEl = document.getElementById('cfg-sucesso');
+  erroEl.classList.add('hidden');
+  sucessoEl.classList.add('hidden');
+
+  if (!nome) { erroEl.textContent = 'Nome é obrigatório.'; erroEl.classList.remove('hidden'); return; }
+  if (!donoWhatsapp) { erroEl.textContent = 'WhatsApp do dono é obrigatório.'; erroEl.classList.remove('hidden'); return; }
+
+  const body = { nome, donoWhatsapp, moeda, taxaEntrega, email: email || null, horarioAtendimento: lerHorarioForm() };
+  if (senha) body.senha = senha;
+  if (userRole === 'admin') body.ativo = document.getElementById('cfg-ativo').checked;
+
+  const res = await fetch(`/admin/restaurantes/${cfgRestauranteId}`, {
+    method: 'PATCH',
+    headers: getHeaders({ 'Content-Type': 'application/json' }),
+    body: JSON.stringify(body),
+  });
+
+  const json = await res.json();
+  if (!res.ok) {
+    erroEl.textContent = json.error || 'Erro ao salvar.';
+    erroEl.classList.remove('hidden');
+    return;
+  }
+
+  // Atualiza nome na lista de restaurantes local
+  const idx = restaurantes.findIndex(r => r.id === cfgRestauranteId);
+  if (idx >= 0) Object.assign(restaurantes[idx], json.data);
+  if (userRole === 'restaurante') {
+    document.getElementById('user-label').textContent = json.data.nome;
+    restauranteInfo = { ...restauranteInfo, nome: json.data.nome };
+  }
+
+  document.getElementById('cfg-senha').value = '';
+  sucessoEl.classList.remove('hidden');
+  mostrarToast('✅ Configurações salvas!');
+}
+
+// ── Sub-tabs (Clientes / Fidelidade) ─────────────────────────────────────────
+let subTabAtual = 'clientes';
+
+function mostrarSubTab(tab) {
+  subTabAtual = tab;
+  document.getElementById('sub-clientes').classList.toggle('hidden', tab !== 'clientes');
+  document.getElementById('sub-fidelidade').classList.toggle('hidden', tab !== 'fidelidade');
+  document.getElementById('sub-tab-btn-clientes').className =
+    `px-4 py-2 rounded-lg text-sm font-semibold transition ${tab === 'clientes' ? 'bg-white shadow text-gray-800' : 'text-gray-500 hover:text-gray-700'}`;
+  document.getElementById('sub-tab-btn-fidelidade').className =
+    `px-4 py-2 rounded-lg text-sm font-semibold transition ${tab === 'fidelidade' ? 'bg-white shadow text-gray-800' : 'text-gray-500 hover:text-gray-700'}`;
+  if (tab === 'fidelidade') carregarFidelidade();
+}
+
+// ── Editar cliente ─────────────────────────────────────────────────────────────
+function abrirModalEditarCliente(id, nome, numero) {
+  document.getElementById('edit-cliente-id').value = id;
+  document.getElementById('edit-cliente-nome').value = nome || '';
+  document.getElementById('edit-cliente-numero').value = numero || '';
+  document.getElementById('modal-editar-cliente').classList.remove('hidden');
+  setTimeout(() => document.getElementById('edit-cliente-nome').focus(), 50);
+}
+
+function fecharModalEditarCliente() {
+  document.getElementById('modal-editar-cliente').classList.add('hidden');
+}
+
+async function salvarClienteEdit() {
+  const id = document.getElementById('edit-cliente-id').value;
+  const nome = document.getElementById('edit-cliente-nome').value.trim();
+  const res = await fetch(`/admin/clientes/${id}`, {
+    method: 'PATCH',
+    headers: getHeaders({ 'Content-Type': 'application/json' }),
+    body: JSON.stringify({ nome }),
+  });
+  if (!res.ok) { mostrarToast('Erro ao salvar cliente'); return; }
+  fecharModalEditarCliente();
+  carregarClientes();
+  mostrarToast('Cliente atualizado!');
+}
+
+// ── Disparar mensagem em massa ────────────────────────────────────────────────
+let programasFidelidadeCache = [];
+
+async function abrirModalDisparar() {
+  document.getElementById('disparar-form').classList.remove('hidden');
+  document.getElementById('disparar-resultado').classList.add('hidden');
+  document.getElementById('disparar-mensagem').value = '';
+  document.getElementById('disparar-erro').classList.add('hidden');
+
+  // Carrega programas para o select de destinatários
+  const rid = restauranteAtual || restaurantes[0]?.id;
+  const sel = document.getElementById('disparar-filtro');
+  sel.innerHTML = '<option value="todos">Todos os clientes do restaurante</option>';
+
+  if (rid) {
+    try {
+      const res = await fetch(`/admin/fidelidade?restauranteId=${rid}`, { headers: getHeaders() });
+      if (res.ok) {
+        const { data } = await res.json();
+        programasFidelidadeCache = data;
+        data.forEach(p => {
+          const opt = document.createElement('option');
+          opt.value = p.id;
+          const unidade = p.tipo === 'PEDIDOS' ? `${p.meta} pedidos` : `R$ ${p.meta}`;
+          opt.textContent = `🏆 ${p.nome} (${unidade}+)`;
+          sel.appendChild(opt);
+        });
+      }
+    } catch {}
+  }
+
+  document.getElementById('modal-disparar').classList.remove('hidden');
+  setTimeout(() => document.getElementById('disparar-mensagem').focus(), 50);
+}
+
+function fecharModalDisparar() {
+  document.getElementById('modal-disparar').classList.add('hidden');
+}
+
+async function enviarDisparar() {
+  const mensagem = document.getElementById('disparar-mensagem').value.trim();
+  const filtro = document.getElementById('disparar-filtro').value;
+  const rid = restauranteAtual || restaurantes[0]?.id;
+
+  const erroEl = document.getElementById('disparar-erro');
+  erroEl.classList.add('hidden');
+
+  if (!mensagem) { erroEl.textContent = 'Digite a mensagem.'; erroEl.classList.remove('hidden'); return; }
+  if (!rid) { erroEl.textContent = 'Selecione um restaurante.'; erroEl.classList.remove('hidden'); return; }
+
+  const btnEnviar = document.querySelector('#disparar-form button[onclick="enviarDisparar()"]');
+  if (btnEnviar) { btnEnviar.disabled = true; btnEnviar.textContent = 'Enviando...'; }
+
+  try {
+    const res = await fetch('/admin/disparar', {
+      method: 'POST',
+      headers: getHeaders({ 'Content-Type': 'application/json' }),
+      body: JSON.stringify({ mensagem, filtro, restauranteId: rid }),
+    });
+    const json = await res.json();
+    document.getElementById('disparar-form').classList.add('hidden');
+    document.getElementById('disparar-resultado').classList.remove('hidden');
+    if (res.ok) {
+      document.getElementById('disparar-icone').textContent = '✅';
+      document.getElementById('disparar-resultado-texto').textContent = `Mensagem enviada com sucesso!`;
+      document.getElementById('disparar-resultado-detalhe').textContent =
+        `${json.enviadas} de ${json.total} destinatário(s) receberam a mensagem${json.erros ? ` (${json.erros} erros)` : ''}.`;
+    } else {
+      document.getElementById('disparar-icone').textContent = '❌';
+      document.getElementById('disparar-resultado-texto').textContent = 'Erro ao enviar';
+      document.getElementById('disparar-resultado-detalhe').textContent = json.error || '';
+    }
+  } catch (err) {
+    if (btnEnviar) { btnEnviar.disabled = false; btnEnviar.textContent = 'Enviar mensagem'; }
+    erroEl.textContent = 'Erro de conexão. Tente novamente.';
+    erroEl.classList.remove('hidden');
+  }
+}
+
+// ── Programas de Fidelidade ───────────────────────────────────────────────────
+let fidEditId = null;
+
+async function carregarFidelidade() {
+  const rid = restauranteAtual || restaurantes[0]?.id;
+  if (!rid) return;
+  const res = await fetch(`/admin/fidelidade?restauranteId=${rid}`, { headers: getHeaders() });
+  if (!res.ok) return;
+  const { data } = await res.json();
+  renderizarFidelidade(data);
+}
+
+async function renderizarFidelidade(programas) {
+  const lista = document.getElementById('fidelidade-lista');
+  lista.innerHTML = '';
+  if (!programas.length) {
+    lista.innerHTML = '<p class="text-sm text-gray-400 text-center py-8">Nenhum programa cadastrado. Clique em "+ Novo Programa" para criar.</p>';
+    return;
+  }
+
+  for (const p of programas) {
+    let qualificados = [];
+    try {
+      const res = await fetch(`/admin/fidelidade/${p.id}/qualificados`, { headers: getHeaders() });
+      if (res.ok) { const json = await res.json(); qualificados = json.data || []; }
+    } catch {}
+
+    const unidade = p.tipo === 'PEDIDOS' ? `${p.meta} pedido(s)` : `${p.meta} em gastos`;
+    const nomeEsc = p.nome.replace(/'/g, "\\'");
+    const div = document.createElement('div');
+    div.className = 'border-b border-gray-100 last:border-0';
+
+    // Linha do programa
+    const header = document.createElement('div');
+    header.className = 'p-4 flex items-center justify-between gap-3';
+    header.innerHTML = `
+      <div class="flex-1 min-w-0">
+        <div class="flex items-center gap-2 mb-0.5 flex-wrap">
+          <span class="font-semibold text-gray-800 text-sm">${p.nome}</span>
+          ${p.ativo ? '<span class="text-xs bg-green-100 text-green-700 px-1.5 py-0.5 rounded-full">Ativo</span>' : '<span class="text-xs bg-gray-100 text-gray-400 px-1.5 py-0.5 rounded-full">Inativo</span>'}
+          ${qualificados.length > 0 ? `<span class="text-xs bg-orange-100 text-orange-700 px-1.5 py-0.5 rounded-full font-semibold">🏆 ${qualificados.length} aguardando resgate</span>` : ''}
+        </div>
+        ${p.descricao ? `<p class="text-xs text-gray-400">${p.descricao}</p>` : ''}
+        <p class="text-xs text-gray-400 mt-0.5">Meta: ${unidade}</p>
+      </div>
+      <div class="flex items-center gap-2 shrink-0">
+        <button onclick="abrirModalDispararFidelidade('${p.id}')"
+          class="text-xs bg-orange-100 text-orange-700 hover:bg-orange-200 px-2.5 py-1.5 rounded-lg transition font-medium">📢 Disparar</button>
+        <button onclick="abrirHistoricoResgates('${p.id}', '${nomeEsc}')"
+          class="text-xs bg-gray-100 text-gray-600 hover:bg-gray-200 px-2.5 py-1.5 rounded-lg transition font-medium">📋 Histórico</button>
+        <button onclick="editarFidelidade('${p.id}')"
+          class="text-xs text-gray-400 hover:text-gray-600 transition">✏️</button>
+        <button onclick="deletarFidelidade('${p.id}', '${nomeEsc}')"
+          class="text-xs text-red-400 hover:text-red-600 transition">🗑</button>
+      </div>
+    `;
+    div.appendChild(header);
+
+    // Lista de qualificados (aguardando resgate)
+    if (qualificados.length > 0) {
+      const tabela = document.createElement('div');
+      tabela.className = 'bg-orange-50 border-t border-orange-100 px-4 pb-3';
+      tabela.innerHTML = `
+        <p class="text-xs font-semibold text-orange-700 pt-3 pb-2">Clientes aguardando resgate:</p>
+        <div class="flex flex-col gap-1.5">
+          ${qualificados.map(c => {
+            const progresso = p.tipo === 'PEDIDOS'
+              ? `${c.pedidos} pedido(s) · ${c.resgates} resgate(s) feito(s)`
+              : `${c.gasto} gastos · ${c.resgates} resgate(s) feito(s)`;
+            const nomeCliente = c.nome || c.numero;
+            const numeroEsc = c.numero.replace(/'/g, "\\'");
+            const nomeClienteEsc = nomeCliente.replace(/'/g, "\\'");
+            return `
+              <div class="flex items-center justify-between gap-2 bg-white rounded-lg px-3 py-2">
+                <div>
+                  <span class="text-sm font-medium text-gray-800">${nomeCliente}</span>
+                  <span class="text-xs text-gray-400 ml-2">${c.numero}</span>
+                  <p class="text-xs text-orange-600">${progresso}</p>
+                </div>
+                <button onclick="registrarResgate('${p.id}', '${numeroEsc}', '${nomeClienteEsc}')"
+                  class="text-xs bg-green-500 hover:bg-green-600 text-white px-3 py-1.5 rounded-lg font-medium transition shrink-0">
+                  ✅ Resgatar
+                </button>
+              </div>`;
+          }).join('')}
+        </div>
+      `;
+      div.appendChild(tabela);
+    }
+
+    lista.appendChild(div);
+  }
+}
+
+async function registrarResgate(programaId, clienteNumero, clienteNome) {
+  if (!confirm(`Registrar resgate para ${clienteNome} (${clienteNumero})?\n\nIsso contabilizará 1 resgate para este cliente.`)) return;
+
+  const res = await fetch(`/admin/fidelidade/${programaId}/resgatar`, {
+    method: 'POST',
+    headers: getHeaders({ 'Content-Type': 'application/json' }),
+    body: JSON.stringify({ clienteNumero }),
+  });
+
+  const json = await res.json();
+  if (!res.ok) { mostrarToast(json.error || 'Erro ao registrar resgate'); return; }
+
+  mostrarToast(`✅ Resgate registrado para ${clienteNome}! Total de resgates: ${json.resgatesTotal}`);
+  carregarFidelidade(); // recarrega a lista
+}
+
+function abrirModalFidelidade() {
+  fidEditId = null;
+  document.getElementById('modal-fidelidade-titulo').textContent = 'Novo Programa de Fidelidade';
+  document.getElementById('fid-id').value = '';
+  document.getElementById('fid-nome').value = '';
+  document.getElementById('fid-descricao').value = '';
+  document.getElementById('fid-tipo').value = 'PEDIDOS';
+  document.getElementById('fid-meta').value = '';
+  document.getElementById('fid-meta-label').textContent = 'Meta (pedidos)';
+  document.getElementById('fid-erro').classList.add('hidden');
+  document.getElementById('modal-fidelidade').classList.remove('hidden');
+}
+
+function fecharModalFidelidade() {
+  document.getElementById('modal-fidelidade').classList.add('hidden');
+}
+
+function editarFidelidade(id) {
+  // Busca na lista carregada (re-fetch para garantir dados frescos)
+  fetch(`/admin/fidelidade?restauranteId=${restauranteAtual || restaurantes[0]?.id}`, { headers: getHeaders() })
+    .then(r => r.json())
+    .then(({ data }) => {
+      const p = data.find(x => x.id === id);
+      if (!p) return;
+      fidEditId = p.id;
+      document.getElementById('modal-fidelidade-titulo').textContent = 'Editar Programa';
+      document.getElementById('fid-id').value = p.id;
+      document.getElementById('fid-nome').value = p.nome;
+      document.getElementById('fid-descricao').value = p.descricao || '';
+      document.getElementById('fid-tipo').value = p.tipo;
+      document.getElementById('fid-meta').value = p.meta;
+      document.getElementById('fid-meta-label').textContent = p.tipo === 'PEDIDOS' ? 'Meta (pedidos)' : 'Meta (R$)';
+      document.getElementById('fid-erro').classList.add('hidden');
+      document.getElementById('modal-fidelidade').classList.remove('hidden');
+    });
+}
+
+document.addEventListener('DOMContentLoaded', () => {
+  document.getElementById('fid-tipo')?.addEventListener('change', function() {
+    document.getElementById('fid-meta-label').textContent = this.value === 'PEDIDOS' ? 'Meta (pedidos)' : 'Meta (R$)';
+  });
+});
+
+async function salvarFidelidade() {
+  const nome = document.getElementById('fid-nome').value.trim();
+  const descricao = document.getElementById('fid-descricao').value.trim();
+  const tipo = document.getElementById('fid-tipo').value;
+  const meta = parseFloat(document.getElementById('fid-meta').value);
+  const id = document.getElementById('fid-id').value;
+  const rid = restauranteAtual || restaurantes[0]?.id;
+
+  const erroEl = document.getElementById('fid-erro');
+  erroEl.classList.add('hidden');
+  if (!nome || !meta || !rid) {
+    erroEl.textContent = 'Nome e meta são obrigatórios.';
+    erroEl.classList.remove('hidden');
+    return;
+  }
+
+  const body = { nome, descricao: descricao || null, tipo, meta, restauranteId: rid };
+
+  const res = id
+    ? await fetch(`/admin/fidelidade/${id}`, { method: 'PATCH', headers: getHeaders({ 'Content-Type': 'application/json' }), body: JSON.stringify(body) })
+    : await fetch('/admin/fidelidade', { method: 'POST', headers: getHeaders({ 'Content-Type': 'application/json' }), body: JSON.stringify(body) });
+
+  if (!res.ok) {
+    const json = await res.json();
+    erroEl.textContent = json.error || 'Erro ao salvar.';
+    erroEl.classList.remove('hidden');
+    return;
+  }
+
+  fecharModalFidelidade();
+  carregarFidelidade();
+  mostrarToast(id ? 'Programa atualizado!' : 'Programa criado!');
+}
+
+async function deletarFidelidade(id, nome) {
+  if (!confirm(`Deletar o programa "${nome}"?`)) return;
+  await fetch(`/admin/fidelidade/${id}`, { method: 'DELETE', headers: getHeaders() });
+  carregarFidelidade();
+  mostrarToast('Programa removido.');
+}
+
+// ── Histórico de resgates ─────────────────────────────────────────────────────
+let historicoPrograma = null;
+let historicoPagina = 1;
+
+async function abrirHistoricoResgates(programaId, programaNome) {
+  historicoPrograma = programaId;
+  historicoPagina = 1;
+  document.getElementById('historico-programa-nome').textContent = programaNome;
+  document.getElementById('modal-historico-resgates').classList.remove('hidden');
+  await carregarHistoricoResgates();
+}
+
+function fecharModalHistorico() {
+  document.getElementById('modal-historico-resgates').classList.add('hidden');
+  historicoPrograma = null;
+}
+
+async function carregarHistoricoResgates() {
+  if (!historicoPrograma) return;
+  const res = await fetch(`/admin/fidelidade/${historicoPrograma}/resgates?pagina=${historicoPagina}`, { headers: getHeaders() });
+  if (!res.ok) return;
+  const { data, meta } = await res.json();
+  renderizarHistorico(data, meta);
+}
+
+function renderizarHistorico(resgates, meta) {
+  const lista = document.getElementById('historico-lista');
+  const vazio = document.getElementById('historico-vazio');
+  lista.innerHTML = '';
+
+  if (!resgates.length) {
+    vazio.classList.remove('hidden');
+  } else {
+    vazio.classList.add('hidden');
+    resgates.forEach((r, i) => {
+      const data = new Date(r.createdAt);
+      const dataFmt = data.toLocaleDateString('pt-BR', { day: '2-digit', month: '2-digit', year: 'numeric' });
+      const horaFmt = data.toLocaleTimeString('pt-BR', { hour: '2-digit', minute: '2-digit' });
+      const numero = meta.total - ((meta.pagina - 1) * meta.limite) - i; // numeração decrescente
+
+      const div = document.createElement('div');
+      div.className = 'px-5 py-3 flex items-center justify-between gap-3 hover:bg-gray-50';
+      div.innerHTML = `
+        <div class="flex items-center gap-3">
+          <span class="w-7 h-7 rounded-full bg-green-100 text-green-700 text-xs font-bold flex items-center justify-center shrink-0">#${numero}</span>
+          <div>
+            <span class="font-medium text-gray-800 text-sm">${r.clienteNome || r.clienteNumero}</span>
+            ${r.clienteNome ? `<span class="text-xs text-gray-400 ml-1">${r.clienteNumero}</span>` : ''}
+            <p class="text-xs text-gray-400 mt-0.5">Registrado por: <span class="text-gray-600">${r.registradoPor}</span></p>
+          </div>
+        </div>
+        <div class="text-right shrink-0">
+          <p class="text-sm text-gray-700 font-medium">${dataFmt}</p>
+          <p class="text-xs text-gray-400">${horaFmt}</p>
+        </div>
+      `;
+      lista.appendChild(div);
+    });
+  }
+
+  // Paginação
+  const pag = document.getElementById('historico-paginacao');
+  pag.innerHTML = '';
+  if (meta.paginas > 1) {
+    const prev = document.createElement('button');
+    prev.textContent = '← Anterior';
+    prev.disabled = meta.pagina <= 1;
+    prev.className = `text-xs px-3 py-1.5 rounded-lg border transition ${meta.pagina <= 1 ? 'text-gray-300 border-gray-200 cursor-not-allowed' : 'text-gray-600 border-gray-300 hover:bg-gray-50'}`;
+    prev.onclick = () => { historicoPagina--; carregarHistoricoResgates(); };
+
+    const info = document.createElement('span');
+    info.className = 'text-xs text-gray-400';
+    info.textContent = `Página ${meta.pagina} de ${meta.paginas} · ${meta.total} resgate(s)`;
+
+    const next = document.createElement('button');
+    next.textContent = 'Próxima →';
+    next.disabled = meta.pagina >= meta.paginas;
+    next.className = `text-xs px-3 py-1.5 rounded-lg border transition ${meta.pagina >= meta.paginas ? 'text-gray-300 border-gray-200 cursor-not-allowed' : 'text-gray-600 border-gray-300 hover:bg-gray-50'}`;
+    next.onclick = () => { historicoPagina++; carregarHistoricoResgates(); };
+
+    pag.appendChild(prev);
+    pag.appendChild(info);
+    pag.appendChild(next);
+  } else if (meta.total > 0) {
+    const info = document.createElement('span');
+    info.className = 'text-xs text-gray-400';
+    info.textContent = `${meta.total} resgate(s) no total`;
+    pag.appendChild(info);
+  }
+}
+
+function abrirModalDispararFidelidade(programaId) {
+  abrirModalDisparar().then(() => {
+    document.getElementById('disparar-filtro').value = programaId;
+  });
+}
+
+// ── Auto login ────────────────────────────────────────────────────────────────
+window.addEventListener('DOMContentLoaded', () => {
+  const savedRole = localStorage.getItem('user_role');
+
+  if (savedRole === 'restaurante') {
+    const savedJwt = localStorage.getItem('jwt_token');
+    if (savedJwt) {
+      jwtToken = savedJwt;
+      userRole = 'restaurante';
+      // Decodifica payload do JWT para obter dados do restaurante
+      try {
+        const payload = JSON.parse(atob(savedJwt.split('.')[1]));
+        restauranteInfo = { id: payload.restauranteId, nome: '', slug: payload.slug };
+      } catch {}
+      fetch('/admin/restaurantes', { headers: { 'Authorization': `Bearer ${savedJwt}` } })
+        .then(r => {
+          if (r.ok) return r.json();
+          throw new Error('unauthorized');
+        })
+        .then(({ data }) => {
+          if (data?.length) restauranteInfo = { id: data[0].id, nome: data[0].nome, slug: data[0].slugWhatsapp };
+          iniciarDashboard();
+        })
+        .catch(() => {
+          localStorage.removeItem('jwt_token');
+          localStorage.removeItem('user_role');
+        });
+    }
+  } else if (savedRole === 'admin') {
+    const savedToken = localStorage.getItem('admin_token');
+    if (savedToken) {
+      token = savedToken;
+      userRole = 'admin';
+      fetch('/admin/stats', { headers: { 'x-admin-token': token } })
+        .then(r => r.ok ? iniciarDashboard() : (() => {
+          localStorage.removeItem('admin_token');
+          localStorage.removeItem('user_role');
+        })())
+        .catch(() => {});
+    }
+  }
+});
+</script>
+</body>
+</html>

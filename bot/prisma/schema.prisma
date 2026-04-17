@@ -28,6 +28,7 @@ model Restaurante {
   pedidos              Pedido[]
   categorias           Categoria[]
   programasFidelidade  ProgramaFidelidade[]
+  motoboys             Motoboy[]
   createdAt            DateTime    @default(now())
 }
 
@@ -138,4 +139,14 @@ model ResgateFidelidade {
   clienteNome   String?
   registradoPor String             @default("admin")
   createdAt     DateTime           @default(now())
+}
+
+model Motoboy {
+  id            String      @id @default(uuid())
+  nome          String
+  telefone      String      // número WhatsApp (só dígitos)
+  restauranteId String
+  restaurante   Restaurante @relation(fields: [restauranteId], references: [id], onDelete: Cascade)
+  ativo         Boolean     @default(true)
+  createdAt     DateTime    @default(now())
 }

@@ -197,6 +197,96 @@ router.patch("/pedidos/:id/pago", async (req, res) => {
   }
 });
 
+// ══ Motoboys ══════════════════════════════════════════════════════════════════
+
+router.get("/motoboys", async (req, res) => {
+  const restauranteId = await resolverRestauranteId(req);
+  if (!restauranteId) return res.status(400).json({ error: "restauranteId obrigatório" });
+  const motoboys = await prisma.motoboy.findMany({
+    where: { restauranteId },
+    orderBy: { nome: "asc" },
+  });
+  res.json({ data: motoboys });
+});
+
+router.post("/motoboys", async (req, res) => {
+  const restauranteId = await resolverRestauranteId(req);
+  if (!restauranteId) return res.status(400).json({ error: "restauranteId obrigatório" });
+  const { nome, telefone } = req.body;
+  if (!nome || !telefone) return res.status(400).json({ error: "nome e telefone são obrigatórios" });
+  const motoboy = await prisma.motoboy.create({ data: { nome, telefone, restauranteId } });
+  res.json({ data: motoboy });
+});
+
+router.patch("/motoboys/:id", async (req, res) => {
+  const { id } = req.params;
+  const { nome, telefone, ativo } = req.body;
+  const data = {};
+  if (nome !== undefined) data.nome = nome;
+  if (telefone !== undefined) data.telefone = telefone;
+  if (ativo !== undefined) data.ativo = ativo;
+  try {
+    const motoboy = await prisma.motoboy.update({ where: { id }, data });
+    res.json({ data: motoboy });
+  } catch (err) {
+    if (err.code === "P2025") return res.status(404).json({ error: "Motoboy não encontrado" });
+    res.status(500).json({ error: err.message });
+  }
+});
+
+router.delete("/motoboys/:id", async (req, res) => {
+  try {
+    await prisma.motoboy.delete({ where: { id: req.params.id } });
+    res.json({ ok: true });
+  } catch (err) {
+    if (err.code === "P2025") return res.status(404).json({ error: "Motoboy não encontrado" });
+    res.status(500).json({ error: err.message });
+  }
+});
+
+// POST /admin/pedidos/:id/despachar — envia pedido para motoboy via WhatsApp
+router.post("/pedidos/:id/despachar", async (req, res) => {
+  const { id } = req.params;
+  const { motoboyId } = req.body;
+  if (!motoboyId) return res.status(400).json({ error: "motoboyId obrigatório" });
+
+  try {
+    const [pedido, motoboy] = await Promise.all([
+      prisma.pedido.findUnique({
+        where: { id },
+        include: { restaurante: true },
+      }),
+      prisma.motoboy.findUnique({ where: { id: motoboyId } }),
+    ]);
+
+    if (!pedido) return res.status(404).json({ error: "Pedido não encontrado" });
+    if (!motoboy) return res.status(404).json({ error: "Motoboy não encontrado" });
+
+    const moeda = pedido.restaurante.moeda || "R$";
+    const temDecimal = ["R$", "$", "€"].includes(moeda);
+    const fmt = (v) => temDecimal ? `${moeda} ${v.toFixed(2)}` : `${moeda} ${Math.round(v).toLocaleString()}`;
+
+    const itens = Array.isArray(pedido.itens) ? pedido.itens : [];
+    const itensTexto = itens.map(i => `• ${i.quantidade || 1}x ${i.nome} — ${fmt(i.preco * (i.quantidade || 1))}`).join("\n");
+
+    const pagamento = pedido.metodoPagamento ? `\n💳 *Pagamento:* ${pedido.metodoPagamento}` : "";
+
+    const mensagem =
+      `🛵 *ENTREGA #${idCurto(id)}*\n\n` +
+      `👤 *Cliente:* ${pedido.clienteNome || "Não identificado"}\n` +
+      `📱 *WhatsApp:* ${pedido.clienteNumero}\n\n` +
+      `🛒 *Itens:*\n${itensTexto}\n\n` +
+      `💰 *Total: ${fmt(pedido.total)}*${pagamento}\n\n` +
+      `📍 *Endereço:*\n${pedido.localizacao || "Não informado"}`;
+
+    await enviarMensagem(motoboy.telefone, mensagem, pedido.restaurante.slugWhatsapp);
+
+    res.json({ ok: true, motoboy: motoboy.nome });
+  } catch (err) {
+    res.status(500).json({ error: err.message });
+  }
+});
+
 // ── GET /admin/clientes/fidelidade?limite=10 ─────────────────────────────────
 router.get("/clientes/fidelidade", async (req, res) => {
   const limite = Math.min(Number(req.query.limite) || 10, 100);

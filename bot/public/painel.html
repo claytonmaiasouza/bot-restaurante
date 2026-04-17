@@ -73,6 +73,7 @@
         <button onclick="mostrarSecao('conversas')" id="nav-conversas" class="font-medium text-gray-400 hidden sm:block hover:text-orange-500 transition">Conversas</button>
         <button onclick="mostrarSecao('clientes')" id="nav-clientes" class="font-medium text-gray-400 hidden sm:block hover:text-orange-500 transition">Clientes</button>
         <button onclick="mostrarSecao('cardapio')" id="nav-cardapio" class="font-medium text-gray-400 hidden sm:block hover:text-orange-500 transition">Cardápio</button>
+        <button onclick="mostrarSecao('motoboys')" id="nav-motoboys" class="font-medium text-gray-400 hidden sm:block hover:text-orange-500 transition">Motoboys</button>
         <button onclick="mostrarSecao('configuracoes')" id="nav-configuracoes" class="font-medium text-gray-400 hidden sm:block hover:text-orange-500 transition">Configurações</button>
       </div>
       <select id="restaurante-filter" onchange="trocarRestaurante()"
@@ -382,6 +383,53 @@
         </div>
 
         <div id="cfg-vazio" class="text-sm text-gray-400 py-6">Selecione um restaurante para ver as configurações.</div>
+      </div>
+    </div>
+
+    <!-- Motoboys -->
+    <div id="secao-motoboys" class="hidden pb-8">
+      <div class="flex items-center justify-between mb-4">
+        <h2 class="font-bold text-gray-800">Motoboys</h2>
+        <button onclick="abrirModalMotoboy()" class="bg-orange-500 hover:bg-orange-600 text-white text-sm font-semibold px-4 py-2 rounded-lg transition">+ Novo Motoboy</button>
+      </div>
+      <div id="cfg-motoboy-restaurante" class="mb-4 hidden">
+        <label class="text-xs text-gray-500">Restaurante</label>
+        <select id="motoboy-restaurante-select" onchange="carregarMotoboys()" class="ml-2 border border-gray-200 rounded-lg px-2 py-1 text-sm"></select>
+      </div>
+      <div id="motoboys-lista" class="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 gap-4"></div>
+      <p id="motoboys-vazio" class="text-sm text-gray-400 hidden">Nenhum motoboy cadastrado.</p>
+    </div>
+
+    <!-- Modal Motoboy -->
+    <div id="modal-motoboy" class="hidden fixed inset-0 bg-black/50 z-50 flex items-center justify-center p-4">
+      <div class="bg-white rounded-2xl shadow-xl w-full max-w-sm p-6">
+        <h3 class="font-bold text-gray-800 mb-4" id="modal-motoboy-titulo">Novo Motoboy</h3>
+        <input type="hidden" id="motoboy-edit-id">
+        <div class="space-y-3">
+          <div>
+            <label class="text-xs text-gray-500 mb-1 block">Nome</label>
+            <input id="motoboy-nome" type="text" placeholder="Nome do motoboy" class="w-full border border-gray-300 rounded-lg px-3 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-orange-400">
+          </div>
+          <div>
+            <label class="text-xs text-gray-500 mb-1 block">WhatsApp (só dígitos, com DDI)</label>
+            <input id="motoboy-telefone" type="text" placeholder="595981234567" class="w-full border border-gray-300 rounded-lg px-3 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-orange-400">
+          </div>
+        </div>
+        <div class="flex gap-2 mt-5">
+          <button onclick="salvarMotoboy()" class="flex-1 bg-orange-500 hover:bg-orange-600 text-white font-semibold py-2 rounded-lg text-sm transition">Salvar</button>
+          <button onclick="fecharModalMotoboy()" class="flex-1 bg-gray-100 hover:bg-gray-200 text-gray-700 font-semibold py-2 rounded-lg text-sm transition">Cancelar</button>
+        </div>
+      </div>
+    </div>
+
+    <!-- Modal Despachar para Motoboy -->
+    <div id="modal-despachar" class="hidden fixed inset-0 bg-black/50 z-50 flex items-center justify-center p-4">
+      <div class="bg-white rounded-2xl shadow-xl w-full max-w-sm p-6">
+        <h3 class="font-bold text-gray-800 mb-1">Despachar para Motoboy</h3>
+        <p id="despachar-pedido-info" class="text-sm text-gray-500 mb-4"></p>
+        <input type="hidden" id="despachar-pedido-id">
+        <div id="despachar-motoboys-lista" class="space-y-2 max-h-64 overflow-y-auto mb-4"></div>
+        <button onclick="fecharModalDespachar()" class="w-full bg-gray-100 hover:bg-gray-200 text-gray-700 font-semibold py-2 rounded-lg text-sm transition">Cancelar</button>
       </div>
     </div>
 
@@ -998,6 +1046,9 @@ function criarCard(pedido) {
       ${!pedido.pago && pedido.status !== 'CANCELADO'
         ? `<button onclick="marcarPago('${pedido.id}')" class="bg-green-500 hover:bg-green-600 text-white text-xs font-medium px-3 py-1.5 rounded-lg transition">💳 Pago</button>`
         : ''}
+      ${pedido.status === 'PREPARANDO' && !isRetirada
+        ? `<button onclick="abrirModalDespachar('${pedido.id}', '${(pedido.clienteNome || pedido.clienteNumero).replace(/'/g, '')}')" class="bg-blue-500 hover:bg-blue-600 text-white text-xs font-medium px-3 py-1.5 rounded-lg transition">🛵 Despachar</button>`
+        : ''}
       ${acoes.map(a => `<button onclick="atualizarStatus('${pedido.id}', '${a.status}')"
         class="${a.cor} text-white text-xs font-medium px-3 py-1.5 rounded-lg transition">${a.label}</button>`).join('')}
     </div>
@@ -1030,9 +1081,16 @@ async function atualizarStatus(id, status) {
   });
   if (!res.ok) { mostrarToast('Erro ao atualizar status'); return; }
   const { data } = await res.json();
-  // Pequeno delay antes de re-renderizar para evitar que o novo botão
-  // capture o evento de mouse ainda "descendo" do clique anterior
-  setTimeout(() => { atualizarCardNaTela(data); carregarStats(); }, 150);
+
+  // Atualiza array local
+  const idx = pedidos.findIndex(p => p.id === id);
+  if (idx >= 0) pedidos[idx] = data;
+
+  // Muda para a aba do novo status para o usuário ver onde foi o pedido
+  tabAtual = status;
+  renderizarTabs();
+  await carregarPedidos();
+  carregarStats();
 }
 
 async function marcarPago(id) {
@@ -1194,7 +1252,7 @@ let secaoAtual = 'pedidos';
 
 function mostrarSecao(secao) {
   secaoAtual = secao;
-  ['pedidos', 'conversas', 'clientes', 'cardapio', 'configuracoes'].forEach(s => {
+  ['pedidos', 'conversas', 'clientes', 'cardapio', 'configuracoes', 'motoboys'].forEach(s => {
     document.getElementById(`secao-${s}`).classList.toggle('hidden', secao !== s);
   });
   document.getElementById('tabs').classList.toggle('hidden', secao !== 'pedidos');
@@ -1204,7 +1262,7 @@ function mostrarSecao(secao) {
   document.getElementById('nav-pedidos').className = secao === 'pedidos'
     ? 'font-bold text-orange-500 hidden sm:block transition'
     : 'font-bold text-gray-800 hidden sm:block hover:text-orange-500 transition';
-  ['conversas', 'clientes', 'cardapio', 'configuracoes'].forEach(s => {
+  ['conversas', 'clientes', 'cardapio', 'configuracoes', 'motoboys'].forEach(s => {
     document.getElementById(`nav-${s}`).className = secao === s ? navAtivo : navInativo;
   });
 
@@ -1212,6 +1270,7 @@ function mostrarSecao(secao) {
   if (secao === 'clientes') carregarClientes();
   if (secao === 'cardapio') carregarCardapio();
   if (secao === 'configuracoes') iniciarConfiguracoes();
+  if (secao === 'motoboys') iniciarMotoboys();
 }
 
 // ── Conversas ─────────────────────────────────────────────────────────────────
@@ -2128,6 +2187,141 @@ async function deletarCardapioPdf() {
   document.getElementById('cfg-pdf-status').textContent = 'Nenhum PDF cadastrado.';
   document.getElementById('cfg-pdf-deletar').classList.add('hidden');
   mostrarToast('PDF removido.');
+}
+
+// ── Motoboys ─────────────────────────────────────────────────────────────────
+let motoboyRestauranteId = null;
+let motoboysCache = [];
+
+function iniciarMotoboys() {
+  if (userRole === 'admin') {
+    document.getElementById('cfg-motoboy-restaurante').classList.remove('hidden');
+    const sel = document.getElementById('motoboy-restaurante-select');
+    sel.innerHTML = restaurantes.map(r => `<option value="${r.id}">${r.nome}</option>`).join('');
+    motoboyRestauranteId = sel.value;
+  } else {
+    motoboyRestauranteId = restauranteInfo?.id;
+  }
+  carregarMotoboys();
+}
+
+async function carregarMotoboys() {
+  const sel = document.getElementById('motoboy-restaurante-select');
+  if (sel && sel.value) motoboyRestauranteId = sel.value;
+  if (!motoboyRestauranteId) return;
+
+  const res = await fetch(`/admin/motoboys?restauranteId=${motoboyRestauranteId}`, { headers: getHeaders() });
+  if (!res.ok) return;
+  const { data } = await res.json();
+  motoboysCache = data;
+
+  const lista = document.getElementById('motoboys-lista');
+  const vazio = document.getElementById('motoboys-vazio');
+  lista.innerHTML = '';
+
+  if (!data.length) { vazio.classList.remove('hidden'); return; }
+  vazio.classList.add('hidden');
+
+  data.forEach(m => {
+    const div = document.createElement('div');
+    div.className = 'bg-white rounded-xl shadow-sm p-4 flex items-center justify-between gap-3';
+    div.innerHTML = `
+      <div>
+        <p class="font-semibold text-gray-800 text-sm">${m.nome}</p>
+        <p class="text-xs text-gray-400">📱 ${m.telefone}</p>
+        <span class="text-xs ${m.ativo ? 'text-green-600' : 'text-gray-400'}">${m.ativo ? '● Ativo' : '● Inativo'}</span>
+      </div>
+      <div class="flex gap-2">
+        <button onclick="abrirModalMotoboy('${m.id}', '${m.nome.replace(/'/g, '')}', '${m.telefone}', ${m.ativo})"
+          class="text-xs bg-gray-100 hover:bg-gray-200 text-gray-700 px-3 py-1.5 rounded-lg">Editar</button>
+        <button onclick="deletarMotoboy('${m.id}')"
+          class="text-xs bg-red-50 hover:bg-red-100 text-red-600 px-3 py-1.5 rounded-lg">Remover</button>
+      </div>`;
+    lista.appendChild(div);
+  });
+}
+
+function abrirModalMotoboy(id = null, nome = '', telefone = '', ativo = true) {
+  document.getElementById('motoboy-edit-id').value = id || '';
+  document.getElementById('motoboy-nome').value = nome;
+  document.getElementById('motoboy-telefone').value = telefone;
+  document.getElementById('modal-motoboy-titulo').textContent = id ? 'Editar Motoboy' : 'Novo Motoboy';
+  document.getElementById('modal-motoboy').classList.remove('hidden');
+}
+
+function fecharModalMotoboy() {
+  document.getElementById('modal-motoboy').classList.add('hidden');
+}
+
+async function salvarMotoboy() {
+  const id = document.getElementById('motoboy-edit-id').value;
+  const nome = document.getElementById('motoboy-nome').value.trim();
+  const telefone = document.getElementById('motoboy-telefone').value.trim();
+  if (!nome || !telefone) { mostrarToast('Preencha nome e telefone'); return; }
+
+  const url = id ? `/admin/motoboys/${id}` : '/admin/motoboys';
+  const method = id ? 'PATCH' : 'POST';
+  const body = id ? { nome, telefone } : { nome, telefone, restauranteId: motoboyRestauranteId };
+
+  const res = await fetch(url, {
+    method,
+    headers: getHeaders({ 'Content-Type': 'application/json' }),
+    body: JSON.stringify(body),
+  });
+  if (!res.ok) { mostrarToast('Erro ao salvar motoboy'); return; }
+  fecharModalMotoboy();
+  carregarMotoboys();
+  mostrarToast(`✅ Motoboy ${id ? 'atualizado' : 'cadastrado'}!`);
+}
+
+async function deletarMotoboy(id) {
+  if (!confirm('Remover este motoboy?')) return;
+  await fetch(`/admin/motoboys/${id}`, { method: 'DELETE', headers: getHeaders() });
+  carregarMotoboys();
+}
+
+async function abrirModalDespachar(pedidoId, clienteNome) {
+  document.getElementById('despachar-pedido-id').value = pedidoId;
+  document.getElementById('despachar-pedido-info').textContent = `Pedido de ${clienteNome}`;
+
+  // Busca motoboys do restaurante do pedido
+  const pedido = pedidos.find(p => p.id === pedidoId);
+  const restId = pedido?.restauranteId || restauranteInfo?.id || restauranteAtual;
+  const res = await fetch(`/admin/motoboys?restauranteId=${restId}`, { headers: getHeaders() });
+  const { data } = await res.json();
+  const ativos = data.filter(m => m.ativo);
+
+  const lista = document.getElementById('despachar-motoboys-lista');
+  if (!ativos.length) {
+    lista.innerHTML = '<p class="text-sm text-gray-400 text-center py-4">Nenhum motoboy ativo cadastrado.<br>Cadastre motoboys na seção Motoboys.</p>';
+  } else {
+    lista.innerHTML = ativos.map(m => `
+      <button onclick="despacharParaMotoboy('${pedidoId}', '${m.id}', '${m.nome.replace(/'/g, '')}')"
+        class="w-full text-left flex items-center gap-3 p-3 rounded-xl border border-gray-200 hover:border-orange-300 hover:bg-orange-50 transition">
+        <span class="text-2xl">🛵</span>
+        <div>
+          <p class="font-semibold text-sm text-gray-800">${m.nome}</p>
+          <p class="text-xs text-gray-400">${m.telefone}</p>
+        </div>
+      </button>`).join('');
+  }
+
+  document.getElementById('modal-despachar').classList.remove('hidden');
+}
+
+function fecharModalDespachar() {
+  document.getElementById('modal-despachar').classList.add('hidden');
+}
+
+async function despacharParaMotoboy(pedidoId, motoboyId, motoboyNome) {
+  fecharModalDespachar();
+  const res = await fetch(`/admin/pedidos/${pedidoId}/despachar`, {
+    method: 'POST',
+    headers: getHeaders({ 'Content-Type': 'application/json' }),
+    body: JSON.stringify({ motoboyId }),
+  });
+  if (!res.ok) { mostrarToast('Erro ao despachar'); return; }
+  mostrarToast(`✅ Pedido despachado para ${motoboyNome}!`);
 }
 
 // ── Sub-tabs (Clientes / Fidelidade) ─────────────────────────────────────────

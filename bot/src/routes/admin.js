@@ -88,7 +88,10 @@ router.get("/pedidos", async (req, res) => {
   if (restauranteId) where.restauranteId = restauranteId;
   if (status && status !== "Todos") {
     if (status === "PAGO") {
-      where.pago = true; // aba PAGO mostra todos os pagos, independente do status
+      where.pago = true;
+    } else if (status === "CONFIRMADO") {
+      // Aba CONFIRMADO = histórico de todos os pedidos confirmados (exceto NOVO e CANCELADO)
+      where.status = { notIn: ["NOVO", "CANCELADO"] };
     } else {
       where.status = status;
     }

@@ -1086,9 +1086,12 @@ async function atualizarStatus(id, status) {
   const idx = pedidos.findIndex(p => p.id === id);
   if (idx >= 0) pedidos[idx] = data;
 
-  // Muda para a aba do novo status para o usuário ver onde foi o pedido
-  tabAtual = status;
-  renderizarTabs();
+  // Se estiver na aba CONFIRMADO (histórico), permanece nela para manter visibilidade
+  // Caso contrário, muda para a aba do novo status
+  if (tabAtual !== 'CONFIRMADO') {
+    tabAtual = status;
+    renderizarTabs();
+  }
   await carregarPedidos();
   carregarStats();
 }

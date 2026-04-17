@@ -49,12 +49,13 @@ async function criarOuBuscarSessao(clienteNumero, restauranteId) {
 /**
  * Atualiza estado e/ou carrinho de uma sessão.
  */
-async function atualizarSessao(sessaoId, { estado, carrinho, clienteNome } = {}) {
+async function atualizarSessao(sessaoId, { estado, carrinho, clienteNome, localizacaoPendente } = {}) {
   const data = { ultimaAtividade: new Date() };
 
   if (estado !== undefined) data.estado = estado;
   if (carrinho !== undefined) data.carrinho = carrinho;
   if (clienteNome !== undefined) data.clienteNome = clienteNome;
+  if (localizacaoPendente !== undefined) data.localizacaoPendente = localizacaoPendente;
 
   return prisma.sessao.update({
     where: { id: sessaoId },

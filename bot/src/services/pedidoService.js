@@ -9,6 +9,13 @@ function idCurto(uuid) {
   return uuid.split("-")[0].toUpperCase();
 }
 
+function fmtValor(valor, moeda) {
+  const temDecimal = ["R$", "$", "€"].includes(moeda);
+  return temDecimal
+    ? `${moeda} ${valor.toFixed(2)}`
+    : `${moeda} ${Math.round(valor).toLocaleString()}`;
+}
+
 function formatarHorario(date) {
   return new Date(date).toLocaleString("pt-BR", {
     timeZone: "America/Sao_Paulo",
@@ -90,7 +97,7 @@ async function finalizarPedido(sessaoId, localizacao, tipoEntrega = "delivery", 
   const instanceName = sessao.restaurante.slugWhatsapp;
   await enviarMensagem(
     sessao.clienteNumero,
-    `✅ *Pedido #${idCurto(pedido.id)} confirmado!*\n\n💰 *Total: ${fmt(total)}*\n\nRecebemos seu pedido e já notificamos o restaurante. Em breve entraremos em contato sobre o tempo de entrega. 🍽️${mensagemExtra}\n\nObrigado pela preferência! 😊`,
+    `✅ *Pedido #${idCurto(pedido.id)} confirmado!*\n\n💰 *Total: ${fmtValor(total, sessao.restaurante.moeda || "R$")}*\n\nRecebemos seu pedido e já notificamos o restaurante. Em breve entraremos em contato sobre o tempo de entrega. 🍽️${mensagemExtra}\n\nObrigado pela preferência! 😊`,
     instanceName
   );
 
@@ -107,9 +114,7 @@ async function finalizarPedido(sessaoId, localizacao, tipoEntrega = "delivery", 
  */
 async function enviarPedidoParaDono(pedido, restaurante, tipoEntrega = "delivery") {
   const moeda = restaurante.moeda || "R$";
-  const temDecimal = ["R$", "$", "€"].includes(moeda);
-  const fmt = (v) =>
-    temDecimal ? `${moeda} ${v.toFixed(2)}` : `${moeda} ${Math.round(v).toLocaleString()}`;
+  const fmt = (v) => fmtValor(v, moeda);
 
   // total já inclui a taxa de entrega (calculada em finalizarPedido)
   const taxaEntrega = pedido.taxaEntrega ?? (tipoEntrega === "retirada" ? 0 : (restaurante.taxaEntrega || 0));

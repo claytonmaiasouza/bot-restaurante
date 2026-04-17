@@ -223,8 +223,9 @@ async function receberMensagem(req, res) {
 
       // Cartão → finalizar com aviso de maquininha
       if (metodoPagamento === "Cartão") {
-        const localizacao = sessao.localizacaoPendente || "Retirada no balcão";
-        const tipoEntrega = localizacao === "retirada" ? "retirada" : "delivery";
+        const locPendente = sessao.localizacaoPendente || "retirada";
+        const tipoEntrega = locPendente === "retirada" ? "retirada" : "delivery";
+        const localizacao = tipoEntrega === "retirada" ? "Retirada no balcão" : locPendente;
         const pedido = await finalizarPedido(sessao.id, localizacao, tipoEntrega, metodoPagamento,
           tipoEntrega === "delivery" ? "\n\n💳 O entregador levará a maquininha de cartão." : "");
         io?.to("admin").emit("conversa:encerrada", { sessaoId: sessao.id });
@@ -234,8 +235,9 @@ async function receberMensagem(req, res) {
 
       // Transferência → exibir dados bancários e finalizar
       if (metodoPagamento === "Transferência") {
-        const localizacao = sessao.localizacaoPendente || "Retirada no balcão";
-        const tipoEntrega = localizacao === "retirada" ? "retirada" : "delivery";
+        const locPendente = sessao.localizacaoPendente || "retirada";
+        const tipoEntrega = locPendente === "retirada" ? "retirada" : "delivery";
+        const localizacao = tipoEntrega === "retirada" ? "Retirada no balcão" : locPendente;
         const dadosTrans = restaurante.dadosTransferencia
           ? `\n\n🏦 *Dados para transferência:*\n${restaurante.dadosTransferencia}`
           : "";
@@ -255,8 +257,9 @@ async function receberMensagem(req, res) {
       await salvarMensagem(sessao.id, "cliente", textoCliente);
       io?.to("admin").emit("conversa:mensagem", { sessaoId: sessao.id, mensagem: { role: "cliente", conteudo: textoCliente, createdAt: new Date() } });
 
-      const localizacao = sessao.localizacaoPendente || "Retirada no balcão";
-      const tipoEntrega = localizacao === "retirada" ? "retirada" : "delivery";
+      const locPendente = sessao.localizacaoPendente || "retirada";
+      const tipoEntrega = locPendente === "retirada" ? "retirada" : "delivery";
+      const localizacao = tipoEntrega === "retirada" ? "Retirada no balcão" : locPendente;
       const pedido = await finalizarPedido(sessao.id, localizacao, tipoEntrega, metodoPagamento,
         semTroco ? "" : `\n\n💵 Troco para: *${trocoInfo}*`);
 
@@ -315,7 +318,7 @@ async function receberMensagem(req, res) {
     // ── g) Pedido pronto → perguntar pagamento antes de finalizar ────────────
     if (pedidoPronto && novoEstado === "FINALIZADO") {
       sessao.carrinho = carrinhoAtualizado;
-      const localizacao = tipoEntrega === "retirada" ? "retirada" : textoCliente;
+      const localizacao = tipoEntrega === "retirada" ? "Retirada no balcão" : textoCliente;
 
       // Guarda localização e muda estado para aguardar pagamento
       await atualizarSessao(sessao.id, {

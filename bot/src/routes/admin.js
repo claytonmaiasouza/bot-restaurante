@@ -54,7 +54,7 @@ router.get("/restaurantes", async (req, res) => {
     const where = req.user.role === "restaurante" ? { id: req.user.restauranteId } : {};
     const restaurantes = await prisma.restaurante.findMany({
       where,
-      select: { id: true, nome: true, slugWhatsapp: true, donoWhatsapp: true, moeda: true, taxaEntrega: true, ativo: true, email: true },
+      select: { id: true, nome: true, slugWhatsapp: true, donoWhatsapp: true, moeda: true, taxaEntrega: true, ativo: true, email: true, horarioAtendimento: true },
       orderBy: { nome: "asc" },
     });
     res.json({ data: restaurantes });

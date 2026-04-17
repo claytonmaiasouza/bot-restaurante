@@ -22,6 +22,7 @@ model Restaurante {
   email               String?     @unique
   senhaHash           String?
   horarioAtendimento  String?     // JSON: { ativo, descricao, dias: { "0": { aberto, abertura, fechamento }, ... } }
+  cardapioPdfUrl      String?
   sessoes              Sessao[]
   pedidos              Pedido[]
   categorias           Categoria[]
@@ -71,6 +72,7 @@ model Sessao {
   carrinho        Json        @default("[]")
   botPausado          Boolean     @default(false)
   localizacaoPendente String?
+  lembreteEnviado     Boolean     @default(false)
   mensagens           Mensagem[]
   pedido              Pedido?
   ultimaAtividade DateTime    @default(now())

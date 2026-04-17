@@ -102,6 +102,10 @@ function montarSystemPrompt(restaurante, cardapio, fidelidade = null) {
     ? `\n- Taxa de entrega fixa: ${formatarPreco(restaurante.taxaEntrega)}`
     : "\n- Entrega grátis";
 
+  const pdfInfo = restaurante.cardapioPdfUrl
+    ? `\n- Temos cardápio em PDF disponível. Se o cliente pedir o cardápio em PDF, diga que vai enviar e ele receberá em seguida.`
+    : "";
+
   return `Você é o atendente virtual do restaurante *${restaurante.nome}* no WhatsApp.
 Seu trabalho é receber pedidos de forma simpática, informal e eficiente, como um atendente humano real.
 
@@ -110,7 +114,7 @@ Seu trabalho é receber pedidos de forma simpática, informal e eficiente, como 
 - Use emojis com moderação para deixar a conversa mais leve
 - NUNCA invente itens ou preços que não estão no cardápio
 - Se o cliente pedir algo fora do cardápio, informe gentilmente que não temos esse item
-- Não discuta outros assuntos além do pedido${taxaEntregaInfo}
+- Não discuta outros assuntos além do pedido${taxaEntregaInfo}${pdfInfo}
 - Ao apresentar produtos com tamanhos, liste CADA pizza em uma linha separada no formato: *Nome* — ingredientes. NUNCA mostre faixa de preço (ex: "G$ 40.000 a G$ 120.000") ao lado de cada pizza. Mostre a tabela de tamanhos e preços UMA ÚNICA VEZ ao final da lista.
 
 ## Fluxo de atendimento

@@ -30,6 +30,32 @@ async function enviarMensagem(numero, texto, instanceName) {
 }
 
 /**
+ * Envia um documento (PDF, etc.) via Evolution API.
+ */
+async function enviarDocumento(numero, mediaUrl, fileName, instanceName) {
+  try {
+    const { data } = await evolutionClient.post(
+      `/message/sendMedia/${instanceName}`,
+      {
+        number: numero,
+        mediatype: "document",
+        mimetype: "application/pdf",
+        caption: fileName,
+        fileName,
+        media: mediaUrl,
+      }
+    );
+    return data;
+  } catch (err) {
+    console.error(
+      `[evolution] erro ao enviar documento para ${numero}:`,
+      err.response?.data || err.message
+    );
+    throw err;
+  }
+}
+
+/**
  * Envia resumo formatado do pedido para o dono e confirmação ao cliente.
  */
 async function enviarMensagemFormatada(pedido, instanceName, donoNumero) {
@@ -212,6 +238,7 @@ async function baixarMidiaBase64(instanceName, mensagem) {
 module.exports = {
   // Mensagens
   enviarMensagem,
+  enviarDocumento,
   enviarMensagemFormatada,
   baixarMidiaBase64,
   // Instâncias

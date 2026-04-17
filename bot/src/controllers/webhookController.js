@@ -1,6 +1,6 @@
 const { processarMensagem } = require("../services/claudeService");
 const { criarOuBuscarSessao, atualizarSessao, salvarMensagem } = require("../services/sessaoService");
-const { enviarMensagem, baixarMidiaBase64 } = require("../services/evolutionService");
+const { enviarMensagem, enviarDocumento, baixarMidiaBase64 } = require("../services/evolutionService");
 const { finalizarPedido } = require("../services/pedidoService");
 const { transcreverAudio } = require("../services/transcricaoService");
 const { buscarContextoFidelidade } = require("../services/cardapioService");
@@ -234,6 +234,24 @@ async function receberMensagem(req, res) {
     }
 
     if (!textoCliente) return;
+
+    // ── f) Pedido de cardápio em PDF ──────────────────────────────────────────
+    if (restaurante.cardapioPdfUrl && /pdf|cardápio digital|menu digital/i.test(textoCliente)) {
+      const msgPdf = `Aqui está o nosso cardápio em PDF! 📄`;
+      await salvarMensagem(sessao.id, "cliente", textoCliente);
+      await salvarMensagem(sessao.id, "bot", msgPdf);
+      io?.to("admin").emit("conversa:mensagem", {
+        sessaoId: sessao.id,
+        mensagem: { role: "cliente", conteudo: textoCliente, createdAt: new Date() },
+      });
+      io?.to("admin").emit("conversa:mensagem", {
+        sessaoId: sessao.id,
+        mensagem: { role: "bot", conteudo: msgPdf, createdAt: new Date() },
+      });
+      await enviarMensagem(clienteNumero, msgPdf, instanceName);
+      await enviarDocumento(clienteNumero, restaurante.cardapioPdfUrl, "cardapio.pdf", instanceName);
+      return;
+    }
 
     const { resposta, novoEstado, carrinhoAtualizado, pedidoPronto, tipoEntrega } =
       await processarMensagem(sessao, textoCliente, restaurante, cardapio, fidelidade);

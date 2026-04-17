@@ -3,6 +3,7 @@ const fs = require("fs");
 const path = require("path");
 const { PrismaClient } = require("@prisma/client");
 const { encerrarSessoesInativas } = require("../services/sessaoService");
+const { enviarMensagem } = require("../services/evolutionService");
 
 const prisma = new PrismaClient();
 
@@ -130,11 +131,55 @@ async function gerarRelatorio(inicio, fim) {
   console.log(relatorio);
 }
 
+// ── Job 3: Lembrete de inatividade (a cada 1 min) ─────────────────────────────
+
+function iniciarJobLembrete() {
+  cron.schedule("* * * * *", async () => {
+    try {
+      const limite = new Date(Date.now() - 4 * 60 * 1000); // 4 minutos atrás
+
+      const sessoes = await prisma.sessao.findMany({
+        where: {
+          estado: { notIn: ["FINALIZADO", "INICIO"] },
+          botPausado: false,
+          lembreteEnviado: false,
+          ultimaAtividade: { lt: limite },
+        },
+        include: { restaurante: true },
+      });
+
+      for (const sessao of sessoes) {
+        const msg =
+          `Olá${sessao.clienteNome ? `, ${sessao.clienteNome}` : ""}! 😊 Ainda está aí?\n\n` +
+          `Pode continuar com seu pedido quando quiser. Estamos aqui! 🍽️`;
+
+        await enviarMensagem(
+          sessao.clienteNumero,
+          msg,
+          sessao.restaurante.slugWhatsapp
+        );
+
+        await prisma.sessao.update({
+          where: { id: sessao.id },
+          data: { lembreteEnviado: true },
+        });
+
+        log(`lembrete enviado para ${sessao.clienteNumero} (sessão ${sessao.id.split("-")[0]})`);
+      }
+    } catch (err) {
+      log(`ERRO no job de lembrete: ${err.message}`);
+    }
+  });
+
+  log("job de lembrete de inatividade agendado (* * * * *)");
+}
+
 // ── Exporta e inicializa ──────────────────────────────────────────────────────
 
 function iniciarJobs() {
   iniciarJobSessoes();
   iniciarJobRelatorio();
+  iniciarJobLembrete();
 }
 
 module.exports = { iniciarJobs, gerarRelatorio };

@@ -27,7 +27,7 @@ async function criarOuBuscarSessao(clienteNumero, restauranteId) {
     // Atualiza timestamp de atividade
     await prisma.sessao.update({
       where: { id: sessaoExistente.id },
-      data: { ultimaAtividade: new Date() },
+      data: { ultimaAtividade: new Date(), lembreteEnviado: false },
     });
     return sessaoExistente;
   }

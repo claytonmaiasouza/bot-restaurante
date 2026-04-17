@@ -339,6 +339,18 @@
               </div>
             </div>
 
+            <!-- Cardápio em PDF -->
+            <div class="p-5 border-t border-gray-100">
+              <h3 class="font-semibold text-gray-700 text-sm mb-3">Cardápio em PDF</h3>
+              <div id="cfg-pdf-status" class="text-sm text-gray-500 mb-3">Nenhum PDF cadastrado.</div>
+              <div class="flex items-center gap-3">
+                <input id="cfg-pdf-input" type="file" accept="application/pdf" class="text-sm text-gray-600 file:mr-3 file:py-1 file:px-3 file:rounded file:border-0 file:text-sm file:bg-orange-50 file:text-orange-700 hover:file:bg-orange-100 cursor-pointer">
+                <button onclick="uploadCardapioPdf()" class="bg-orange-500 hover:bg-orange-600 text-white text-sm px-4 py-2 rounded-lg">Enviar PDF</button>
+                <button id="cfg-pdf-deletar" onclick="deletarCardapioPdf()" class="hidden text-red-500 hover:text-red-700 text-sm px-3 py-2 border border-red-200 rounded-lg">Remover</button>
+              </div>
+              <p class="text-xs text-gray-400 mt-2">Quando o cliente pedir o cardápio em PDF no WhatsApp, o bot enviará este arquivo automaticamente.</p>
+            </div>
+
             <!-- Status (somente admin) -->
             <div id="cfg-status-wrapper" class="hidden p-5">
               <h3 class="font-semibold text-gray-700 text-sm mb-3">Status</h3>
@@ -1997,6 +2009,17 @@ async function carregarConfiguracoes() {
 
   preencherHorarioForm(r.horarioAtendimento);
 
+  // PDF status
+  const pdfStatus = document.getElementById('cfg-pdf-status');
+  const pdfDeletar = document.getElementById('cfg-pdf-deletar');
+  if (r.cardapioPdfUrl) {
+    pdfStatus.innerHTML = `PDF cadastrado: <a href="${r.cardapioPdfUrl}" target="_blank" class="text-orange-500 underline">visualizar</a>`;
+    pdfDeletar.classList.remove('hidden');
+  } else {
+    pdfStatus.textContent = 'Nenhum PDF cadastrado.';
+    pdfDeletar.classList.add('hidden');
+  }
+
   document.getElementById('cfg-erro').classList.add('hidden');
   document.getElementById('cfg-sucesso').classList.add('hidden');
   document.getElementById('cfg-vazio').classList.add('hidden');
@@ -2049,6 +2072,46 @@ async function salvarConfiguracoes() {
   document.getElementById('cfg-senha').value = '';
   sucessoEl.classList.remove('hidden');
   mostrarToast('✅ Configurações salvas!');
+}
+
+// ── Upload/remoção de PDF do cardápio ─────────────────────────────────────────
+
+async function uploadCardapioPdf() {
+  if (!cfgRestauranteId) return;
+  const fileInput = document.getElementById('cfg-pdf-input');
+  const file = fileInput.files[0];
+  if (!file) { mostrarToast('Selecione um arquivo PDF primeiro.'); return; }
+
+  const formData = new FormData();
+  formData.append('pdf', file);
+
+  const res = await fetch(`/admin/restaurantes/${cfgRestauranteId}/upload-cardapio-pdf`, {
+    method: 'POST',
+    headers: getHeaders(),
+    body: formData,
+  });
+
+  const json = await res.json();
+  if (!res.ok) { mostrarToast('Erro ao enviar PDF: ' + (json.error || '')); return; }
+
+  const pdfUrl = json.data.cardapioPdfUrl;
+  document.getElementById('cfg-pdf-status').innerHTML = `PDF cadastrado: <a href="${pdfUrl}" target="_blank" class="text-orange-500 underline">visualizar</a>`;
+  document.getElementById('cfg-pdf-deletar').classList.remove('hidden');
+  fileInput.value = '';
+  mostrarToast('✅ PDF do cardápio enviado!');
+}
+
+async function deletarCardapioPdf() {
+  if (!cfgRestauranteId) return;
+  const res = await fetch(`/admin/restaurantes/${cfgRestauranteId}/upload-cardapio-pdf`, {
+    method: 'DELETE',
+    headers: getHeaders(),
+  });
+  if (!res.ok) { mostrarToast('Erro ao remover PDF.'); return; }
+
+  document.getElementById('cfg-pdf-status').textContent = 'Nenhum PDF cadastrado.';
+  document.getElementById('cfg-pdf-deletar').classList.add('hidden');
+  mostrarToast('PDF removido.');
 }
 
 // ── Sub-tabs (Clientes / Fidelidade) ─────────────────────────────────────────

@@ -3,6 +3,8 @@ const { PrismaClient } = require("@prisma/client");
 const multer = require("multer");
 const pdfParse = require("pdf-parse");
 const axios = require("axios");
+const fs = require("fs");
+const path = require("path");
 const { confirmarPedido } = require("../services/pedidoService");
 const { enviarMensagem, listarInstancias, obterQRCode, verificarConexao, criarInstancia, configurarWebhook } = require("../services/evolutionService");
 const { authMiddleware } = require("../middleware/authMiddleware");
@@ -16,6 +18,18 @@ const bcrypt = require("bcryptjs");
 
 // Multer: armazena PDF em memória (sem salvar em disco)
 const upload = multer({ storage: multer.memoryStorage(), limits: { fileSize: 10 * 1024 * 1024 } });
+
+// Multer: salva PDF de cardápio em disco
+const UPLOADS_DIR = path.resolve(__dirname, "../../public/uploads");
+if (!fs.existsSync(UPLOADS_DIR)) fs.mkdirSync(UPLOADS_DIR, { recursive: true });
+const uploadDisco = multer({
+  storage: multer.diskStorage({
+    destination: (_req, _file, cb) => cb(null, UPLOADS_DIR),
+    filename: (req, _file, cb) => cb(null, `cardapio-${req.params.id}.pdf`),
+  }),
+  limits: { fileSize: 20 * 1024 * 1024 },
+  fileFilter: (_req, file, cb) => cb(null, file.mimetype === "application/pdf"),
+});
 
 const router = Router();
 const prisma = new PrismaClient();
@@ -54,7 +68,7 @@ router.get("/restaurantes", async (req, res) => {
     const where = req.user.role === "restaurante" ? { id: req.user.restauranteId } : {};
     const restaurantes = await prisma.restaurante.findMany({
       where,
-      select: { id: true, nome: true, slugWhatsapp: true, donoWhatsapp: true, moeda: true, taxaEntrega: true, ativo: true, email: true, horarioAtendimento: true },
+      select: { id: true, nome: true, slugWhatsapp: true, donoWhatsapp: true, moeda: true, taxaEntrega: true, ativo: true, email: true, horarioAtendimento: true, cardapioPdfUrl: true },
       orderBy: { nome: "asc" },
     });
     res.json({ data: restaurantes });
@@ -690,7 +704,7 @@ router.patch("/restaurantes/:id", async (req, res) => {
     const restaurante = await prisma.restaurante.update({
       where: { id },
       data: dados,
-      select: { id: true, nome: true, slugWhatsapp: true, donoWhatsapp: true, moeda: true, taxaEntrega: true, ativo: true, email: true, horarioAtendimento: true },
+      select: { id: true, nome: true, slugWhatsapp: true, donoWhatsapp: true, moeda: true, taxaEntrega: true, ativo: true, email: true, horarioAtendimento: true, cardapioPdfUrl: true },
     });
 
     // Invalida cache para refletir mudanças imediatamente
@@ -703,6 +717,48 @@ router.patch("/restaurantes/:id", async (req, res) => {
     if (err.code === "P2025") return res.status(404).json({ error: "Restaurante não encontrado" });
     res.status(500).json({ error: err.message });
   }
+});
+
+// POST /admin/restaurantes/:id/upload-cardapio-pdf
+router.post("/restaurantes/:id/upload-cardapio-pdf", uploadDisco.single("pdf"), async (req, res) => {
+  const { id } = req.params;
+
+  if (req.user.role === "restaurante" && req.user.restauranteId !== id) {
+    return res.status(403).json({ error: "Acesso negado" });
+  }
+
+  if (!req.file) {
+    return res.status(400).json({ error: "Arquivo PDF não recebido ou formato inválido" });
+  }
+
+  const botUrl = process.env.BOT_PUBLIC_URL || `http://localhost:${process.env.PORT || 3000}`;
+  const pdfUrl = `${botUrl}/uploads/cardapio-${id}.pdf`;
+
+  await prisma.restaurante.update({
+    where: { id },
+    data: { cardapioPdfUrl: pdfUrl },
+  });
+
+  res.json({ data: { cardapioPdfUrl: pdfUrl } });
+});
+
+// DELETE /admin/restaurantes/:id/upload-cardapio-pdf
+router.delete("/restaurantes/:id/upload-cardapio-pdf", async (req, res) => {
+  const { id } = req.params;
+
+  if (req.user.role === "restaurante" && req.user.restauranteId !== id) {
+    return res.status(403).json({ error: "Acesso negado" });
+  }
+
+  const filePath = path.join(UPLOADS_DIR, `cardapio-${id}.pdf`);
+  if (fs.existsSync(filePath)) fs.unlinkSync(filePath);
+
+  await prisma.restaurante.update({
+    where: { id },
+    data: { cardapioPdfUrl: null },
+  });
+
+  res.json({ data: { cardapioPdfUrl: null } });
 });
 
 // ══ Criação de Restaurante (somente super admin) ══════════════════════════════

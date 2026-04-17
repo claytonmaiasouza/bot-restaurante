@@ -68,7 +68,7 @@ router.get("/restaurantes", async (req, res) => {
     const where = req.user.role === "restaurante" ? { id: req.user.restauranteId } : {};
     const restaurantes = await prisma.restaurante.findMany({
       where,
-      select: { id: true, nome: true, slugWhatsapp: true, donoWhatsapp: true, moeda: true, taxaEntrega: true, ativo: true, email: true, horarioAtendimento: true, cardapioPdfUrl: true },
+      select: { id: true, nome: true, slugWhatsapp: true, donoWhatsapp: true, moeda: true, taxaEntrega: true, ativo: true, email: true, horarioAtendimento: true, cardapioPdfUrl: true, dadosTransferencia: true },
       orderBy: { nome: "asc" },
     });
     res.json({ data: restaurantes });
@@ -687,7 +687,7 @@ router.patch("/restaurantes/:id", async (req, res) => {
     return res.status(403).json({ error: "Acesso negado" });
   }
 
-  const { nome, donoWhatsapp, moeda, taxaEntrega, email, senha, ativo, horarioAtendimento } = req.body;
+  const { nome, donoWhatsapp, moeda, taxaEntrega, email, senha, ativo, horarioAtendimento, dadosTransferencia } = req.body;
 
   try {
     const dados = {};
@@ -698,13 +698,14 @@ router.patch("/restaurantes/:id", async (req, res) => {
     if (email !== undefined)               dados.email = email ? email.toLowerCase().trim() : null;
     if (senha)                             dados.senhaHash = await bcrypt.hash(senha, 10);
     if (horarioAtendimento !== undefined)  dados.horarioAtendimento = horarioAtendimento ? JSON.stringify(horarioAtendimento) : null;
+    if (dadosTransferencia !== undefined)  dados.dadosTransferencia = dadosTransferencia || null;
     // Só admin pode ativar/desativar
     if (ativo !== undefined && req.user.role === "admin") dados.ativo = ativo;
 
     const restaurante = await prisma.restaurante.update({
       where: { id },
       data: dados,
-      select: { id: true, nome: true, slugWhatsapp: true, donoWhatsapp: true, moeda: true, taxaEntrega: true, ativo: true, email: true, horarioAtendimento: true, cardapioPdfUrl: true },
+      select: { id: true, nome: true, slugWhatsapp: true, donoWhatsapp: true, moeda: true, taxaEntrega: true, ativo: true, email: true, horarioAtendimento: true, cardapioPdfUrl: true, dadosTransferencia: true },
     });
 
     // Invalida cache para refletir mudanças imediatamente

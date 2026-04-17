@@ -23,6 +23,7 @@ model Restaurante {
   senhaHash           String?
   horarioAtendimento  String?     // JSON: { ativo, descricao, dias: { "0": { aberto, abertura, fechamento }, ... } }
   cardapioPdfUrl      String?
+  dadosTransferencia  String?     // Dados para PIX/transferência exibidos ao cliente
   sessoes              Sessao[]
   pedidos              Pedido[]
   categorias           Categoria[]

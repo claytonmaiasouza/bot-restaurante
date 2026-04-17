@@ -339,6 +339,14 @@
               </div>
             </div>
 
+            <!-- Dados para transferência/PIX -->
+            <div class="p-5 border-t border-gray-100">
+              <h3 class="font-semibold text-gray-700 text-sm mb-1">Dados para Transferência / PIX</h3>
+              <p class="text-xs text-gray-400 mb-2">Exibidos automaticamente ao cliente quando ele escolher transferência como forma de pagamento.</p>
+              <textarea id="cfg-transferencia" rows="4" placeholder="Ex: PIX: (chave)\nBanco: Itaú\nAg: 0001 / Conta: 12345-6\nNome: Fulano de Tal"
+                class="w-full border border-gray-300 rounded-lg px-3 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-orange-400 resize-none"></textarea>
+            </div>
+
             <!-- Cardápio em PDF -->
             <div class="p-5 border-t border-gray-100">
               <h3 class="font-semibold text-gray-700 text-sm mb-3">Cardápio em PDF</h3>
@@ -2007,6 +2015,8 @@ async function carregarConfiguracoes() {
     statusWrapper.classList.add('hidden');
   }
 
+  document.getElementById('cfg-transferencia').value = r.dadosTransferencia || '';
+
   preencherHorarioForm(r.horarioAtendimento);
 
   // PDF status
@@ -2044,7 +2054,8 @@ async function salvarConfiguracoes() {
   if (!nome) { erroEl.textContent = 'Nome é obrigatório.'; erroEl.classList.remove('hidden'); return; }
   if (!donoWhatsapp) { erroEl.textContent = 'WhatsApp do dono é obrigatório.'; erroEl.classList.remove('hidden'); return; }
 
-  const body = { nome, donoWhatsapp, moeda, taxaEntrega, email: email || null, horarioAtendimento: lerHorarioForm() };
+  const dadosTransferencia = document.getElementById('cfg-transferencia').value.trim();
+  const body = { nome, donoWhatsapp, moeda, taxaEntrega, email: email || null, horarioAtendimento: lerHorarioForm(), dadosTransferencia: dadosTransferencia || null };
   if (senha) body.senha = senha;
   if (userRole === 'admin') body.ativo = document.getElementById('cfg-ativo').checked;
 

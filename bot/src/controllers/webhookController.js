@@ -186,7 +186,7 @@ async function receberMensagem(req, res) {
       return;
     }
 
-    // ── e) Pagamento → finalizar pedido ──────────────────────────────────────
+    // ── e) Pagamento → tratar cada método ───────────────────────────────────
     if (sessao.estado === "AGUARDANDO_PAGAMENTO" && textoCliente) {
       const texto = textoCliente.toLowerCase();
       let metodoPagamento = null;
@@ -202,34 +202,66 @@ async function receberMensagem(req, res) {
           `🏦 *Transferência* (PIX/transferência bancária)`;
         await salvarMensagem(sessao.id, "cliente", textoCliente);
         await salvarMensagem(sessao.id, "bot", msg);
-        io?.to("admin").emit("conversa:mensagem", {
-          sessaoId: sessao.id,
-          mensagem: { role: "cliente", conteudo: textoCliente, createdAt: new Date() },
-        });
-        io?.to("admin").emit("conversa:mensagem", {
-          sessaoId: sessao.id,
-          mensagem: { role: "bot", conteudo: msg, createdAt: new Date() },
-        });
+        io?.to("admin").emit("conversa:mensagem", { sessaoId: sessao.id, mensagem: { role: "cliente", conteudo: textoCliente, createdAt: new Date() } });
+        io?.to("admin").emit("conversa:mensagem", { sessaoId: sessao.id, mensagem: { role: "bot", conteudo: msg, createdAt: new Date() } });
         await enviarMensagem(clienteNumero, msg, instanceName);
         return;
       }
 
-      const localizacao = sessao.localizacaoPendente || "Retirada no balcão";
-      const tipoEntrega = localizacao === "retirada" ? "retirada" : "delivery";
+      await salvarMensagem(sessao.id, "cliente", textoCliente);
+      io?.to("admin").emit("conversa:mensagem", { sessaoId: sessao.id, mensagem: { role: "cliente", conteudo: textoCliente, createdAt: new Date() } });
 
-      const pedido = await finalizarPedido(sessao.id, localizacao, tipoEntrega, metodoPagamento);
+      // Dinheiro → perguntar troco
+      if (metodoPagamento === "Dinheiro") {
+        await atualizarSessao(sessao.id, { estado: "AGUARDANDO_TROCO" });
+        const msgTroco = `💵 Ótimo! Pagamento em dinheiro.\n\nTroco para quanto? (Digite o valor ou "sem troco" se não precisar)`;
+        await salvarMensagem(sessao.id, "bot", msgTroco);
+        io?.to("admin").emit("conversa:mensagem", { sessaoId: sessao.id, mensagem: { role: "bot", conteudo: msgTroco, createdAt: new Date() } });
+        await enviarMensagem(clienteNumero, msgTroco, instanceName);
+        return;
+      }
+
+      // Cartão → finalizar com aviso de maquininha
+      if (metodoPagamento === "Cartão") {
+        const localizacao = sessao.localizacaoPendente || "Retirada no balcão";
+        const tipoEntrega = localizacao === "retirada" ? "retirada" : "delivery";
+        const pedido = await finalizarPedido(sessao.id, localizacao, tipoEntrega, metodoPagamento,
+          tipoEntrega === "delivery" ? "\n\n💳 O entregador levará a maquininha de cartão." : "");
+        io?.to("admin").emit("conversa:encerrada", { sessaoId: sessao.id });
+        io?.to(`restaurante:${restaurante.slugWhatsapp}`).emit("pedido:novo", { restauranteId: restaurante.id, pedido });
+        return;
+      }
+
+      // Transferência → exibir dados bancários e finalizar
+      if (metodoPagamento === "Transferência") {
+        const localizacao = sessao.localizacaoPendente || "Retirada no balcão";
+        const tipoEntrega = localizacao === "retirada" ? "retirada" : "delivery";
+        const dadosTrans = restaurante.dadosTransferencia
+          ? `\n\n🏦 *Dados para transferência:*\n${restaurante.dadosTransferencia}`
+          : "";
+        const pedido = await finalizarPedido(sessao.id, localizacao, tipoEntrega, metodoPagamento, dadosTrans);
+        io?.to("admin").emit("conversa:encerrada", { sessaoId: sessao.id });
+        io?.to(`restaurante:${restaurante.slugWhatsapp}`).emit("pedido:novo", { restauranteId: restaurante.id, pedido });
+        return;
+      }
+    }
+
+    // ── e.2) Troco → finalizar pedido com dinheiro ────────────────────────────
+    if (sessao.estado === "AGUARDANDO_TROCO" && textoCliente) {
+      const semTroco = /sem troco|sin cambio|não precisa|no necesito|exato|exacto/i.test(textoCliente);
+      const trocoInfo = semTroco ? "sem troco" : textoCliente.trim();
+      const metodoPagamento = semTroco ? "Dinheiro (sem troco)" : `Dinheiro - Troco para ${trocoInfo}`;
 
       await salvarMensagem(sessao.id, "cliente", textoCliente);
+      io?.to("admin").emit("conversa:mensagem", { sessaoId: sessao.id, mensagem: { role: "cliente", conteudo: textoCliente, createdAt: new Date() } });
 
-      io?.to("admin").emit("conversa:mensagem", {
-        sessaoId: sessao.id,
-        mensagem: { role: "cliente", conteudo: textoCliente, createdAt: new Date() },
-      });
+      const localizacao = sessao.localizacaoPendente || "Retirada no balcão";
+      const tipoEntrega = localizacao === "retirada" ? "retirada" : "delivery";
+      const pedido = await finalizarPedido(sessao.id, localizacao, tipoEntrega, metodoPagamento,
+        semTroco ? "" : `\n\n💵 Troco para: *${trocoInfo}*`);
+
       io?.to("admin").emit("conversa:encerrada", { sessaoId: sessao.id });
-      io?.to(`restaurante:${restaurante.slugWhatsapp}`).emit("pedido:novo", {
-        restauranteId: restaurante.id,
-        pedido,
-      });
+      io?.to(`restaurante:${restaurante.slugWhatsapp}`).emit("pedido:novo", { restauranteId: restaurante.id, pedido });
       return;
     }
 

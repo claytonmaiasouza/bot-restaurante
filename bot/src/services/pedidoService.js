@@ -30,7 +30,7 @@ function formatarHorario(date) {
  * @param {string} localizacao - Endereço ou link Google Maps
  * @returns {object}           - Pedido criado (com itens e total)
  */
-async function finalizarPedido(sessaoId, localizacao, tipoEntrega = "delivery", metodoPagamento = null) {
+async function finalizarPedido(sessaoId, localizacao, tipoEntrega = "delivery", metodoPagamento = null, mensagemExtra = "") {
   // a) Buscar sessão e carrinho
   const sessao = await prisma.sessao.findUnique({
     where: { id: sessaoId },
@@ -90,7 +90,7 @@ async function finalizarPedido(sessaoId, localizacao, tipoEntrega = "delivery", 
   const instanceName = sessao.restaurante.slugWhatsapp;
   await enviarMensagem(
     sessao.clienteNumero,
-    `✅ *Pedido #${idCurto(pedido.id)} confirmado!*\n\nRecebemos seu pedido e já notificamos o restaurante. Em breve entraremos em contato sobre o tempo de entrega. 🍽️\n\nObrigado pela preferência! 😊`,
+    `✅ *Pedido #${idCurto(pedido.id)} confirmado!*\n\nRecebemos seu pedido e já notificamos o restaurante. Em breve entraremos em contato sobre o tempo de entrega. 🍽️${mensagemExtra}\n\nObrigado pela preferência! 😊`,
     instanceName
   );
 

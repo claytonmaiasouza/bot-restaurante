@@ -104,6 +104,8 @@ model Pedido {
   metodoPagamento  String? // Dinheiro | Cartão | Transferência
   status        String      @default("NOVO") // NOVO, CONFIRMADO, PAGO, PREPARANDO, SAIU_PARA_ENTREGA, PRONTO_PARA_RETIRADA, ENTREGUE, CANCELADO
   pago          Boolean     @default(false)
+  motoboyId     String?     // ID do motoboy despachado (sem FK para preservar histórico)
+  motoboyNome   String?     // nome denormalizado para exibição
   createdAt     DateTime    @default(now())
 }
 

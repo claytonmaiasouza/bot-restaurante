@@ -103,7 +103,7 @@ function montarSystemPrompt(restaurante, cardapio, fidelidade = null) {
     : "\n- Entrega grátis";
 
   const pdfInfo = restaurante.cardapioPdfUrl
-    ? `\n- Temos cardápio em PDF disponível. Se o cliente pedir o cardápio em PDF, diga que vai enviar e ele receberá em seguida.`
+    ? `\n- Temos cardápio disponível em arquivo. NÃO mencione nem ofereça esse arquivo proativamente. Apenas apresente o cardápio digitalmente quando solicitado.`
     : "";
 
   return `Você é o atendente virtual do restaurante *${restaurante.nome}* no WhatsApp.

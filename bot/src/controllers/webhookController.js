@@ -1,6 +1,6 @@
 const { processarMensagem } = require("../services/claudeService");
 const { criarOuBuscarSessao, atualizarSessao, salvarMensagem } = require("../services/sessaoService");
-const { enviarMensagem, enviarDocumento, baixarMidiaBase64 } = require("../services/evolutionService");
+const { enviarMensagem, enviarImagem, enviarDocumento, baixarMidiaBase64 } = require("../services/evolutionService");
 const { finalizarPedido } = require("../services/pedidoService");
 const { transcreverAudio } = require("../services/transcricaoService");
 const { buscarContextoFidelidade } = require("../services/cardapioService");
@@ -270,21 +270,34 @@ async function receberMensagem(req, res) {
 
     if (!textoCliente) return;
 
-    // ── f) Pedido de cardápio em PDF ──────────────────────────────────────────
-    if (restaurante.cardapioPdfUrl && /pdf|cardápio digital|menu digital/i.test(textoCliente)) {
-      const msgPdf = `Aqui está o nosso cardápio em PDF! 📄`;
+    // ── f) Pedido de cardápio em arquivo (PDF ou fotos) ──────────────────────
+    if (
+      restaurante.cardapioPdfUrl &&
+      /cardápio|cardapio|menu|pdf|foto do card/i.test(textoCliente) &&
+      /manda|envia|envi|quero|pode|me pass|ver|mostrar|tem.*pdf|tem.*foto/i.test(textoCliente)
+    ) {
       await salvarMensagem(sessao.id, "cliente", textoCliente);
-      await salvarMensagem(sessao.id, "bot", msgPdf);
       io?.to("admin").emit("conversa:mensagem", {
         sessaoId: sessao.id,
         mensagem: { role: "cliente", conteudo: textoCliente, createdAt: new Date() },
       });
-      io?.to("admin").emit("conversa:mensagem", {
-        sessaoId: sessao.id,
-        mensagem: { role: "bot", conteudo: msgPdf, createdAt: new Date() },
-      });
-      await enviarMensagem(clienteNumero, msgPdf, instanceName);
-      await enviarDocumento(clienteNumero, restaurante.cardapioPdfUrl, "cardapio.pdf", instanceName);
+
+      // Verifica se é array JSON de fotos
+      let fotos = null;
+      try {
+        const parsed = JSON.parse(restaurante.cardapioPdfUrl);
+        if (Array.isArray(parsed) && parsed.length > 0) fotos = parsed;
+      } catch { /* single URL */ }
+
+      if (fotos) {
+        for (const url of fotos) {
+          await enviarImagem(clienteNumero, url, "", instanceName);
+        }
+      } else if (/\.(jpg|jpeg|png|webp)$/i.test(restaurante.cardapioPdfUrl)) {
+        await enviarImagem(clienteNumero, restaurante.cardapioPdfUrl, "", instanceName);
+      } else {
+        await enviarDocumento(clienteNumero, restaurante.cardapioPdfUrl, "cardapio.pdf", instanceName);
+      }
       return;
     }
 

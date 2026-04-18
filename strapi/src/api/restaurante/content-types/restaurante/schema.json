@@ -44,6 +44,16 @@
     "logoUrl": {
       "type": "string"
     },
+    "moeda": {
+      "type": "string",
+      "default": "R$",
+      "comment": "Símbolo da moeda, ex: R$, G$, $"
+    },
+    "taxaEntrega": {
+      "type": "integer",
+      "default": 0,
+      "comment": "Taxa de entrega fixa (0 = grátis)"
+    },
     "cardapios": {
       "type": "relation",
       "relation": "oneToMany",

@@ -35,6 +35,8 @@ async function buscarRestaurante(slug) {
       slugWhatsapp: item.attributes?.slugWhatsapp || item.slugWhatsapp,
       donoWhatsapp: item.attributes?.donoWhatsapp || item.donoWhatsapp,
       ativo: item.attributes?.ativo ?? item.ativo,
+      moeda: item.attributes?.moeda || item.moeda || "R$",
+      taxaEntrega: parseFloat(item.attributes?.taxaEntrega ?? item.taxaEntrega ?? 0),
     };
   } catch (err) {
     console.error("[strapi] erro ao buscar restaurante:", err.message);
@@ -68,7 +70,7 @@ async function buscarCardapio(strapiRestauranteId) {
     const { data } = await strapiClient.get("/api/categorias", {
       params: {
         "filters[cardapio][restaurante][id][$eq]": strapiRestauranteId,
-        "populate": "produtos",
+        "populate[produtos][populate]": "tamanhos",
         "fields": "nome",
       },
     });
@@ -82,14 +84,18 @@ async function buscarCardapio(strapiRestauranteId) {
       const produtos = produtosRaw
         .map((p) => {
           const pa = p.attributes || p;
+          const tamanhos = Array.isArray(pa.tamanhos) && pa.tamanhos.length > 0
+            ? pa.tamanhos
+            : null;
           return {
             nome: pa.nome,
-            preco: parseFloat(pa.preco) || 0,
+            preco: tamanhos ? null : (parseFloat(pa.preco) || 0),
+            tamanhos,
             descricao: pa.descricao || null,
             disponivel: pa.disponivel,
           };
         })
-        .filter((p) => p.nome && p.preco > 0 && p.disponivel !== false);
+        .filter((p) => p.nome && (p.tamanhos || p.preco > 0) && p.disponivel !== false);
 
       return {
         nome: attrs.nome,

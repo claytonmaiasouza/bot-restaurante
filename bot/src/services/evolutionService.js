@@ -56,6 +56,25 @@ async function enviarDocumento(numero, mediaUrl, fileName, instanceName) {
 }
 
 /**
+ * Envia uma imagem via Evolution API.
+ */
+async function enviarImagem(numero, mediaUrl, caption, instanceName) {
+  try {
+    const { data } = await evolutionClient.post(
+      `/message/sendMedia/${instanceName}`,
+      { number: numero, mediatype: "image", caption: caption || "", media: mediaUrl }
+    );
+    return data;
+  } catch (err) {
+    console.error(
+      `[evolution] erro ao enviar imagem para ${numero}:`,
+      err.response?.data || err.message
+    );
+    throw err;
+  }
+}
+
+/**
  * Envia resumo formatado do pedido para o dono e confirmação ao cliente.
  */
 async function enviarMensagemFormatada(pedido, instanceName, donoNumero) {
@@ -101,9 +120,16 @@ async function criarInstancia(restaurante) {
       integration: "WHATSAPP-BAILEYS",
     });
     console.log(`[evolution] instância criada: ${restaurante.slugWhatsapp}`);
+    // Extrai QR code da resposta de criação, se disponível
+    const qrData = data?.qrcode || data?.hash;
+    if (qrData) {
+      data._qrcode = {
+        qrcode: qrData.code || qrData.qrcode || null,
+        base64: qrData.base64 || null,
+      };
+    }
     return data;
   } catch (err) {
-    // Ignora erro se a instância já existe (409 ou 403 dependendo da versão da Evolution)
     const jaExiste =
       err.response?.status === 409 ||
       err.response?.status === 403 ||
@@ -127,10 +153,10 @@ async function criarInstancia(restaurante) {
 async function obterQRCode(instanceName) {
   try {
     const { data } = await evolutionClient.get(`/instance/connect/${instanceName}`);
-    return {
-      qrcode: data?.qrcode?.code || data?.code || null,
-      base64: data?.qrcode?.base64 || data?.base64 || null,
-    };
+    const base64 = data?.qrcode?.base64 || data?.base64 || null;
+    const code = data?.qrcode?.code || data?.code || null;
+    if (!base64 && !code) return null;
+    return { qrcode: code, base64 };
   } catch (err) {
     console.error(`[evolution] erro ao obter QR code de ${instanceName}:`, err.response?.data || err.message);
     return null;
@@ -238,6 +264,7 @@ async function baixarMidiaBase64(instanceName, mensagem) {
 module.exports = {
   // Mensagens
   enviarMensagem,
+  enviarImagem,
   enviarDocumento,
   enviarMensagemFormatada,
   baixarMidiaBase64,

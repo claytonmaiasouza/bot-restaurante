@@ -1,0 +1,24 @@
+{
+  "collectionName": "components_cardapio_tamanhos",
+  "info": {
+    "displayName": "Tamanho",
+    "description": "Variante de tamanho com preço (e preço com borda opcional)"
+  },
+  "options": {},
+  "attributes": {
+    "nome": {
+      "type": "string",
+      "required": true,
+      "comment": "Ex: Individual (4pz), Pequeña (6pz)"
+    },
+    "preco": {
+      "type": "integer",
+      "required": true,
+      "comment": "Preço sem borda"
+    },
+    "precoComBorda": {
+      "type": "integer",
+      "comment": "Preço com borda recheada (deixar vazio se não aplica)"
+    }
+  }
+}

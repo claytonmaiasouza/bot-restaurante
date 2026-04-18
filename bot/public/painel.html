@@ -11,6 +11,26 @@
     .tab-active { @apply bg-white shadow text-gray-800; }
     ::-webkit-scrollbar { height: 4px; }
     ::-webkit-scrollbar-thumb { background: #d1d5db; border-radius: 9999px; }
+    .nav-tab {
+      padding: 5px 12px;
+      border-radius: 7px;
+      border: 1.5px solid transparent;
+      font-size: 0.82rem;
+      transition: all 0.15s ease;
+      white-space: nowrap;
+    }
+    .nav-tab:hover {
+      border-color: #f97316;
+      color: #f97316;
+      background: #fff7ed;
+    }
+    .nav-tab-active {
+      border-color: #f97316 !important;
+      color: #ea6c00 !important;
+      background: #fff7ed !important;
+      font-weight: 700;
+      box-shadow: 0 1px 4px 0 rgba(249,115,22,0.10);
+    }
   </style>
 </head>
 <body class="bg-gray-100 min-h-screen">
@@ -67,14 +87,15 @@
   <!-- Header -->
   <header class="bg-white shadow-sm sticky top-0 z-20">
     <div class="max-w-7xl mx-auto px-4 py-3 flex items-center justify-between gap-3">
-      <div class="flex items-center gap-2 shrink-0">
-        <span class="text-xl">🍕</span>
-        <button onclick="mostrarSecao('pedidos')" id="nav-pedidos" class="font-bold text-gray-800 hidden sm:block hover:text-orange-500 transition">Pedidos</button>
-        <button onclick="mostrarSecao('conversas')" id="nav-conversas" class="font-medium text-gray-400 hidden sm:block hover:text-orange-500 transition">Conversas</button>
-        <button onclick="mostrarSecao('clientes')" id="nav-clientes" class="font-medium text-gray-400 hidden sm:block hover:text-orange-500 transition">Clientes</button>
-        <button onclick="mostrarSecao('cardapio')" id="nav-cardapio" class="font-medium text-gray-400 hidden sm:block hover:text-orange-500 transition">Cardápio</button>
-        <button onclick="mostrarSecao('motoboys')" id="nav-motoboys" class="font-medium text-gray-400 hidden sm:block hover:text-orange-500 transition">Motoboys</button>
-        <button onclick="mostrarSecao('configuracoes')" id="nav-configuracoes" class="font-medium text-gray-400 hidden sm:block hover:text-orange-500 transition">Configurações</button>
+      <div class="flex items-center gap-1.5 shrink-0">
+        <span class="text-xl mr-1">🍕</span>
+        <button onclick="mostrarSecao('pedidos')" id="nav-pedidos" class="nav-tab font-semibold text-gray-800 hidden sm:block">Pedidos</button>
+        <button onclick="mostrarSecao('conversas')" id="nav-conversas" class="nav-tab font-medium text-gray-500 hidden sm:block">Conversas</button>
+        <button onclick="mostrarSecao('clientes')" id="nav-clientes" class="nav-tab font-medium text-gray-500 hidden sm:block">Clientes</button>
+        <button onclick="mostrarSecao('cardapio')" id="nav-cardapio" class="nav-tab font-medium text-gray-500 hidden sm:block">Cardápio</button>
+        <button onclick="mostrarSecao('motoboys')" id="nav-motoboys" class="nav-tab font-medium text-gray-500 hidden sm:block">Motoboys</button>
+        <button onclick="mostrarSecao('restaurantes-admin')" id="nav-restaurantes-admin" class="nav-tab font-medium text-gray-500 hidden">Restaurantes</button>
+        <button onclick="mostrarSecao('configuracoes')" id="nav-configuracoes" class="nav-tab font-medium text-gray-500 hidden sm:block">Configurações</button>
       </div>
       <select id="restaurante-filter" onchange="trocarRestaurante()"
         class="border border-gray-300 rounded-lg px-3 py-1.5 text-sm focus:outline-none focus:ring-2 focus:ring-orange-400 flex-1 max-w-xs">
@@ -348,16 +369,47 @@
                 class="w-full border border-gray-300 rounded-lg px-3 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-orange-400 resize-none"></textarea>
             </div>
 
-            <!-- Cardápio em PDF -->
+            <!-- Cardápio em PDF ou Fotos -->
             <div class="p-5 border-t border-gray-100">
-              <h3 class="font-semibold text-gray-700 text-sm mb-3">Cardápio em PDF</h3>
-              <div id="cfg-pdf-status" class="text-sm text-gray-500 mb-3">Nenhum PDF cadastrado.</div>
-              <div class="flex items-center gap-3">
-                <input id="cfg-pdf-input" type="file" accept="application/pdf" class="text-sm text-gray-600 file:mr-3 file:py-1 file:px-3 file:rounded file:border-0 file:text-sm file:bg-orange-50 file:text-orange-700 hover:file:bg-orange-100 cursor-pointer">
-                <button onclick="uploadCardapioPdf()" class="bg-orange-500 hover:bg-orange-600 text-white text-sm px-4 py-2 rounded-lg">Enviar PDF</button>
-                <button id="cfg-pdf-deletar" onclick="deletarCardapioPdf()" class="hidden text-red-500 hover:text-red-700 text-sm px-3 py-2 border border-red-200 rounded-lg">Remover</button>
+              <h3 class="font-semibold text-gray-700 text-sm mb-3">Cardápio (PDF ou Fotos)</h3>
+
+              <!-- Abas -->
+              <div class="flex gap-1 mb-4 bg-gray-100 rounded-lg p-1 w-fit">
+                <button id="cfg-tab-pdf" onclick="cfgTrocarAba('pdf')"
+                  class="text-xs font-semibold px-4 py-1.5 rounded-md bg-white shadow text-gray-800 transition">📄 PDF</button>
+                <button id="cfg-tab-foto" onclick="cfgTrocarAba('foto')"
+                  class="text-xs font-medium px-4 py-1.5 rounded-md text-gray-500 hover:text-gray-700 transition">📷 Fotos</button>
               </div>
-              <p class="text-xs text-gray-400 mt-2">Quando o cliente pedir o cardápio em PDF no WhatsApp, o bot enviará este arquivo automaticamente.</p>
+
+              <!-- Aba PDF -->
+              <div id="cfg-aba-pdf">
+                <div id="cfg-pdf-status" class="text-sm text-gray-500 mb-3">Nenhum PDF cadastrado.</div>
+                <div class="flex items-center gap-3">
+                  <input id="cfg-pdf-input" type="file" accept="application/pdf"
+                    class="text-sm text-gray-600 file:mr-3 file:py-1 file:px-3 file:rounded file:border-0 file:text-sm file:bg-orange-50 file:text-orange-700 hover:file:bg-orange-100 cursor-pointer">
+                  <button onclick="uploadCardapioPdf()"
+                    class="bg-orange-500 hover:bg-orange-600 text-white text-sm px-4 py-2 rounded-lg">Enviar PDF</button>
+                  <button id="cfg-pdf-deletar" onclick="deletarCardapioPdf()"
+                    class="hidden text-red-500 hover:text-red-700 text-sm px-3 py-2 border border-red-200 rounded-lg">Remover PDF</button>
+                </div>
+              </div>
+
+              <!-- Aba Fotos (múltiplas) -->
+              <div id="cfg-aba-foto" class="hidden">
+                <!-- Grade de fotos cadastradas -->
+                <div id="cfg-fotos-grid" class="flex flex-wrap gap-3 mb-3"></div>
+
+                <!-- Adicionar fotos -->
+                <label class="flex items-center gap-2 cursor-pointer w-fit border-2 border-dashed border-orange-300 hover:border-orange-500 rounded-xl px-4 py-3 text-orange-500 hover:text-orange-600 transition">
+                  <span class="text-xl">+</span>
+                  <span class="text-sm font-medium">Adicionar fotos</span>
+                  <input id="cfg-fotos-input" type="file" accept="image/jpeg,image/png,image/webp"
+                    multiple class="hidden" onchange="uploadCardapioFotos(this)">
+                </label>
+                <p class="text-xs text-gray-400 mt-2">Máximo 10 fotos • JPG, PNG ou WebP • 10 MB por foto</p>
+              </div>
+
+              <p class="text-xs text-gray-400 mt-3">Quando o cliente pedir o cardápio no WhatsApp, o bot enviará as fotos automaticamente.</p>
             </div>
 
             <!-- Status (somente admin) -->
@@ -386,6 +438,16 @@
       </div>
     </div>
 
+    <!-- Restaurantes (super admin) -->
+    <div id="secao-restaurantes-admin" class="hidden pb-8">
+      <div class="flex items-center justify-between mb-4">
+        <h2 class="font-bold text-gray-800">Restaurantes cadastrados</h2>
+        <button onclick="abrirModalNovoRestaurante()" class="bg-orange-500 hover:bg-orange-600 text-white text-sm font-semibold px-4 py-2 rounded-lg transition">+ Novo Restaurante</button>
+      </div>
+      <div id="restaurantes-admin-lista" class="flex flex-col gap-3"></div>
+      <p id="restaurantes-admin-vazio" class="text-sm text-gray-400 hidden">Nenhum restaurante cadastrado.</p>
+    </div>
+
     <!-- Motoboys -->
     <div id="secao-motoboys" class="hidden pb-8">
       <div class="flex items-center justify-between mb-4">
@@ -398,6 +460,14 @@
       </div>
       <div id="motoboys-lista" class="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 gap-4"></div>
       <p id="motoboys-vazio" class="text-sm text-gray-400 hidden">Nenhum motoboy cadastrado.</p>
+
+      <!-- Controle de Despachos -->
+      <div class="mt-8">
+        <h3 class="font-bold text-gray-800 mb-3">Controle de Despachos</h3>
+        <div id="despachos-container" class="bg-white rounded-2xl shadow-sm overflow-hidden">
+          <p class="text-sm text-gray-400 p-5">Carregando...</p>
+        </div>
+      </div>
     </div>
 
     <!-- Modal Motoboy -->
@@ -512,11 +582,17 @@
           <p class="text-green-700 font-semibold text-sm">✅ Restaurante criado com sucesso!</p>
           <p id="nr-qr-nome" class="text-green-600 text-xs mt-1"></p>
         </div>
-        <p class="text-sm text-gray-600 mb-3">Escaneie o QR code com o WhatsApp Business do restaurante:</p>
-        <div id="nr-qr-imagem" class="flex justify-center mb-4"></div>
-        <p class="text-xs text-gray-400">Configurações → Dispositivos conectados → Conectar dispositivo</p>
+        <p class="text-sm text-gray-600 mb-2">Escaneie o QR code com o WhatsApp Business do restaurante:</p>
+        <p class="text-xs text-amber-600 mb-3">⏱ O QR expira em ~60 segundos. Se não funcionar, clique em Renovar.</p>
+        <div id="nr-qr-imagem" class="flex justify-center mb-3 min-h-[12rem] items-center"></div>
+        <p id="nr-qr-countdown" class="text-xs text-gray-400 mb-1"></p>
+        <p class="text-xs text-gray-400 mb-4">Configurações → Dispositivos conectados → Conectar dispositivo</p>
+        <button onclick="renovarQRCode()"
+          class="w-full bg-orange-500 hover:bg-orange-600 text-white rounded-lg py-2.5 font-semibold transition text-sm mb-2">
+          🔄 Renovar QR Code
+        </button>
         <button onclick="fecharModalRestaurante()"
-          class="mt-4 w-full bg-gray-100 hover:bg-gray-200 text-gray-700 rounded-lg py-2.5 font-semibold transition text-sm">
+          class="w-full bg-gray-100 hover:bg-gray-200 text-gray-700 rounded-lg py-2.5 font-semibold transition text-sm">
           Fechar
         </button>
       </div>
@@ -586,31 +662,62 @@
   </div>
 </div>
 
-<!-- MODAL IMPORTAR PDF -->
+<!-- MODAL IMPORTAR PDF/FOTO -->
 <div id="modal-pdf" class="hidden fixed inset-0 bg-black/50 z-50 flex items-center justify-center p-4">
   <div class="bg-white rounded-2xl shadow-2xl w-full max-w-2xl max-h-[90vh] overflow-y-auto">
     <div class="p-6">
-      <div class="flex items-center justify-between mb-5">
-        <h2 class="text-lg font-bold text-gray-800">Importar Cardápio via PDF</h2>
+      <div class="flex items-center justify-between mb-4">
+        <h2 class="text-lg font-bold text-gray-800">Importar Cardápio com IA</h2>
         <button onclick="fecharModalPDF()" class="text-gray-400 hover:text-gray-600 text-xl">✕</button>
+      </div>
+
+      <!-- Abas PDF / Foto -->
+      <div class="flex gap-2 mb-5 border-b border-gray-200">
+        <button id="tab-pdf" onclick="trocarAbaImport('pdf')"
+          class="px-4 py-2 text-sm font-semibold border-b-2 border-orange-500 text-orange-600 transition">
+          📄 PDF
+        </button>
+        <button id="tab-foto" onclick="trocarAbaImport('foto')"
+          class="px-4 py-2 text-sm font-semibold border-b-2 border-transparent text-gray-400 hover:text-gray-600 transition">
+          📷 Foto
+        </button>
       </div>
 
       <!-- Etapa 1: upload -->
       <div id="pdf-etapa-upload">
-        <div id="pdf-dropzone"
-          class="border-2 border-dashed border-gray-300 rounded-xl p-8 text-center cursor-pointer hover:border-orange-400 hover:bg-orange-50 transition"
-          onclick="document.getElementById('pdf-input').click()">
-          <p class="text-4xl mb-3">📄</p>
-          <p class="text-gray-600 font-medium">Clique para selecionar o PDF do cardápio</p>
-          <p class="text-gray-400 text-sm mt-1">Tamanho máximo: 10MB</p>
-          <p id="pdf-nome-arquivo" class="text-orange-600 text-sm mt-2 font-medium"></p>
+        <!-- Aba PDF -->
+        <div id="import-aba-pdf">
+          <div id="pdf-dropzone"
+            class="border-2 border-dashed border-gray-300 rounded-xl p-8 text-center cursor-pointer hover:border-orange-400 hover:bg-orange-50 transition"
+            onclick="document.getElementById('pdf-input').click()">
+            <p class="text-4xl mb-3">📄</p>
+            <p class="text-gray-600 font-medium">Clique para selecionar o PDF do cardápio</p>
+            <p class="text-gray-400 text-sm mt-1">Tamanho máximo: 10MB</p>
+            <p id="pdf-nome-arquivo" class="text-orange-600 text-sm mt-2 font-medium"></p>
+          </div>
+          <input id="pdf-input" type="file" accept=".pdf" class="hidden" onchange="selecionarPDF(this)">
         </div>
-        <input id="pdf-input" type="file" accept=".pdf" class="hidden" onchange="selecionarPDF(this)">
+
+        <!-- Aba Foto -->
+        <div id="import-aba-foto" class="hidden">
+          <div id="foto-dropzone"
+            class="border-2 border-dashed border-gray-300 rounded-xl p-8 text-center cursor-pointer hover:border-orange-400 hover:bg-orange-50 transition"
+            onclick="document.getElementById('foto-input').click()">
+            <p class="text-4xl mb-3">📷</p>
+            <p class="text-gray-600 font-medium">Clique para selecionar a foto do cardápio</p>
+            <p class="text-gray-400 text-sm mt-1">JPG, PNG ou WEBP — máximo 5MB</p>
+            <p id="foto-nome-arquivo" class="text-orange-600 text-sm mt-2 font-medium"></p>
+          </div>
+          <input id="foto-input" type="file" accept="image/jpeg,image/png,image/webp,image/gif" class="hidden" onchange="selecionarFoto(this)">
+          <div id="foto-preview-container" class="hidden mt-3 flex justify-center">
+            <img id="foto-preview-img" class="max-h-48 rounded-xl border border-gray-200 object-contain" />
+          </div>
+        </div>
 
         <div class="mt-4 bg-blue-50 rounded-xl p-4 text-sm text-blue-700">
           <p class="font-semibold mb-1">Como funciona:</p>
           <ol class="list-decimal list-inside space-y-1 text-blue-600">
-            <li>Faça upload do PDF com o cardápio</li>
+            <li>Envie o PDF ou uma foto do cardápio</li>
             <li>A IA interpreta categorias, produtos e preços automaticamente</li>
             <li>Você revisa o resultado antes de salvar</li>
           </ol>
@@ -618,7 +725,7 @@
 
         <p id="pdf-erro" class="text-red-500 text-sm mt-3 hidden"></p>
 
-        <button onclick="processarPDF()"
+        <button id="btn-processar-import" onclick="processarImport()"
           class="mt-4 w-full bg-orange-500 hover:bg-orange-600 text-white rounded-lg py-2.5 font-semibold transition text-sm disabled:opacity-50">
           Processar com IA
         </button>
@@ -916,6 +1023,8 @@ async function iniciarDashboard() {
     document.getElementById('user-label').textContent = 'Super Admin';
     document.getElementById('user-label').classList.remove('hidden');
     document.getElementById('btn-novo-restaurante').classList.remove('hidden');
+    document.getElementById('nav-restaurantes-admin').classList.remove('hidden');
+    document.getElementById('nav-restaurantes-admin').classList.add('sm:block');
   }
 
   renderizarTabs();
@@ -940,6 +1049,60 @@ async function carregarRestaurantes() {
       sel.appendChild(opt);
     });
   }
+}
+
+async function carregarListaRestaurantes() {
+  const res = await fetch('/admin/restaurantes', { headers: getHeaders() });
+  if (!res.ok) return;
+  const { data } = await res.json();
+
+  const lista = document.getElementById('restaurantes-admin-lista');
+  const vazio = document.getElementById('restaurantes-admin-vazio');
+  lista.innerHTML = '';
+
+  if (!data.length) { vazio.classList.remove('hidden'); return; }
+  vazio.classList.add('hidden');
+
+  data.forEach(r => {
+    const div = document.createElement('div');
+    div.className = 'bg-white rounded-2xl shadow-sm border border-gray-100 p-4 flex items-center justify-between gap-4';
+    div.innerHTML = `
+      <div class="flex-1 min-w-0">
+        <div class="flex items-center gap-2 mb-1">
+          <span class="font-semibold text-gray-800 truncate">${r.nome}</span>
+          <span class="text-xs px-2 py-0.5 rounded-full ${r.ativo ? 'bg-green-100 text-green-700' : 'bg-red-100 text-red-500'}">${r.ativo ? 'Ativo' : 'Inativo'}</span>
+        </div>
+        <p class="text-xs text-gray-400">📱 ${r.slugWhatsapp} &nbsp;|&nbsp; 💰 ${r.moeda} &nbsp;|&nbsp; ✉️ ${r.email || '—'}</p>
+      </div>
+      <button onclick="confirmarDeletarRestaurante('${r.id}', '${r.nome.replace(/'/g, "\\'")}')"
+        class="shrink-0 bg-red-50 hover:bg-red-100 text-red-600 text-xs font-semibold px-3 py-2 rounded-lg transition">
+        🗑 Deletar
+      </button>`;
+    lista.appendChild(div);
+  });
+}
+
+function confirmarDeletarRestaurante(id, nome) {
+  if (!confirm(`⚠️ Tem certeza que deseja DELETAR o restaurante "${nome}"?\n\nIsso removerá permanentemente:\n• Todos os pedidos\n• Todas as sessões e conversas\n• Todo o cardápio\n• Todos os motoboys\n• Dados de fidelidade\n\nEsta ação não pode ser desfeita.`)) return;
+  deletarRestaurante(id, nome);
+}
+
+async function deletarRestaurante(id, nome) {
+  const res = await fetch(`/admin/restaurantes/${id}`, {
+    method: 'DELETE',
+    headers: getHeaders(),
+  });
+  if (!res.ok) {
+    const json = await res.json().catch(() => ({}));
+    mostrarToast(`Erro ao deletar: ${json.error || 'tente novamente'}`);
+    return;
+  }
+  mostrarToast(`✅ Restaurante "${nome}" deletado.`);
+  // Remove do select e do array local
+  restaurantes = restaurantes.filter(r => r.id !== id);
+  const opt = document.querySelector(`#restaurante-filter option[value="${id}"]`);
+  if (opt) opt.remove();
+  carregarListaRestaurantes();
 }
 
 function trocarRestaurante() {
@@ -1041,6 +1204,7 @@ function criarCard(pedido) {
     </div>
 
     ${pedido.localizacao && !isRetirada ? `<p class="text-xs text-gray-400 truncate">📍 ${pedido.localizacao}</p>` : ''}
+    ${pedido.motoboyNome ? `<p class="text-xs font-medium text-blue-500">🛵 Despachado: ${pedido.motoboyNome}</p>` : ''}
 
     <div class="flex gap-2 flex-wrap">
       ${!pedido.pago && pedido.status !== 'CANCELADO'
@@ -1255,25 +1419,30 @@ let secaoAtual = 'pedidos';
 
 function mostrarSecao(secao) {
   secaoAtual = secao;
-  ['pedidos', 'conversas', 'clientes', 'cardapio', 'configuracoes', 'motoboys'].forEach(s => {
+  ['pedidos', 'conversas', 'clientes', 'cardapio', 'configuracoes', 'motoboys', 'restaurantes-admin'].forEach(s => {
     document.getElementById(`secao-${s}`).classList.toggle('hidden', secao !== s);
   });
   document.getElementById('tabs').classList.toggle('hidden', secao !== 'pedidos');
 
-  const navAtivo = 'font-medium text-orange-500 hidden sm:block transition';
-  const navInativo = 'font-medium text-gray-400 hidden sm:block hover:text-orange-500 transition';
-  document.getElementById('nav-pedidos').className = secao === 'pedidos'
-    ? 'font-bold text-orange-500 hidden sm:block transition'
-    : 'font-bold text-gray-800 hidden sm:block hover:text-orange-500 transition';
-  ['conversas', 'clientes', 'cardapio', 'configuracoes', 'motoboys'].forEach(s => {
-    document.getElementById(`nav-${s}`).className = secao === s ? navAtivo : navInativo;
+  // Reset todas as abas e marca a ativa
+  ['pedidos', 'conversas', 'clientes', 'cardapio', 'configuracoes', 'motoboys'].forEach(s => {
+    const el = document.getElementById(`nav-${s}`);
+    if (!el) return;
+    el.classList.remove('nav-tab-active');
+    if (s === secao) el.classList.add('nav-tab-active');
   });
+  const elNavRest = document.getElementById('nav-restaurantes-admin');
+  if (elNavRest) {
+    elNavRest.classList.remove('nav-tab-active');
+    if (secao === 'restaurantes-admin') elNavRest.classList.add('nav-tab-active');
+  }
 
   if (secao === 'conversas') carregarConversas();
   if (secao === 'clientes') carregarClientes();
   if (secao === 'cardapio') carregarCardapio();
   if (secao === 'configuracoes') iniciarConfiguracoes();
   if (secao === 'motoboys') iniciarMotoboys();
+  if (secao === 'restaurantes-admin') carregarListaRestaurantes();
 }
 
 // ── Conversas ─────────────────────────────────────────────────────────────────
@@ -1496,16 +1665,23 @@ function buscarClientes() {
   }, 400);
 }
 
-// ── Importar PDF ─────────────────────────────────────────────────────────────
+// ── Importar PDF / Foto ───────────────────────────────────────────────────────
 let pdfArquivo = null;
+let fotoArquivo = null;
+let importAba = 'pdf'; // 'pdf' | 'foto'
 let pdfCardapioInterpretado = null;
 
 function abrirModalImportarPDF() {
   pdfArquivo = null;
+  fotoArquivo = null;
   pdfCardapioInterpretado = null;
   document.getElementById('pdf-nome-arquivo').textContent = '';
+  document.getElementById('foto-nome-arquivo').textContent = '';
   document.getElementById('pdf-erro').classList.add('hidden');
   document.getElementById('pdf-input').value = '';
+  document.getElementById('foto-input').value = '';
+  document.getElementById('foto-preview-container').classList.add('hidden');
+  trocarAbaImport('pdf');
   mostrarEtapaPDF('upload');
   document.getElementById('modal-pdf').classList.remove('hidden');
 }
@@ -1520,6 +1696,20 @@ function mostrarEtapaPDF(etapa) {
   });
 }
 
+function trocarAbaImport(aba) {
+  importAba = aba;
+  document.getElementById('import-aba-pdf').classList.toggle('hidden', aba !== 'pdf');
+  document.getElementById('import-aba-foto').classList.toggle('hidden', aba !== 'foto');
+  const tabPdf = document.getElementById('tab-pdf');
+  const tabFoto = document.getElementById('tab-foto');
+  tabPdf.className = aba === 'pdf'
+    ? 'px-4 py-2 text-sm font-semibold border-b-2 border-orange-500 text-orange-600 transition'
+    : 'px-4 py-2 text-sm font-semibold border-b-2 border-transparent text-gray-400 hover:text-gray-600 transition';
+  tabFoto.className = aba === 'foto'
+    ? 'px-4 py-2 text-sm font-semibold border-b-2 border-orange-500 text-orange-600 transition'
+    : 'px-4 py-2 text-sm font-semibold border-b-2 border-transparent text-gray-400 hover:text-gray-600 transition';
+}
+
 function selecionarPDF(input) {
   pdfArquivo = input.files[0];
   if (pdfArquivo) {
@@ -1528,52 +1718,60 @@ function selecionarPDF(input) {
   }
 }
 
-async function processarPDF() {
-  if (!pdfArquivo) {
-    const el = document.getElementById('pdf-erro');
-    el.textContent = 'Selecione um arquivo PDF primeiro.';
-    el.classList.remove('hidden');
-    return;
+function selecionarFoto(input) {
+  fotoArquivo = input.files[0];
+  if (fotoArquivo) {
+    document.getElementById('foto-nome-arquivo').textContent = `📷 ${fotoArquivo.name}`;
+    document.getElementById('foto-dropzone').classList.add('border-orange-400', 'bg-orange-50');
+    const reader = new FileReader();
+    reader.onload = (e) => {
+      document.getElementById('foto-preview-img').src = e.target.result;
+      document.getElementById('foto-preview-container').classList.remove('hidden');
+    };
+    reader.readAsDataURL(fotoArquivo);
   }
+}
 
+async function processarImport() {
   const rid = cardapioRestauranteId || restauranteAtual || restaurantes[0]?.id;
   if (!rid) { mostrarToast('Selecione um restaurante primeiro'); return; }
 
-  mostrarEtapaPDF('loading');
+  const el = document.getElementById('pdf-erro');
+  el.classList.add('hidden');
 
-  const formData = new FormData();
-  formData.append('pdf', pdfArquivo);
+  if (importAba === 'pdf') {
+    if (!pdfArquivo) { el.textContent = 'Selecione um arquivo PDF primeiro.'; el.classList.remove('hidden'); return; }
+    mostrarEtapaPDF('loading');
+    const formData = new FormData();
+    formData.append('pdf', pdfArquivo);
+    try {
+      const res = await fetch(`/admin/cardapio/${rid}/importar-pdf`, { method: 'POST', headers: { ...getHeaders() }, body: formData });
+      const json = await res.json();
+      if (!res.ok) { mostrarEtapaPDF('upload'); el.textContent = json.error || 'Erro ao processar PDF.'; el.classList.remove('hidden'); return; }
+      pdfCardapioInterpretado = json.data;
+      document.getElementById('pdf-resumo').textContent = `${json.totalCategorias} categoria(s) e ${json.totalProdutos} produto(s) encontrados`;
+      renderizarPreviewPDF(json.data);
+      mostrarEtapaPDF('preview');
+    } catch { mostrarEtapaPDF('upload'); el.textContent = 'Erro de conexão. Tente novamente.'; el.classList.remove('hidden'); }
 
-  try {
-    const res = await fetch(`/admin/cardapio/${rid}/importar-pdf`, {
-      method: 'POST',
-      headers: { ...getHeaders() },
-      body: formData,
-    });
-
-    const json = await res.json();
-
-    if (!res.ok) {
-      mostrarEtapaPDF('upload');
-      const el = document.getElementById('pdf-erro');
-      el.textContent = json.error || 'Erro ao processar PDF.';
-      el.classList.remove('hidden');
-      return;
-    }
-
-    pdfCardapioInterpretado = json.data;
-    document.getElementById('pdf-resumo').textContent =
-      `${json.totalCategorias} categoria(s) e ${json.totalProdutos} produto(s) encontrados`;
-
-    renderizarPreviewPDF(json.data);
-    mostrarEtapaPDF('preview');
-  } catch (err) {
-    mostrarEtapaPDF('upload');
-    const el = document.getElementById('pdf-erro');
-    el.textContent = 'Erro de conexão. Tente novamente.';
-    el.classList.remove('hidden');
+  } else {
+    if (!fotoArquivo) { el.textContent = 'Selecione uma foto primeiro.'; el.classList.remove('hidden'); return; }
+    mostrarEtapaPDF('loading');
+    const formData = new FormData();
+    formData.append('imagem', fotoArquivo);
+    try {
+      const res = await fetch(`/admin/cardapio/${rid}/importar-imagem`, { method: 'POST', headers: { ...getHeaders() }, body: formData });
+      const json = await res.json();
+      if (!res.ok) { mostrarEtapaPDF('upload'); el.textContent = json.error || 'Erro ao processar imagem.'; el.classList.remove('hidden'); return; }
+      pdfCardapioInterpretado = json.data;
+      document.getElementById('pdf-resumo').textContent = `${json.totalCategorias} categoria(s) e ${json.totalProdutos} produto(s) encontrados`;
+      renderizarPreviewPDF(json.data);
+      mostrarEtapaPDF('preview');
+    } catch { mostrarEtapaPDF('upload'); el.textContent = 'Erro de conexão. Tente novamente.'; el.classList.remove('hidden'); }
   }
 }
+
+function processarPDF() { processarImport(); }
 
 function renderizarPreviewPDF(categorias) {
   const lista = document.getElementById('pdf-preview-lista');
@@ -1635,6 +1833,9 @@ async function confirmarImportacao() {
 }
 
 // ── Novo Restaurante ──────────────────────────────────────────────────────────
+let qrSlugAtual = null;
+let qrCountdownTimer = null;
+
 function abrirModalNovoRestaurante() {
   document.getElementById('modal-restaurante').classList.remove('hidden');
   document.getElementById('modal-restaurante-form').classList.remove('hidden');
@@ -1643,8 +1844,80 @@ function abrirModalNovoRestaurante() {
 }
 
 function fecharModalRestaurante() {
+  clearInterval(qrCountdownTimer);
+  qrSlugAtual = null;
   document.getElementById('modal-restaurante').classList.add('hidden');
   carregarRestaurantes();
+}
+
+function exibirQR(qrcode) {
+  const qrContainer = document.getElementById('nr-qr-imagem');
+  qrContainer.innerHTML = '';
+  const base64 = qrcode?.base64;
+  const code = qrcode?.qrcode;
+  const imgSrc = base64
+    ? (base64.startsWith('data:') ? base64 : `data:image/png;base64,${base64}`)
+    : (code?.startsWith('data:') ? code : null);
+  if (imgSrc) {
+    const img = document.createElement('img');
+    img.src = imgSrc;
+    img.className = 'w-48 h-48 rounded-lg border border-gray-200';
+    qrContainer.appendChild(img);
+    iniciarCountdownQR();
+  } else {
+    qrContainer.innerHTML = '<p class="text-sm text-gray-400">QR code não disponível. Clique em Renovar.</p>';
+  }
+}
+
+function iniciarCountdownQR() {
+  clearInterval(qrCountdownTimer);
+  let seg = 55;
+  const el = document.getElementById('nr-qr-countdown');
+  el.textContent = `⏱ Expira em ${seg}s`;
+  qrCountdownTimer = setInterval(() => {
+    seg--;
+    if (seg <= 0) {
+      clearInterval(qrCountdownTimer);
+      el.textContent = '⚠️ QR expirado — clique em Renovar';
+      document.getElementById('nr-qr-imagem').innerHTML =
+        '<p class="text-sm text-gray-400">QR expirado. Clique em Renovar QR Code.</p>';
+    } else {
+      el.textContent = `⏱ Expira em ${seg}s`;
+    }
+  }, 1000);
+}
+
+async function renovarQRCode() {
+  if (!qrSlugAtual) return;
+  const qrContainer = document.getElementById('nr-qr-imagem');
+  qrContainer.innerHTML = '<p class="text-sm text-gray-400 animate-pulse">Gerando novo QR...</p>';
+  clearInterval(qrCountdownTimer);
+  document.getElementById('nr-qr-countdown').textContent = '';
+
+  const res = await fetch(`/admin/instancias/${qrSlugAtual}/qrcode`, { headers: getHeaders() });
+  const json = await res.json();
+
+  if (json.connected) {
+    clearInterval(qrCountdownTimer);
+    qrContainer.innerHTML = '<p class="text-green-600 font-semibold text-sm">✅ WhatsApp já conectado!</p>';
+    document.getElementById('nr-qr-countdown').textContent = '';
+    return;
+  }
+
+  if (json.qrcode) {
+    exibirQR(json.qrcode);
+  } else {
+    // Tenta reconectar para gerar novo QR
+    const res2 = await fetch(`/admin/instancias/${qrSlugAtual}/reconectar`, {
+      method: 'POST', headers: getHeaders(),
+    });
+    const json2 = await res2.json();
+    if (json2.qrcode) {
+      exibirQR(json2.qrcode);
+    } else {
+      qrContainer.innerHTML = '<p class="text-sm text-gray-400">Não foi possível gerar QR. Tente novamente.</p>';
+    }
+  }
 }
 
 async function criarRestaurante() {
@@ -1681,19 +1954,8 @@ async function criarRestaurante() {
   document.getElementById('modal-restaurante-form').classList.add('hidden');
   document.getElementById('modal-restaurante-qr').classList.remove('hidden');
   document.getElementById('nr-qr-nome').textContent = json.data.nome;
-
-  const qrContainer = document.getElementById('nr-qr-imagem');
-  qrContainer.innerHTML = '';
-  const qrcode = json.qrcode?.qrcode;
-  if (qrcode) {
-    const src = qrcode.startsWith('data:') ? qrcode : `data:image/png;base64,${qrcode}`;
-    const img = document.createElement('img');
-    img.src = src;
-    img.className = 'w-48 h-48 rounded-lg border border-gray-200';
-    qrContainer.appendChild(img);
-  } else {
-    qrContainer.innerHTML = '<p class="text-sm text-gray-400">QR code ainda não disponível — tente conectar pela seção de instâncias.</p>';
-  }
+  qrSlugAtual = json.data.slugWhatsapp;
+  exibirQR(json.qrcode);
 
   mostrarToast(`✅ Restaurante "${json.data.nome}" criado!`);
 }
@@ -2086,15 +2348,25 @@ async function carregarConfiguracoes() {
 
   preencherHorarioForm(r.horarioAtendimento);
 
-  // PDF status
+  // Status do cardápio (PDF ou Fotos)
   const pdfStatus = document.getElementById('cfg-pdf-status');
   const pdfDeletar = document.getElementById('cfg-pdf-deletar');
   if (r.cardapioPdfUrl) {
-    pdfStatus.innerHTML = `PDF cadastrado: <a href="${r.cardapioPdfUrl}" target="_blank" class="text-orange-500 underline">visualizar</a>`;
-    pdfDeletar.classList.remove('hidden');
+    let fotos = null;
+    try { const p = JSON.parse(r.cardapioPdfUrl); if (Array.isArray(p)) fotos = p; } catch {}
+    if (fotos) {
+      cfgTrocarAba('foto');
+      cfgRenderFotos(fotos);
+    } else {
+      cfgTrocarAba('pdf');
+      pdfStatus.innerHTML = `PDF cadastrado: <a href="${r.cardapioPdfUrl}" target="_blank" class="text-orange-500 underline">visualizar</a>`;
+      pdfDeletar.classList.remove('hidden');
+    }
   } else {
+    cfgTrocarAba('pdf');
     pdfStatus.textContent = 'Nenhum PDF cadastrado.';
     pdfDeletar.classList.add('hidden');
+    cfgRenderFotos([]);
   }
 
   document.getElementById('cfg-erro').classList.add('hidden');
@@ -2181,15 +2453,64 @@ async function uploadCardapioPdf() {
 
 async function deletarCardapioPdf() {
   if (!cfgRestauranteId) return;
+  if (!confirm('Remover o PDF do cardápio?')) return;
   const res = await fetch(`/admin/restaurantes/${cfgRestauranteId}/upload-cardapio-pdf`, {
-    method: 'DELETE',
-    headers: getHeaders(),
+    method: 'DELETE', headers: getHeaders(),
   });
   if (!res.ok) { mostrarToast('Erro ao remover PDF.'); return; }
-
   document.getElementById('cfg-pdf-status').textContent = 'Nenhum PDF cadastrado.';
   document.getElementById('cfg-pdf-deletar').classList.add('hidden');
   mostrarToast('PDF removido.');
+}
+
+function cfgTrocarAba(aba) {
+  const isPhoto = aba === 'foto';
+  document.getElementById('cfg-aba-pdf').classList.toggle('hidden', isPhoto);
+  document.getElementById('cfg-aba-foto').classList.toggle('hidden', !isPhoto);
+  document.getElementById('cfg-tab-pdf').className = `text-xs px-4 py-1.5 rounded-md transition ${isPhoto ? 'font-medium text-gray-500 hover:text-gray-700' : 'font-semibold text-gray-800 bg-white shadow'}`;
+  document.getElementById('cfg-tab-foto').className = `text-xs px-4 py-1.5 rounded-md transition ${isPhoto ? 'font-semibold text-gray-800 bg-white shadow' : 'font-medium text-gray-500 hover:text-gray-700'}`;
+}
+
+function cfgRenderFotos(fotos) {
+  const grid = document.getElementById('cfg-fotos-grid');
+  if (!grid) return;
+  if (!fotos || fotos.length === 0) { grid.innerHTML = ''; return; }
+  grid.innerHTML = fotos.map(url => {
+    const filename = url.split('/uploads/')[1] || '';
+    return `
+      <div class="relative group w-24 h-24">
+        <img src="${url}" class="w-24 h-24 object-cover rounded-xl border border-gray-200" onerror="this.src=''">
+        <button onclick="removerFotoCardapio('${filename}')"
+          class="absolute top-1 right-1 bg-red-500 text-white rounded-full w-5 h-5 text-xs flex items-center justify-center opacity-0 group-hover:opacity-100 transition leading-none">✕</button>
+      </div>`;
+  }).join('');
+}
+
+async function removerFotoCardapio(filename) {
+  if (!cfgRestauranteId || !filename) return;
+  const res = await fetch(`/admin/restaurantes/${cfgRestauranteId}/upload-cardapio-fotos/${encodeURIComponent(filename)}`, {
+    method: 'DELETE', headers: getHeaders(),
+  });
+  const json = await res.json();
+  if (!res.ok) { mostrarToast('Erro ao remover foto.'); return; }
+  cfgRenderFotos(json.data.fotos);
+  mostrarToast('Foto removida.');
+}
+
+async function uploadCardapioFotos(input) {
+  if (!cfgRestauranteId || !input.files || input.files.length === 0) return;
+  const formData = new FormData();
+  for (const file of input.files) formData.append('fotos', file);
+
+  mostrarToast('Enviando fotos...');
+  const res = await fetch(`/admin/restaurantes/${cfgRestauranteId}/upload-cardapio-fotos`, {
+    method: 'POST', headers: getHeaders(), body: formData,
+  });
+  const json = await res.json();
+  if (!res.ok) { mostrarToast('Erro: ' + (json.error || 'falha ao enviar')); return; }
+  cfgRenderFotos(json.data.fotos);
+  input.value = '';
+  mostrarToast(`✅ ${json.data.fotos.length} foto(s) salva(s)!`);
 }
 
 // ── Motoboys ─────────────────────────────────────────────────────────────────
@@ -2206,6 +2527,7 @@ function iniciarMotoboys() {
     motoboyRestauranteId = restauranteInfo?.id;
   }
   carregarMotoboys();
+  carregarDespachos();
 }
 
 async function carregarMotoboys() {
@@ -2281,6 +2603,49 @@ async function deletarMotoboy(id) {
   if (!confirm('Remover este motoboy?')) return;
   await fetch(`/admin/motoboys/${id}`, { method: 'DELETE', headers: getHeaders() });
   carregarMotoboys();
+  carregarDespachos();
+}
+
+async function carregarDespachos() {
+  if (!motoboyRestauranteId) return;
+  const container = document.getElementById('despachos-container');
+  const res = await fetch(`/admin/motoboys/despachos?restauranteId=${motoboyRestauranteId}`, { headers: getHeaders() });
+  if (!res.ok) { container.innerHTML = '<p class="text-sm text-gray-400 p-5">Erro ao carregar despachos.</p>'; return; }
+  const { data } = await res.json();
+
+  if (!data.length) {
+    container.innerHTML = '<p class="text-sm text-gray-400 p-5 text-center">Nenhum despacho registrado ainda.</p>';
+    return;
+  }
+
+  container.innerHTML = `
+    <table class="w-full text-sm">
+      <thead class="bg-gray-50 border-b border-gray-100">
+        <tr>
+          <th class="text-left px-4 py-3 text-xs text-gray-500 font-semibold">Motoboy</th>
+          <th class="text-center px-3 py-3 text-xs text-gray-500 font-semibold">Hoje</th>
+          <th class="text-center px-3 py-3 text-xs text-gray-500 font-semibold">Este mês</th>
+          <th class="text-center px-3 py-3 text-xs text-gray-500 font-semibold">Total</th>
+          <th class="text-right px-4 py-3 text-xs text-gray-500 font-semibold">Último despacho</th>
+        </tr>
+      </thead>
+      <tbody class="divide-y divide-gray-50">
+        ${data.map(d => `
+          <tr class="hover:bg-gray-50 transition">
+            <td class="px-4 py-3 font-semibold text-gray-800">🛵 ${d.motoboyNome}</td>
+            <td class="px-3 py-3 text-center">
+              <span class="inline-block min-w-[28px] px-2 py-0.5 rounded-full text-xs font-bold ${d.hoje > 0 ? 'bg-orange-100 text-orange-700' : 'bg-gray-100 text-gray-400'}">${d.hoje}</span>
+            </td>
+            <td class="px-3 py-3 text-center">
+              <span class="inline-block min-w-[28px] px-2 py-0.5 rounded-full text-xs font-bold ${d.mes > 0 ? 'bg-blue-100 text-blue-700' : 'bg-gray-100 text-gray-400'}">${d.mes}</span>
+            </td>
+            <td class="px-3 py-3 text-center">
+              <span class="inline-block min-w-[28px] px-2 py-0.5 rounded-full text-xs font-bold bg-gray-800 text-white">${d.total}</span>
+            </td>
+            <td class="px-4 py-3 text-right text-xs text-gray-400">${d.ultimoDespacho ? new Date(d.ultimoDespacho).toLocaleString('pt-BR', { day:'2-digit', month:'2-digit', hour:'2-digit', minute:'2-digit' }) : '-'}</td>
+          </tr>`).join('')}
+      </tbody>
+    </table>`;
 }
 
 async function abrirModalDespachar(pedidoId, clienteNome) {
@@ -2324,6 +2689,11 @@ async function despacharParaMotoboy(pedidoId, motoboyId, motoboyNome) {
     body: JSON.stringify({ motoboyId }),
   });
   if (!res.ok) { mostrarToast('Erro ao despachar'); return; }
+
+  // Atualiza array local para refletir motoboy no card imediatamente
+  const idx = pedidos.findIndex(p => p.id === pedidoId);
+  if (idx >= 0) pedidos[idx].motoboyNome = motoboyNome;
+  await carregarPedidos();
   mostrarToast(`✅ Pedido despachado para ${motoboyNome}!`);
 }
 

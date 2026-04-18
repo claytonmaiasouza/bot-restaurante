@@ -20,7 +20,12 @@
     },
     "preco": {
       "type": "decimal",
-      "required": true
+      "required": false
+    },
+    "tamanhos": {
+      "type": "component",
+      "repeatable": true,
+      "component": "cardapio.tamanho"
     },
     "emoji": {
       "type": "string"

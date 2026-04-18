@@ -19,6 +19,16 @@ const bcrypt = require("bcryptjs");
 // Multer: armazena PDF em memória (sem salvar em disco)
 const upload = multer({ storage: multer.memoryStorage(), limits: { fileSize: 10 * 1024 * 1024 } });
 
+// Multer: armazena imagem de cardápio em memória
+const uploadImagem = multer({
+  storage: multer.memoryStorage(),
+  limits: { fileSize: 5 * 1024 * 1024 },
+  fileFilter: (_req, file, cb) => {
+    const allowed = ["image/jpeg", "image/png", "image/webp", "image/gif"];
+    cb(null, allowed.includes(file.mimetype));
+  },
+});
+
 // Multer: salva PDF de cardápio em disco
 const UPLOADS_DIR = path.resolve(__dirname, "../../public/uploads");
 if (!fs.existsSync(UPLOADS_DIR)) fs.mkdirSync(UPLOADS_DIR, { recursive: true });
@@ -30,6 +40,28 @@ const uploadDisco = multer({
   limits: { fileSize: 20 * 1024 * 1024 },
   fileFilter: (_req, file, cb) => cb(null, file.mimetype === "application/pdf"),
 });
+
+// Multer: salva fotos de cardápio em disco (múltiplas)
+const FOTO_EXTS = { "image/jpeg": "jpg", "image/png": "png", "image/webp": "webp" };
+const uploadDiscoFotos = multer({
+  storage: multer.diskStorage({
+    destination: (_req, _file, cb) => cb(null, UPLOADS_DIR),
+    filename: (req, file, cb) => {
+      const ext = FOTO_EXTS[file.mimetype] || "jpg";
+      cb(null, `cardapio-foto-${req.params.id}-${Date.now()}-${Math.random().toString(36).slice(2, 6)}.${ext}`);
+    },
+  }),
+  limits: { fileSize: 10 * 1024 * 1024 },
+  fileFilter: (_req, file, cb) => cb(null, file.mimetype in FOTO_EXTS),
+});
+
+function parseFotos(cardapioPdfUrl) {
+  if (!cardapioPdfUrl) return [];
+  try {
+    const parsed = JSON.parse(cardapioPdfUrl);
+    return Array.isArray(parsed) ? parsed : [];
+  } catch { return []; }
+}
 
 const router = Router();
 const prisma = new PrismaClient();
@@ -203,22 +235,30 @@ router.patch("/pedidos/:id/pago", async (req, res) => {
 // ══ Motoboys ══════════════════════════════════════════════════════════════════
 
 router.get("/motoboys", async (req, res) => {
-  const restauranteId = await resolverRestauranteId(req);
-  if (!restauranteId) return res.status(400).json({ error: "restauranteId obrigatório" });
-  const motoboys = await prisma.motoboy.findMany({
-    where: { restauranteId },
-    orderBy: { nome: "asc" },
-  });
-  res.json({ data: motoboys });
+  try {
+    const restauranteId = resolverRestauranteId(req);
+    if (!restauranteId) return res.status(400).json({ error: "restauranteId obrigatório" });
+    const motoboys = await prisma.motoboy.findMany({
+      where: { restauranteId },
+      orderBy: { nome: "asc" },
+    });
+    res.json({ data: motoboys });
+  } catch (err) {
+    res.status(500).json({ error: err.message });
+  }
 });
 
 router.post("/motoboys", async (req, res) => {
-  const restauranteId = await resolverRestauranteId(req);
-  if (!restauranteId) return res.status(400).json({ error: "restauranteId obrigatório" });
-  const { nome, telefone } = req.body;
-  if (!nome || !telefone) return res.status(400).json({ error: "nome e telefone são obrigatórios" });
-  const motoboy = await prisma.motoboy.create({ data: { nome, telefone, restauranteId } });
-  res.json({ data: motoboy });
+  try {
+    const restauranteId = resolverRestauranteId(req);
+    if (!restauranteId) return res.status(400).json({ error: "restauranteId obrigatório" });
+    const { nome, telefone } = req.body;
+    if (!nome || !telefone) return res.status(400).json({ error: "nome e telefone são obrigatórios" });
+    const motoboy = await prisma.motoboy.create({ data: { nome, telefone, restauranteId } });
+    res.json({ data: motoboy });
+  } catch (err) {
+    res.status(500).json({ error: err.message });
+  }
 });
 
 router.patch("/motoboys/:id", async (req, res) => {
@@ -284,7 +324,61 @@ router.post("/pedidos/:id/despachar", async (req, res) => {
 
     await enviarMensagem(motoboy.telefone, mensagem, pedido.restaurante.slugWhatsapp);
 
+    await prisma.pedido.update({
+      where: { id },
+      data: { motoboyId: motoboy.id, motoboyNome: motoboy.nome },
+    });
+
     res.json({ ok: true, motoboy: motoboy.nome });
+  } catch (err) {
+    res.status(500).json({ error: err.message });
+  }
+});
+
+// GET /admin/motoboys/despachos?restauranteId=xxx — estatísticas de despachos por motoboy
+router.get("/motoboys/despachos", async (req, res) => {
+  const rid = resolverRestauranteId(req);
+  if (!rid) return res.status(400).json({ error: "restauranteId obrigatório" });
+
+  try {
+    const agora = new Date();
+    const inicioMes = new Date(agora.getFullYear(), agora.getMonth(), 1);
+    const inicioHoje = new Date(agora.getFullYear(), agora.getMonth(), agora.getDate());
+
+    const [total, mes, hoje] = await Promise.all([
+      prisma.pedido.groupBy({
+        by: ["motoboyId", "motoboyNome"],
+        where: { restauranteId: rid, motoboyId: { not: null } },
+        _count: { id: true },
+        _max: { createdAt: true },
+      }),
+      prisma.pedido.groupBy({
+        by: ["motoboyId"],
+        where: { restauranteId: rid, motoboyId: { not: null }, createdAt: { gte: inicioMes } },
+        _count: { id: true },
+      }),
+      prisma.pedido.groupBy({
+        by: ["motoboyId"],
+        where: { restauranteId: rid, motoboyId: { not: null }, createdAt: { gte: inicioHoje } },
+        _count: { id: true },
+      }),
+    ]);
+
+    const mesPorId = Object.fromEntries(mes.map(x => [x.motoboyId, x._count.id]));
+    const hojePorId = Object.fromEntries(hoje.map(x => [x.motoboyId, x._count.id]));
+
+    const data = total
+      .map(item => ({
+        motoboyId: item.motoboyId,
+        motoboyNome: item.motoboyNome || "Desconhecido",
+        total: item._count.id,
+        mes: mesPorId[item.motoboyId] || 0,
+        hoje: hojePorId[item.motoboyId] || 0,
+        ultimoDespacho: item._max.createdAt,
+      }))
+      .sort((a, b) => b.total - a.total);
+
+    res.json({ data });
   } catch (err) {
     res.status(500).json({ error: err.message });
   }
@@ -836,7 +930,53 @@ router.post("/restaurantes/:id/upload-cardapio-pdf", uploadDisco.single("pdf"), 
   res.json({ data: { cardapioPdfUrl: pdfUrl } });
 });
 
-// DELETE /admin/restaurantes/:id/upload-cardapio-pdf
+// POST /admin/restaurantes/:id/upload-cardapio-fotos — adiciona fotos ao array
+router.post("/restaurantes/:id/upload-cardapio-fotos", uploadDiscoFotos.array("fotos", 10), async (req, res) => {
+  const { id } = req.params;
+
+  if (req.user.role === "restaurante" && req.user.restauranteId !== id) {
+    return res.status(403).json({ error: "Acesso negado" });
+  }
+  if (!req.files || req.files.length === 0) {
+    return res.status(400).json({ error: "Nenhuma imagem recebida (aceito: JPG, PNG, WebP, máx 10)" });
+  }
+
+  // Remove PDF anterior se existir
+  const pdfPath = path.join(UPLOADS_DIR, `cardapio-${id}.pdf`);
+  if (fs.existsSync(pdfPath)) fs.unlinkSync(pdfPath);
+
+  const restaurante = await prisma.restaurante.findUnique({ where: { id }, select: { cardapioPdfUrl: true } });
+  const fotos = parseFotos(restaurante.cardapioPdfUrl);
+
+  const botUrl = process.env.BOT_PUBLIC_URL || `http://localhost:${process.env.PORT || 3000}`;
+  for (const file of req.files) {
+    fotos.push(`${botUrl}/uploads/${file.filename}`);
+  }
+
+  await prisma.restaurante.update({ where: { id }, data: { cardapioPdfUrl: JSON.stringify(fotos) } });
+  res.json({ data: { fotos } });
+});
+
+// DELETE /admin/restaurantes/:id/upload-cardapio-fotos/:filename — remove uma foto do array
+router.delete("/restaurantes/:id/upload-cardapio-fotos/:filename", async (req, res) => {
+  const { id, filename } = req.params;
+
+  if (req.user.role === "restaurante" && req.user.restauranteId !== id) {
+    return res.status(403).json({ error: "Acesso negado" });
+  }
+
+  const restaurante = await prisma.restaurante.findUnique({ where: { id }, select: { cardapioPdfUrl: true } });
+  const fotos = parseFotos(restaurante.cardapioPdfUrl).filter(url => !url.endsWith(`/${filename}`));
+
+  const filePath = path.join(UPLOADS_DIR, filename);
+  if (fs.existsSync(filePath)) fs.unlinkSync(filePath);
+
+  const newValue = fotos.length > 0 ? JSON.stringify(fotos) : null;
+  await prisma.restaurante.update({ where: { id }, data: { cardapioPdfUrl: newValue } });
+  res.json({ data: { fotos } });
+});
+
+// DELETE /admin/restaurantes/:id/upload-cardapio-pdf — remove PDF ou todas as fotos
 router.delete("/restaurantes/:id/upload-cardapio-pdf", async (req, res) => {
   const { id } = req.params;
 
@@ -844,18 +984,54 @@ router.delete("/restaurantes/:id/upload-cardapio-pdf", async (req, res) => {
     return res.status(403).json({ error: "Acesso negado" });
   }
 
-  const filePath = path.join(UPLOADS_DIR, `cardapio-${id}.pdf`);
-  if (fs.existsSync(filePath)) fs.unlinkSync(filePath);
+  const restaurante = await prisma.restaurante.findUnique({ where: { id }, select: { cardapioPdfUrl: true } });
 
-  await prisma.restaurante.update({
-    where: { id },
-    data: { cardapioPdfUrl: null },
-  });
+  // Remove PDF
+  const pdfPath = path.join(UPLOADS_DIR, `cardapio-${id}.pdf`);
+  if (fs.existsSync(pdfPath)) fs.unlinkSync(pdfPath);
 
+  // Remove todas as fotos do array (se houver)
+  for (const url of parseFotos(restaurante.cardapioPdfUrl)) {
+    const filename = url.split("/uploads/")[1];
+    if (filename) {
+      const fotoPath = path.join(UPLOADS_DIR, filename);
+      if (fs.existsSync(fotoPath)) fs.unlinkSync(fotoPath);
+    }
+  }
+
+  await prisma.restaurante.update({ where: { id }, data: { cardapioPdfUrl: null } });
   res.json({ data: { cardapioPdfUrl: null } });
 });
 
-// ══ Criação de Restaurante (somente super admin) ══════════════════════════════
+// ══ Criação / Exclusão de Restaurante (somente super admin) ══════════════════
+
+// DELETE /admin/restaurantes/:id — remove restaurante e todos os dados relacionados
+router.delete("/restaurantes/:id", async (req, res) => {
+  if (req.user.role !== "admin") return res.status(403).json({ error: "Acesso restrito ao super admin" });
+
+  const { id } = req.params;
+  try {
+    // Cascade manual: Prisma só faz cascade se configurado no schema.
+    // A ordem importa para evitar violações de FK.
+    await prisma.$transaction([
+      prisma.mensagem.deleteMany({ where: { sessao: { restauranteId: id } } }),
+      prisma.resgateFidelidade.deleteMany({ where: { programa: { restauranteId: id } } }),
+      prisma.programaFidelidade.deleteMany({ where: { restauranteId: id } }),
+      prisma.pedido.deleteMany({ where: { restauranteId: id } }),
+      prisma.sessao.deleteMany({ where: { restauranteId: id } }),
+      prisma.tamanho.deleteMany({ where: { produto: { categoria: { restauranteId: id } } } }),
+      prisma.produto.deleteMany({ where: { categoria: { restauranteId: id } } }),
+      prisma.categoria.deleteMany({ where: { restauranteId: id } }),
+      prisma.motoboy.deleteMany({ where: { restauranteId: id } }),
+      prisma.restaurante.delete({ where: { id } }),
+    ]);
+
+    res.json({ ok: true });
+  } catch (err) {
+    if (err.code === "P2025") return res.status(404).json({ error: "Restaurante não encontrado" });
+    res.status(500).json({ error: err.message });
+  }
+});
 
 router.post("/restaurantes", async (req, res) => {
   if (req.user.role !== "admin") return res.status(403).json({ error: "Acesso restrito ao super admin" });
@@ -887,9 +1063,18 @@ router.post("/restaurantes", async (req, res) => {
     });
 
     // Cria instância na Evolution API
-    await criarInstancia(restaurante);
+    const instancia = await criarInstancia(restaurante);
     await configurarWebhook(restaurante.slugWhatsapp, webhookBaseUrl);
-    const qr = await obterQRCode(restaurante.slugWhatsapp);
+
+    // Tenta usar QR da própria resposta de criação; se não, aguarda e busca
+    let qr = instancia?._qrcode?.base64 ? instancia._qrcode : null;
+    if (!qr?.base64) {
+      for (let i = 0; i < 6; i++) {
+        await new Promise((r) => setTimeout(r, 2000));
+        qr = await obterQRCode(restaurante.slugWhatsapp);
+        if (qr?.base64) break;
+      }
+    }
 
     res.status(201).json({
       data: restaurante,
@@ -1096,6 +1281,61 @@ ${texto.slice(0, 8000)}`;
       return res.status(422).json({ error: "A IA retornou um formato inválido. Tente novamente." });
     }
     console.error("[importar-pdf] erro:", err.message);
+    res.status(500).json({ error: err.message });
+  }
+});
+
+// POST /admin/cardapio/:restauranteId/importar-imagem
+// Etapa 1 (foto): envia imagem, Claude Vision interpreta, retorna preview
+router.post("/cardapio/:restauranteId/importar-imagem", uploadImagem.single("imagem"), async (req, res) => {
+  const { restauranteId } = req.params;
+  if (req.user.role === "restaurante" && req.user.restauranteId !== restauranteId) {
+    return res.status(403).json({ error: "Acesso negado" });
+  }
+  if (!req.file) return res.status(400).json({ error: "Imagem não recebida ou formato inválido (use JPG, PNG, WEBP ou GIF)" });
+
+  try {
+    const base64 = req.file.buffer.toString("base64");
+    const mediaType = req.file.mimetype;
+
+    const openRouterClient = axios.create({
+      baseURL: "https://openrouter.ai/api/v1",
+      headers: {
+        Authorization: `Bearer ${process.env.OPENROUTER_API_KEY}`,
+        "Content-Type": "application/json",
+        "HTTP-Referer": process.env.BOT_PUBLIC_URL || "https://bot-restaurante.app",
+        "X-Title": "Bot Restaurante",
+      },
+    });
+
+    const prompt = `Analise esta foto de cardápio de restaurante e retorne um JSON estruturado com as categorias e produtos visíveis.\n\nREGRAS:\n- Identifique as categorias (ex: Pizzas, Hambúrgueres, Bebidas, Sobremesas)\n- Para cada categoria, liste os produtos com nome, descrição e preço\n- Se um produto tiver variações de tamanho (P, M, G, Individual, Mediana, Grande, etc.), use o campo "tamanhos" com nome, preco e precoComBorda (se houver)\n- Se não houver tamanhos, use apenas o campo "preco" (número sem símbolos de moeda)\n- Remova símbolos de moeda dos preços — retorne apenas números (ex: 29.90 ou 40000)\n- Mantenha o idioma original do cardápio\n- Se não conseguir identificar o preço, use 0\n- Ignore informações não relacionadas ao cardápio (endereço, horários, telefone, etc.)\n\nFORMATO DE RESPOSTA (apenas o JSON, sem markdown, sem explicações):\n[\n  {\n    "nome": "Nome da Categoria",\n    "produtos": [\n      {\n        "nome": "Nome do Produto",\n        "descricao": "Descrição ou ingredientes (opcional)",\n        "preco": 0,\n        "tamanhos": null\n      }\n    ]\n  }\n]`;
+
+    const { data } = await openRouterClient.post("/chat/completions", {
+      model: "anthropic/claude-sonnet-4-5",
+      max_tokens: 4096,
+      messages: [{
+        role: "user",
+        content: [
+          { type: "image_url", image_url: { url: `data:${mediaType};base64,${base64}` } },
+          { type: "text", text: prompt },
+        ],
+      }],
+    });
+
+    const resposta = data.choices[0].message.content.trim();
+    const jsonStr = resposta.replace(/^```json\s*/i, "").replace(/^```\s*/i, "").replace(/```\s*$/i, "").trim();
+    const cardapio = JSON.parse(jsonStr);
+
+    if (!Array.isArray(cardapio) || !cardapio.length) {
+      return res.status(422).json({ error: "A IA não conseguiu identificar categorias na imagem. Tente uma foto mais clara." });
+    }
+
+    res.json({ data: cardapio, totalCategorias: cardapio.length, totalProdutos: cardapio.reduce((acc, c) => acc + c.produtos.length, 0) });
+  } catch (err) {
+    if (err instanceof SyntaxError) {
+      return res.status(422).json({ error: "A IA retornou um formato inválido. Tente novamente com uma foto mais clara." });
+    }
+    console.error("[importar-imagem] erro:", err.message);
     res.status(500).json({ error: err.message });
   }
 });

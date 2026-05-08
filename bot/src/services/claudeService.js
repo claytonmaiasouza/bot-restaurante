@@ -104,6 +104,7 @@ function montarSystemPrompt(restaurante, cardapio, fidelidade = null) {
     : "\n- Entrega grátis";
 
   let fotosInfo = "";
+  let oferecerFotosFluxo = "";
   if (restaurante.cardapioPdfUrl) {
     let temFotos = false;
     try {
@@ -112,9 +113,11 @@ function montarSystemPrompt(restaurante, cardapio, fidelidade = null) {
     } catch {
       if (/\.(jpg|jpeg|png|webp)$/i.test(restaurante.cardapioPdfUrl)) temFotos = true;
     }
-    fotosInfo = temFotos
-      ? `\n- Temos fotos do cardápio disponíveis. Após listar os itens de uma categoria (especialmente pizzas), ofereça as fotos ao final de forma natural: "Quer ver as fotos do nosso cardápio? 📸". Quando o cliente confirmar ou pedir as fotos diretamente, defina "mostrarFotos": true no JSON.`
-      : `\n- Temos cardápio disponível em PDF. NÃO mencione nem ofereça proativamente.`;
+    if (temFotos) {
+      oferecerFotosFluxo = ` Ao terminar de listar os itens, **OBRIGATÓRIO**: finalize SEMPRE com a linha "\\n\\n📸 Quer ver as fotos do nosso cardápio digital?" — sem exceção, independentemente da categoria. Quando o cliente confirmar (sim, quero, manda, pode mandar, yes, claro…), defina "mostrarFotos": true no JSON daquela resposta.`;
+    } else {
+      fotosInfo = `\n- Temos cardápio disponível em PDF. NÃO mencione nem ofereça proativamente.`;
+    }
   }
 
   return `Você é o atendente virtual do restaurante *${restaurante.nome}* no WhatsApp.
@@ -137,7 +140,7 @@ Seu trabalho é receber pedidos de forma simpática, informal e eficiente, como 
 
 ## Fluxo de atendimento
 1. **INICIO**: Cumprimente o cliente pelo nome (se souber) e apresente o restaurante. Mostre as categorias disponíveis e pergunte o que ele deseja.
-2. **VENDO_CARDAPIO**: Apresente os itens da categoria solicitada com preços. Permita que o cliente adicione itens.
+2. **VENDO_CARDAPIO**: Apresente os itens da categoria solicitada com preços. Permita que o cliente adicione itens.${oferecerFotosFluxo}
 3. **ADICIONANDO_ITEM**: Se o produto tiver tamanhos, pergunte qual tamanho o cliente deseja. Se o tamanho tiver preço "com borda", pergunte também se deseja borda recheada (e informe o valor adicional). Use o preço correto conforme tamanho e borda escolhidos. Confirme o item no carrinho com o nome incluindo tamanho e borda (ex: "Pizza Americana - Mediana com borda"). Em seguida, **se o cardápio tiver bebidas/refrigerantes e o carrinho ainda não tiver nenhuma bebida**, faça uma sugestão natural e breve de refrigerante com base no pedido:
    - Pedido individual pequeno (1 hambúrguer ou pizza pequena/broto): sugira um refrigerante de 500 mL do cardápio.
    - Pedido maior (pizza média, grande ou família; 2+ hambúrgueres; ou qualquer combinação com mais de 1 item principal): sugira um refrigerante de 2 litros do cardápio.

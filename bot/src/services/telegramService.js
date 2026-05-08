@@ -18,6 +18,18 @@ async function enviarMensagemTelegram(chatId, texto) {
   }
 }
 
+async function enviarFotoTelegram(chatId, photoUrl, caption = "") {
+  try {
+    const payload = { chat_id: chatId, photo: photoUrl, parse_mode: "Markdown" };
+    if (caption) payload.caption = caption;
+    const { data } = await axios.post(`${baseUrl()}/sendPhoto`, payload);
+    return data;
+  } catch (err) {
+    console.error("[telegram] erro ao enviar foto:", err.response?.data || err.message);
+    throw err;
+  }
+}
+
 async function configurarWebhook(urlWebhook) {
   const { data } = await axios.post(`${baseUrl()}/setWebhook`, {
     url: urlWebhook,
@@ -28,4 +40,4 @@ async function configurarWebhook(urlWebhook) {
   return data;
 }
 
-module.exports = { enviarMensagemTelegram, configurarWebhook };
+module.exports = { enviarMensagemTelegram, enviarFotoTelegram, configurarWebhook };

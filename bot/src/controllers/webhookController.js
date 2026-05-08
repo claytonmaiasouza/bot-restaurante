@@ -273,7 +273,7 @@ async function receberMensagem(req, res) {
     // ── f) Pedido de cardápio em arquivo (PDF ou fotos) ──────────────────────
     if (
       restaurante.cardapioPdfUrl &&
-      /cardápio|cardapio|menu|pdf|foto do card/i.test(textoCliente) &&
+      /cardápio|cardapio|menu|pdf|fotos?|foto do card/i.test(textoCliente) &&
       /manda|envia|envi|quero|pode|me pass|ver|mostrar|tem.*pdf|tem.*foto/i.test(textoCliente)
     ) {
       await salvarMensagem(sessao.id, "cliente", textoCliente);
@@ -301,7 +301,7 @@ async function receberMensagem(req, res) {
       return;
     }
 
-    const { resposta, novoEstado, carrinhoAtualizado, pedidoPronto, tipoEntrega } =
+    const { resposta, novoEstado, carrinhoAtualizado, pedidoPronto, tipoEntrega, mostrarFotos } =
       await processarMensagem(sessao, textoCliente, restaurante, cardapio, fidelidade);
 
     // ── e) Persistir ──────────────────────────────────────────────────────────
@@ -327,6 +327,23 @@ async function receberMensagem(req, res) {
 
     // ── f) Responder ao cliente ───────────────────────────────────────────────
     await enviarMensagem(clienteNumero, resposta, instanceName);
+
+    // ── g) Enviar fotos do cardápio quando Claude sinalizar ───────────────────
+    if (mostrarFotos && restaurante.cardapioPdfUrl) {
+      let fotos = null;
+      try {
+        const parsed = JSON.parse(restaurante.cardapioPdfUrl);
+        if (Array.isArray(parsed) && parsed.length > 0) fotos = parsed;
+      } catch { /* single URL */ }
+
+      if (fotos) {
+        for (const url of fotos) {
+          await enviarImagem(clienteNumero, url, "", instanceName);
+        }
+      } else if (/\.(jpg|jpeg|png|webp)$/i.test(restaurante.cardapioPdfUrl)) {
+        await enviarImagem(clienteNumero, restaurante.cardapioPdfUrl, "", instanceName);
+      }
+    }
 
     // ── g) Pedido pronto → perguntar pagamento antes de finalizar ────────────
     if (pedidoPronto && novoEstado === "FINALIZADO") {

@@ -103,9 +103,19 @@ function montarSystemPrompt(restaurante, cardapio, fidelidade = null) {
     ? `\n- Taxa de entrega fixa: ${formatarPreco(restaurante.taxaEntrega)}`
     : "\n- Entrega grátis";
 
-  const pdfInfo = restaurante.cardapioPdfUrl
-    ? `\n- Temos cardápio disponível em arquivo. NÃO mencione nem ofereça esse arquivo proativamente. Apenas apresente o cardápio digitalmente quando solicitado.`
-    : "";
+  let fotosInfo = "";
+  if (restaurante.cardapioPdfUrl) {
+    let temFotos = false;
+    try {
+      const parsed = JSON.parse(restaurante.cardapioPdfUrl);
+      if (Array.isArray(parsed) && parsed.length > 0) temFotos = true;
+    } catch {
+      if (/\.(jpg|jpeg|png|webp)$/i.test(restaurante.cardapioPdfUrl)) temFotos = true;
+    }
+    fotosInfo = temFotos
+      ? `\n- Temos fotos do cardápio disponíveis. Após listar os itens de uma categoria (especialmente pizzas), ofereça as fotos ao final de forma natural: "Quer ver as fotos do nosso cardápio? 📸". Quando o cliente confirmar ou pedir as fotos diretamente, defina "mostrarFotos": true no JSON.`
+      : `\n- Temos cardápio disponível em PDF. NÃO mencione nem ofereça proativamente.`;
+  }
 
   return `Você é o atendente virtual do restaurante *${restaurante.nome}* no WhatsApp.
 Seu trabalho é receber pedidos de forma simpática, informal e eficiente, como um atendente humano real.
@@ -120,7 +130,7 @@ Seu trabalho é receber pedidos de forma simpática, informal e eficiente, como 
 - Use emojis com moderação para deixar a conversa mais leve
 - NUNCA invente itens ou preços que não estão no cardápio
 - Se o cliente pedir algo fora do cardápio, informe gentilmente que não temos esse item
-- Não discuta outros assuntos além do pedido${taxaEntregaInfo}${pdfInfo}
+- Não discuta outros assuntos além do pedido${taxaEntregaInfo}${fotosInfo}
 - **Tolerância a erros de digitação:** Interprete palavras mal digitadas pelo contexto. Exemplos de variações que devem ser reconhecidas como "pizza": pitisa, pitsa, pissa, pitça, piza, piça, pizzza, pitzza (português) e pissa, pitsa, pisa, pitça (espanhol). Aplique o mesmo critério para outros itens do cardápio — se a palavra for parecida com um item existente, assuma que é aquele item e confirme naturalmente.
 - Ao apresentar produtos com tamanhos, liste CADA pizza em uma linha separada no formato: *Nome* — ingredientes. NUNCA mostre faixa de preço (ex: "G$ 40.000 a G$ 120.000") ao lado de cada pizza. Mostre a tabela de tamanhos e preços UMA ÚNICA VEZ ao final da lista.
 - **Múltiplos sabores:** Uma pizza pode ser feita com até 3 sabores diferentes. Ao apresentar o cardápio de pizzas, informe isso de forma natural (ex: "Você pode combinar até 3 sabores em uma mesma pizza!"). Quando o cliente quiser mais de um sabor, registre no carrinho como "Pizza [Sabor1]/[Sabor2]/[Sabor3] - [Tamanho]" usando o preço do tamanho escolhido (o preço não muda por ter mais sabores). Se pedir apenas um sabor, registre normalmente.
@@ -151,7 +161,8 @@ Ao final de CADA resposta, inclua obrigatoriamente um bloco JSON no seguinte for
   "estado": "ESTADO_ATUAL",
   "carrinho": [{"nome": "Item", "preco": 0.00, "quantidade": 1}],
   "pedidoPronto": false,
-  "tipoEntrega": "delivery"
+  "tipoEntrega": "delivery",
+  "mostrarFotos": false
 }
 |||FIM|||
 
@@ -159,6 +170,7 @@ Ao final de CADA resposta, inclua obrigatoriamente um bloco JSON no seguinte for
 - "carrinho" reflete o estado atual do carrinho após a interação
 - "tipoEntrega" deve ser "delivery" ou "retirada"
 - "pedidoPronto" deve ser true quando: (a) cliente de entrega fornecer o endereço/localização, OU (b) cliente escolher retirada e confirmar o pedido
+- "mostrarFotos": true quando o cliente confirmar que quer ver as fotos do cardápio ou pedir as fotos diretamente
 - IMPORTANTE: o campo "preco" no carrinho deve ser SEMPRE o valor numérico inteiro completo, SEM pontos ou vírgulas. Os preços no cardápio já estão no formato inteiro sem separadores (ex: "G$ 90000" significa noventa mil — use 90000, NUNCA 90; "G$ 10000" = dez mil = use 10000)`;
 }
 
@@ -166,11 +178,11 @@ Ao final de CADA resposta, inclua obrigatoriamente um bloco JSON no seguinte for
 function extrairDadosEstruturados(texto) {
   const regex = /\|\|\|JSON\|\|\|([\s\S]*?)\|\|\|FIM\|\|\|/;
   const match = texto.match(regex);
-  if (!match) return { estado: null, carrinho: [], pedidoPronto: false };
+  if (!match) return { estado: null, carrinho: [], pedidoPronto: false, mostrarFotos: false };
   try {
     return JSON.parse(match[1].trim());
   } catch {
-    return { estado: null, carrinho: [], pedidoPronto: false };
+    return { estado: null, carrinho: [], pedidoPronto: false, mostrarFotos: false };
   }
 }
 
@@ -225,6 +237,7 @@ async function processarMensagem(sessao, mensagemCliente, restaurante, cardapio,
     carrinhoAtualizado: dados.carrinho || carrinhoAtual,
     pedidoPronto: dados.pedidoPronto === true,
     tipoEntrega: dados.tipoEntrega || "delivery",
+    mostrarFotos: dados.mostrarFotos === true,
   };
 }
 

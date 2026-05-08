@@ -1,6 +1,6 @@
 const { processarMensagem } = require("../services/claudeService");
 const { criarOuBuscarSessao, atualizarSessao, salvarMensagem } = require("../services/sessaoService");
-const { enviarMensagemTelegram } = require("../services/telegramService");
+const { enviarMensagemTelegram, enviarFotoTelegram } = require("../services/telegramService");
 const { finalizarPedido } = require("../services/pedidoService");
 const { buscarContextoFidelidade } = require("../services/cardapioService");
 const { resolverRestaurante } = require("../services/tenantService");
@@ -171,8 +171,36 @@ async function receberUpdateTelegram(req, res) {
 
     if (!textoCliente) return;
 
+    // ── Pedido direto de fotos do cardápio ────────────────────────────────────
+    if (
+      restaurante.cardapioPdfUrl &&
+      /cardápio|cardapio|menu|fotos?/i.test(textoCliente) &&
+      /manda|envia|quero|pode|me pass|ver|mostrar/i.test(textoCliente)
+    ) {
+      await salvarMensagem(sessao.id, "cliente", textoCliente);
+      io?.to("admin").emit("conversa:mensagem", {
+        sessaoId: sessao.id,
+        mensagem: { role: "cliente", conteudo: textoCliente, createdAt: new Date() },
+      });
+
+      let fotos = null;
+      try {
+        const parsed = JSON.parse(restaurante.cardapioPdfUrl);
+        if (Array.isArray(parsed) && parsed.length > 0) fotos = parsed;
+      } catch { /* single URL */ }
+
+      if (fotos) {
+        for (const url of fotos) {
+          await enviarFotoTelegram(chatId, url);
+        }
+      } else if (/\.(jpg|jpeg|png|webp)$/i.test(restaurante.cardapioPdfUrl)) {
+        await enviarFotoTelegram(chatId, restaurante.cardapioPdfUrl);
+      }
+      return;
+    }
+
     // ── Claude AI ─────────────────────────────────────────────────────────────
-    const { resposta, novoEstado, carrinhoAtualizado, pedidoPronto, tipoEntrega } =
+    const { resposta, novoEstado, carrinhoAtualizado, pedidoPronto, tipoEntrega, mostrarFotos } =
       await processarMensagem(sessao, textoCliente, restaurante, cardapio, fidelidade);
 
     await Promise.all([
@@ -189,6 +217,23 @@ async function receberUpdateTelegram(req, res) {
     io?.to("admin").emit("conversa:mensagem", { sessaoId: sessao.id, mensagem: { role: "bot", conteudo: resposta, createdAt: agora } });
 
     await enviarMensagemTelegram(chatId, resposta);
+
+    // ── Enviar fotos quando Claude sinalizar ──────────────────────────────────
+    if (mostrarFotos && restaurante.cardapioPdfUrl) {
+      let fotos = null;
+      try {
+        const parsed = JSON.parse(restaurante.cardapioPdfUrl);
+        if (Array.isArray(parsed) && parsed.length > 0) fotos = parsed;
+      } catch { /* single URL */ }
+
+      if (fotos) {
+        for (const url of fotos) {
+          await enviarFotoTelegram(chatId, url);
+        }
+      } else if (/\.(jpg|jpeg|png|webp)$/i.test(restaurante.cardapioPdfUrl)) {
+        await enviarFotoTelegram(chatId, restaurante.cardapioPdfUrl);
+      }
+    }
 
     if (pedidoPronto && novoEstado === "FINALIZADO") {
       const localizacao = tipoEntrega === "retirada" ? "Retirada no balcão" : textoCliente;

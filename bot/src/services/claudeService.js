@@ -114,7 +114,7 @@ function montarSystemPrompt(restaurante, cardapio, fidelidade = null) {
       if (/\.(jpg|jpeg|png|webp)$/i.test(restaurante.cardapioPdfUrl)) temFotos = true;
     }
     if (temFotos) {
-      oferecerFotosFluxo = ` Ao terminar de listar os itens, **OBRIGATÓRIO**: finalize SEMPRE com a linha "\\n\\n📸 Quer ver as fotos do nosso cardápio digital?" — sem exceção, independentemente da categoria. Quando o cliente confirmar (sim, quero, manda, pode mandar, yes, claro…), defina "mostrarFotos": true no JSON daquela resposta.`;
+      oferecerFotosFluxo = ` Ao terminar de listar os sabores de pizzas salgadas, **OBRIGATÓRIO**: finalize SEMPRE com a pergunta "\\n\\n📸 Deseja ver o cardápio completo?" — sem exceção. Quando o cliente confirmar (sim, quero, pode mandar, yes, claro, manda…), defina "mostrarFotos": true no JSON daquela resposta.`;
     } else {
       fotosInfo = `\n- Temos cardápio disponível em PDF. NÃO mencione nem ofereça proativamente.`;
     }

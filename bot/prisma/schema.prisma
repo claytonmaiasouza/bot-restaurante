@@ -24,11 +24,17 @@ model Restaurante {
   horarioAtendimento  String?     // JSON: { ativo, descricao, dias: { "0": { aberto, abertura, fechamento }, ... } }
   cardapioPdfUrl      String?
   dadosTransferencia  String?     // Dados para PIX/transferência exibidos ao cliente
+  instrucoes          String?     // Instruções livres para o agente IA (recheios de borda, regras de tamanho, etc.)
   sessoes              Sessao[]
   pedidos              Pedido[]
+  turnosCaixa          TurnoCaixa[]
   categorias           Categoria[]
   programasFidelidade  ProgramaFidelidade[]
   motoboys             Motoboy[]
+  clientesFidelidade   ClienteFidelidade[]
+  campanhas            CampanhaMarketing[]
+  itensEstoque         ItemEstoque[]
+  custosMensais        CustoMensal[]
   createdAt            DateTime    @default(now())
 }
 
@@ -106,18 +112,25 @@ model Pedido {
   pago          Boolean     @default(false)
   motoboyId     String?     // ID do motoboy despachado (sem FK para preservar histórico)
   motoboyNome   String?     // nome denormalizado para exibição
+  mesa          Int?        // número da mesa (null = pedido via WhatsApp)
+  origem        String      @default("WHATSAPP") // WHATSAPP | MESA
+  numeroDia     Int?        // sequencial diário reiniciado a cada dia por restaurante
   createdAt     DateTime    @default(now())
 }
 
 model ClienteFidelidade {
-  id           String    @id @default(uuid())
-  numero       String    @unique // WhatsApp do cliente
-  nome         String?
-  totalPedidos Int       @default(0)
-  totalGasto   Float     @default(0)
-  ultimoPedido DateTime?
-  restaurantes Json      @default("[]") // histórico por restaurante
-  createdAt    DateTime  @default(now())
+  id            String      @id @default(uuid())
+  numero        String
+  restauranteId String
+  restaurante   Restaurante @relation(fields: [restauranteId], references: [id], onDelete: Cascade)
+  nome          String?
+  totalPedidos  Int         @default(0)
+  totalGasto    Float       @default(0)
+  resgates      Int         @default(0)
+  ultimoPedido  DateTime?
+  createdAt     DateTime    @default(now())
+
+  @@unique([numero, restauranteId])
 }
 
 model ProgramaFidelidade {
@@ -151,4 +164,83 @@ model Motoboy {
   restaurante   Restaurante @relation(fields: [restauranteId], references: [id], onDelete: Cascade)
   ativo         Boolean     @default(true)
   createdAt     DateTime    @default(now())
+}
+
+model CampanhaMarketing {
+  id            String      @id @default(uuid())
+  restauranteId String
+  restaurante   Restaurante @relation(fields: [restauranteId], references: [id], onDelete: Cascade)
+  titulo        String
+  mensagem      String
+  segmento      String
+  totalEnviados Int         @default(0)
+  totalErros    Int         @default(0)
+  criadoEm      DateTime    @default(now())
+  criadoPor     String?
+}
+
+model ItemEstoque {
+  id               String                @id @default(uuid())
+  restauranteId    String
+  restaurante      Restaurante           @relation(fields: [restauranteId], references: [id], onDelete: Cascade)
+  nome             String
+  categoria        String                // INGREDIENTE | BEBIDA | EMBALAGEM | LIMPEZA | OUTROS
+  unidade          String                // kg, g, L, ml, un, cx, sc
+  quantidadeAtual  Float                 @default(0)
+  quantidadeMinima Float                 @default(0)
+  precoUnitario    Float                 @default(0)
+  fornecedor       String?
+  ativo            Boolean               @default(true)
+  movimentacoes    MovimentacaoEstoque[]
+  createdAt        DateTime              @default(now())
+  updatedAt        DateTime              @updatedAt
+}
+
+model MovimentacaoEstoque {
+  id            String      @id @default(uuid())
+  restauranteId String
+  itemId        String
+  item          ItemEstoque @relation(fields: [itemId], references: [id], onDelete: Cascade)
+  tipo          String      // ENTRADA | SAIDA | AJUSTE
+  quantidade    Float
+  precoUnitario Float?
+  motivo        String      // COMPRA | PRODUCAO | DESPERDICIO | INVENTARIO | OUTRO
+  observacao    String?
+  criadoPor     String      @default("admin")
+  createdAt     DateTime    @default(now())
+}
+
+model CustoMensal {
+  id            String      @id @default(uuid())
+  restauranteId String
+  restaurante   Restaurante @relation(fields: [restauranteId], references: [id], onDelete: Cascade)
+  nome          String
+  categoria     String      // FIXO | VARIAVEL
+  subcategoria  String      // ALUGUEL | FUNCIONARIO | ENERGIA | AGUA | INTERNET | FORNECEDOR | EMBALAGEM | MANUTENCAO | OUTRO
+  valor         Float
+  mes           String      // YYYY-MM
+  observacao    String?
+  createdAt     DateTime    @default(now())
+}
+
+model TurnoCaixa {
+  id              String      @id @default(uuid())
+  restauranteId   String
+  restaurante     Restaurante @relation(fields: [restauranteId], references: [id], onDelete: Cascade)
+  status          String      @default("ABERTO") // ABERTO | FECHADO
+  valorAbertura   Float       @default(0)
+  valorFechamento Float?
+  sangrias        Json        @default("[]") // [{valor, motivo, registradoPor, criadoEm}]
+  totalVendas     Float       @default(0)
+  totalDinheiro   Float       @default(0)
+  totalCartao     Float       @default(0)
+  totalPix        Float       @default(0)
+  totalOutros     Float       @default(0)
+  totalSangrias   Float       @default(0)
+  observacao      String?
+  abertoPor       String?
+  fechadoPor      String?
+  abertoEm        DateTime    @default(now())
+  fechadoEm       DateTime?
+  createdAt       DateTime    @default(now())
 }

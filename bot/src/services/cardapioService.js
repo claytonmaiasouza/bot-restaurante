@@ -34,7 +34,7 @@ async function buscarCardapioDB(restauranteId) {
         })) : null,
       })),
     }))
-    .filter((c) => c.produtos.length > 0);
+;
 }
 
 // ── Verifica se o restaurante tem cardápio no banco ───────────────────────────
@@ -165,22 +165,16 @@ async function buscarContextoFidelidade(restauranteId, clienteNumero) {
       where: { restauranteId, ativo: true },
       orderBy: { createdAt: "asc" },
     }),
-    prisma.clienteFidelidade.findUnique({ where: { numero: clienteNumero } }),
+    prisma.clienteFidelidade.findUnique({
+      where: { numero_restauranteId: { numero: clienteNumero, restauranteId } },
+    }),
   ]);
 
-  let progressoCliente = { totalPedidos: 0, totalGasto: 0, resgates: {} };
-  if (cliente) {
-    const hist = Array.isArray(cliente.restaurantes) ? cliente.restaurantes : [];
-    const r = hist.find((h) => h.restauranteId === restauranteId);
-    if (r) {
-      progressoCliente = {
-        totalPedidos: r.pedidos || 0,
-        totalGasto: r.gasto || 0,
-        // mapa programaId→resgatesFeitos é construído no claudeService com os dados do hist
-        _hist: r, // passa o objeto completo para o claudeService calcular corretamente
-      };
-    }
-  }
+  const progressoCliente = {
+    totalPedidos: cliente?.totalPedidos || 0,
+    totalGasto: cliente?.totalGasto || 0,
+    _hist: cliente || null,
+  };
 
   return { programas, progressoCliente };
 }

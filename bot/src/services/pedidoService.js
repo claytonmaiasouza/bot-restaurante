@@ -27,6 +27,25 @@ function formatarHorario(date) {
   });
 }
 
+// ── Numeração diária ──────────────────────────────────────────────────────────
+
+async function proximoNumeroDia(restauranteId) {
+  const agora = new Date();
+  // Dia começa às 05:00 UTC (01:00 horário local -4h) para cobrir serviço noturno
+  const inicioDia = new Date(Date.UTC(agora.getUTCFullYear(), agora.getUTCMonth(), agora.getUTCDate(), 5, 0, 0, 0));
+  if (agora < inicioDia) inicioDia.setUTCDate(inicioDia.getUTCDate() - 1);
+  const count = await prisma.pedido.count({ where: { restauranteId, createdAt: { gte: inicioDia } } });
+  return count + 1;
+}
+
+function formatNumPedido(pedido) {
+  if (!pedido.numeroDia) return idCurto(pedido.id);
+  const isMesa = pedido.origem === "MESA";
+  const isRetirada = !isMesa && (!pedido.localizacao || pedido.localizacao === "Retirada no balcão");
+  const prefixo = isMesa ? "M" : isRetirada ? "B" : "D";
+  return `${prefixo}${pedido.numeroDia}`;
+}
+
 // ── 1. finalizarPedido ────────────────────────────────────────────────────────
 
 /**
@@ -60,6 +79,7 @@ async function finalizarPedido(sessaoId, localizacao, tipoEntrega = "delivery", 
   const total = subtotal + taxaEntrega;
 
   // c) Criar pedido + marcar sessão como FINALIZADO (transação atômica)
+  const numeroDia = await proximoNumeroDia(sessao.restauranteId);
   const [pedido] = await prisma.$transaction([
     prisma.pedido.create({
       data: {
@@ -72,6 +92,7 @@ async function finalizarPedido(sessaoId, localizacao, tipoEntrega = "delivery", 
         localizacao,
         metodoPagamento: metodoPagamento || null,
         status: "NOVO",
+        numeroDia,
       },
     }),
     prisma.sessao.update({
@@ -95,9 +116,10 @@ async function finalizarPedido(sessaoId, localizacao, tipoEntrega = "delivery", 
 
   // f) Confirmar ao cliente
   const instanceName = sessao.restaurante.slugWhatsapp;
+  const numFormatado = formatNumPedido({ ...pedido, localizacao, origem: "WHATSAPP" });
   await enviarMensagem(
     sessao.clienteNumero,
-    `✅ *Pedido #${idCurto(pedido.id)} confirmado!*\n\nRecebemos seu pedido e já notificamos o restaurante. Em breve entraremos em contato sobre o tempo de entrega. 🍽️${mensagemExtra}\n\n💰 *Total: ${fmtValor(total, sessao.restaurante.moeda || "R$")}*\n\nObrigado pela preferência! 😊`,
+    `✅ *Pedido #${numFormatado} confirmado!*\n\nRecebemos seu pedido e já notificamos o restaurante. Em breve entraremos em contato sobre o tempo de entrega. 🍽️${mensagemExtra}\n\n💰 *Total: ${fmtValor(total, sessao.restaurante.moeda || "R$")}*\n\nObrigado pela preferência! 😊`,
     instanceName
   );
 
@@ -133,7 +155,7 @@ async function enviarPedidoParaDono(pedido, restaurante, tipoEntrega = "delivery
   const pagamentoLinha = pedido.metodoPagamento ? `\n💳 *Pagamento: ${pedido.metodoPagamento}*` : "";
 
   const mensagem =
-    `🛵 *NOVO PEDIDO #${idCurto(pedido.id)}*\n\n` +
+    `🛵 *NOVO PEDIDO #${formatNumPedido(pedido)}*\n\n` +
     `👤 Cliente: ${pedido.clienteNome || "Não identificado"} (${pedido.clienteNumero})\n\n` +
     `🛒 *Itens:*\n${itensFormatados}${taxaLinha}\n\n` +
     `💰 *Total: ${fmt(pedido.total)}*${pagamentoLinha}\n\n` +
@@ -164,7 +186,7 @@ async function confirmarPedido(pedidoId) {
 
   await enviarMensagem(
     pedido.clienteNumero,
-    `🎉 Boa notícia! O restaurante *${pedido.restaurante.nome}* confirmou seu pedido #${idCurto(pedido.id)} e já está preparando tudo para você. 🍽️`,
+    `🎉 Boa notícia! O restaurante *${pedido.restaurante.nome}* confirmou seu pedido #${formatNumPedido(pedido)} e já está preparando tudo para você. 🍽️`,
     pedido.restaurante.slugWhatsapp
   );
 
@@ -175,51 +197,23 @@ async function confirmarPedido(pedidoId) {
 
 async function atualizarFidelidade(numero, nome, valorPedido, restauranteId) {
   const agora = new Date();
-
-  const existente = await prisma.clienteFidelidade.findUnique({
-    where: { numero },
-  });
-
-  if (!existente) {
-    await prisma.clienteFidelidade.create({
-      data: {
-        numero,
-        nome: nome || null,
-        totalPedidos: 1,
-        totalGasto: valorPedido,
-        ultimoPedido: agora,
-        restaurantes: [{ restauranteId, pedidos: 1, gasto: valorPedido }],
-      },
-    });
-    return;
-  }
-
-  const historico = Array.isArray(existente.restaurantes)
-    ? existente.restaurantes
-    : [];
-  const idx = historico.findIndex((r) => r.restauranteId === restauranteId);
-
-  if (idx >= 0) {
-    historico[idx].pedidos += 1;
-    historico[idx].gasto = parseFloat(
-      (historico[idx].gasto + valorPedido).toFixed(2)
-    );
-  } else {
-    historico.push({ restauranteId, pedidos: 1, gasto: valorPedido });
-  }
-
-  await prisma.clienteFidelidade.update({
-    where: { numero },
-    data: {
-      nome: nome || existente.nome,
-      totalPedidos: existente.totalPedidos + 1,
-      totalGasto: parseFloat(
-        (existente.totalGasto + valorPedido).toFixed(2)
-      ),
+  await prisma.clienteFidelidade.upsert({
+    where: { numero_restauranteId: { numero, restauranteId } },
+    create: {
+      numero,
+      restauranteId,
+      nome: nome || null,
+      totalPedidos: 1,
+      totalGasto: valorPedido,
       ultimoPedido: agora,
-      restaurantes: historico,
+    },
+    update: {
+      ...(nome ? { nome } : {}),
+      totalPedidos: { increment: 1 },
+      totalGasto: { increment: valorPedido },
+      ultimoPedido: agora,
     },
   });
 }
 
-module.exports = { finalizarPedido, enviarPedidoParaDono, confirmarPedido };
+module.exports = { finalizarPedido, enviarPedidoParaDono, confirmarPedido, proximoNumeroDia, formatNumPedido };

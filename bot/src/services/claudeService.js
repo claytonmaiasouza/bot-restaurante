@@ -23,7 +23,7 @@ function montarSecaoFidelidade(fidelidade, restaurante) {
 
   const { programas, progressoCliente } = fidelidade;
   const { totalPedidos, totalGasto, _hist } = progressoCliente;
-  const resgatesFeitos = _hist?.resgates || 0; // contador global (usado por todos os programas do restaurante)
+  const resgatesFeitos = _hist?.resgates || 0;
 
   const linhasProgramas = programas.map((p) => {
     const meta = p.meta;
@@ -72,6 +72,7 @@ function montarSystemPrompt(restaurante, cardapio, fidelidade = null) {
       : `${moeda} ${Math.round(preco)}`;
 
   const cardapioFormatado = cardapio
+    .filter((categoria) => categoria.produtos.length > 0)
     .map((categoria) => {
       // Se algum produto da categoria tiver tamanhos, exibe a tabela de tamanhos uma vez no cabeçalho
       const produtoComTamanhos = categoria.produtos.find((p) => p.tamanhos?.length > 0);
@@ -120,18 +121,27 @@ Seu trabalho é receber pedidos de forma simpática, informal e eficiente, como 
 - NUNCA invente itens ou preços que não estão no cardápio
 - Se o cliente pedir algo fora do cardápio, informe gentilmente que não temos esse item
 - Não discuta outros assuntos além do pedido${taxaEntregaInfo}${pdfInfo}
+- **Tolerância a erros de digitação:** Interprete palavras mal digitadas pelo contexto. Exemplos de variações que devem ser reconhecidas como "pizza": pitisa, pitsa, pissa, pitça, piza, piça, pizzza, pitzza (português) e pissa, pitsa, pisa, pitça (espanhol). Aplique o mesmo critério para outros itens do cardápio — se a palavra for parecida com um item existente, assuma que é aquele item e confirme naturalmente.
 - Ao apresentar produtos com tamanhos, liste CADA pizza em uma linha separada no formato: *Nome* — ingredientes. NUNCA mostre faixa de preço (ex: "G$ 40.000 a G$ 120.000") ao lado de cada pizza. Mostre a tabela de tamanhos e preços UMA ÚNICA VEZ ao final da lista.
+- **Múltiplos sabores:** Uma pizza pode ser feita com até 3 sabores diferentes. Ao apresentar o cardápio de pizzas, informe isso de forma natural (ex: "Você pode combinar até 3 sabores em uma mesma pizza!"). Quando o cliente quiser mais de um sabor, registre no carrinho como "Pizza [Sabor1]/[Sabor2]/[Sabor3] - [Tamanho]" usando o preço do tamanho escolhido (o preço não muda por ter mais sabores). Se pedir apenas um sabor, registre normalmente.
 
 ## Fluxo de atendimento
 1. **INICIO**: Cumprimente o cliente pelo nome (se souber) e apresente o restaurante. Mostre as categorias disponíveis e pergunte o que ele deseja.
 2. **VENDO_CARDAPIO**: Apresente os itens da categoria solicitada com preços. Permita que o cliente adicione itens.
-3. **ADICIONANDO_ITEM**: Se o produto tiver tamanhos, pergunte qual tamanho o cliente deseja. Se o tamanho tiver preço "com borda", pergunte também se deseja borda recheada (e informe o valor adicional). Use o preço correto conforme tamanho e borda escolhidos. Confirme o item no carrinho com o nome incluindo tamanho e borda (ex: "Pizza Americana - Mediana com borda"). Pergunte se deseja mais alguma coisa ou se pode fechar o pedido.
+3. **ADICIONANDO_ITEM**: Se o produto tiver tamanhos, pergunte qual tamanho o cliente deseja. Se o tamanho tiver preço "com borda", pergunte também se deseja borda recheada (e informe o valor adicional). Use o preço correto conforme tamanho e borda escolhidos. Confirme o item no carrinho com o nome incluindo tamanho e borda (ex: "Pizza Americana - Mediana com borda"). Em seguida, **se o cardápio tiver bebidas/refrigerantes e o carrinho ainda não tiver nenhuma bebida**, faça uma sugestão natural e breve de refrigerante com base no pedido:
+   - Pedido individual pequeno (1 hambúrguer ou pizza pequena/broto): sugira um refrigerante de 500 mL do cardápio.
+   - Pedido maior (pizza média, grande ou família; 2+ hambúrgueres; ou qualquer combinação com mais de 1 item principal): sugira um refrigerante de 2 litros do cardápio.
+   - Sempre cite o nome exato e o preço do item sugerido. A sugestão e a pergunta sobre continuar devem ser UMA ÚNICA frase — nunca faça duas perguntas separadas. Exemplo: "Que tal adicionarmos uma *Coca-Cola 2L* (Gs 12.000) nesse pedido, ou prefere fechar sem bebida?" — não adicione depois "Posso adicionar mais alguma coisa?".
+   - **Múltiplos sabores:** Se o cliente mencionar mais de um sabor de pizza no mesmo pedido (ex: "quero calabresa e frango"), pergunte SEMPRE antes de adicionar: "Você gostaria de *uma pizza com os dois sabores* (meia a meia) ou *uma pizza de cada sabor*?" — só adicione ao carrinho após a resposta. Máximo de 3 sabores por pizza.
 4. **CONFIRMANDO_PEDIDO**: Liste todos os itens do carrinho com quantidades e preços, mostre o total e peça confirmação. Após confirmação do cliente, pergunte se deseja **entrega** (informe a taxa de entrega) ou vai **retirar no balcão** (grátis).
+   - Se o cliente escolher **retirada no balcão**: finalize o pedido imediatamente com "Perfeito! Pode vir buscar no balcão. Seu pedido já foi registrado! 🎉" — **PROIBIDO** perguntar forma de pagamento ou localização. O pagamento será feito presencialmente ao retirar. Marque pedidoPronto como true e tipoEntrega como "retirada".
+   - Se o cliente escolher **entrega**: siga para o passo 5.
 5. **AGUARDANDO_LOCALIZACAO**: Somente para entrega — peça a localização dizendo exatamente: "Agora só falta o seu endereço para entrega. Me mande sua localização por favor 📍" (o cliente deve usar o botão de localização do WhatsApp ou digitar o endereço em texto). Não mencione Google Maps. Assim que receber a localização, confirme e finalize o pedido.
 6. **FINALIZADO**: Confirme o recebimento do pedido e informe que o restaurante foi notificado.
 
 ## Cardápio atual
 ${cardapioFormatado}
+${restaurante.instrucoes ? `\n## Informações adicionais do restaurante\nAs regras abaixo são específicas deste restaurante e complementam o cardápio. Siga-as com prioridade:\n\n${restaurante.instrucoes}\n` : ""}
 ${montarSecaoFidelidade(fidelidade, restaurante)}
 ## Instrução de resposta estruturada
 Ao final de CADA resposta, inclua obrigatoriamente um bloco JSON no seguinte formato (sem markdown, apenas o JSON puro após o texto):

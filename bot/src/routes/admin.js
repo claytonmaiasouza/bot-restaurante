@@ -5,7 +5,7 @@ const pdfParse = require("pdf-parse");
 const axios = require("axios");
 const fs = require("fs");
 const path = require("path");
-const { confirmarPedido } = require("../services/pedidoService");
+const { confirmarPedido, proximoNumeroDia, formatNumPedido } = require("../services/pedidoService");
 const { enviarMensagem, listarInstancias, obterQRCode, verificarConexao, criarInstancia, configurarWebhook } = require("../services/evolutionService");
 const { authMiddleware } = require("../middleware/authMiddleware");
 const {
@@ -100,7 +100,7 @@ router.get("/restaurantes", async (req, res) => {
     const where = req.user.role === "restaurante" ? { id: req.user.restauranteId } : {};
     const restaurantes = await prisma.restaurante.findMany({
       where,
-      select: { id: true, nome: true, slugWhatsapp: true, donoWhatsapp: true, moeda: true, taxaEntrega: true, ativo: true, email: true, horarioAtendimento: true, cardapioPdfUrl: true, dadosTransferencia: true },
+      select: { id: true, nome: true, slugWhatsapp: true, donoWhatsapp: true, moeda: true, taxaEntrega: true, ativo: true, email: true, horarioAtendimento: true, cardapioPdfUrl: true, dadosTransferencia: true, instrucoes: true },
       orderBy: { nome: "asc" },
     });
     res.json({ data: restaurantes });
@@ -109,11 +109,11 @@ router.get("/restaurantes", async (req, res) => {
   }
 });
 
-// ── GET /admin/pedidos?restauranteId=X&status=NOVO&pagina=1 ──────────────────
+// ── GET /admin/pedidos?restauranteId=X&status=NOVO&pagina=1&inicio=&fim= ──────
 router.get("/pedidos", async (req, res) => {
-  const { status, pagina = 1 } = req.query;
+  const { status, pagina = 1, inicio, fim, limite: limiteQuery } = req.query;
   const restauranteId = resolverRestauranteId(req);
-  const limite = 50;
+  const limite = limiteQuery ? Math.min(Number(limiteQuery), 200) : 50;
   const offset = (Number(pagina) - 1) * limite;
 
   const where = {};
@@ -122,11 +122,15 @@ router.get("/pedidos", async (req, res) => {
     if (status === "PAGO") {
       where.pago = true;
     } else if (status === "CONFIRMADO") {
-      // Aba CONFIRMADO = histórico de todos os pedidos confirmados (exceto NOVO e CANCELADO)
       where.status = { notIn: ["NOVO", "CANCELADO"] };
     } else {
       where.status = status;
     }
+  }
+  if (inicio || fim) {
+    where.createdAt = {};
+    if (inicio) where.createdAt.gte = new Date(inicio);
+    if (fim) where.createdAt.lte = new Date(fim + "T23:59:59.999Z");
   }
 
   try {
@@ -181,7 +185,7 @@ router.patch("/pedidos/:id/status", async (req, res) => {
     });
 
     // Notifica o cliente via WhatsApp
-    const mensagem = NOTIFICACOES[status]?.(idCurto(pedido.id));
+    const mensagem = NOTIFICACOES[status]?.(formatNumPedido(pedido));
     if (mensagem) {
       await enviarMensagem(pedido.clienteNumero, mensagem, pedido.restaurante.slugWhatsapp).catch(() => {});
     }
@@ -206,8 +210,9 @@ router.patch("/pedidos/:id/pago", async (req, res) => {
     const atual = await prisma.pedido.findUnique({ where: { id }, select: { status: true } });
     if (!atual) return res.status(404).json({ error: "Pedido não encontrado" });
 
-    // Muda status para PAGO exceto se já entregue ou cancelado
-    const novoStatus = ["ENTREGUE", "CANCELADO"].includes(atual.status) ? atual.status : "PAGO";
+    // Marca como pago sem regredir o status — só avança para PAGO se ainda não chegou lá
+    const statusAntesDePago = ["NOVO", "CONFIRMADO"];
+    const novoStatus = statusAntesDePago.includes(atual.status) ? "PAGO" : atual.status;
 
     const pedido = await prisma.pedido.update({
       where: { id },
@@ -216,7 +221,7 @@ router.patch("/pedidos/:id/pago", async (req, res) => {
     });
 
     if (novoStatus === "PAGO") {
-      const mensagem = NOTIFICACOES["PAGO"]?.(idCurto(pedido.id));
+      const mensagem = NOTIFICACOES["PAGO"]?.(formatNumPedido(pedido));
       if (mensagem) {
         await enviarMensagem(pedido.clienteNumero, mensagem, pedido.restaurante.slugWhatsapp).catch(() => {});
       }
@@ -315,21 +320,28 @@ router.post("/pedidos/:id/despachar", async (req, res) => {
     const pagamento = pedido.metodoPagamento ? `\n💳 *Pagamento:* ${pedido.metodoPagamento}` : "";
 
     const mensagem =
-      `🛵 *ENTREGA #${idCurto(id)}*\n\n` +
+      `🛵 *ENTREGA #${formatNumPedido(pedido)}*\n\n` +
       `👤 *Cliente:* ${pedido.clienteNome || "Não identificado"}\n` +
       `📱 *WhatsApp:* ${pedido.clienteNumero}\n\n` +
       `🛒 *Itens:*\n${itensTexto}\n\n` +
       `💰 *Total: ${fmt(pedido.total)}*${pagamento}\n\n` +
       `📍 *Endereço:*\n${pedido.localizacao || "Não informado"}`;
 
-    await enviarMensagem(motoboy.telefone, mensagem, pedido.restaurante.slugWhatsapp);
-
+    // Salva o motoboy no pedido independentemente do sucesso da mensagem WA
     await prisma.pedido.update({
       where: { id },
       data: { motoboyId: motoboy.id, motoboyNome: motoboy.nome },
     });
 
-    res.json({ ok: true, motoboy: motoboy.nome });
+    let avisoWa = null;
+    try {
+      await enviarMensagem(motoboy.telefone, mensagem, pedido.restaurante.slugWhatsapp);
+    } catch (errWa) {
+      console.error("[despachar] falha ao notificar motoboy via WA:", errWa.response?.data || errWa.message);
+      avisoWa = "Motoboy atribuído, mas a mensagem WhatsApp não foi enviada.";
+    }
+
+    res.json({ ok: true, motoboy: motoboy.nome, aviso: avisoWa });
   } catch (err) {
     res.status(500).json({ error: err.message });
   }
@@ -406,10 +418,12 @@ router.get("/stats", async (req, res) => {
 
   const inicioDia = new Date();
   inicioDia.setHours(0, 0, 0, 0);
-  const whereHoje = { ...where, createdAt: { gte: inicioDia } };
+  const fimDia = new Date();
+  fimDia.setHours(23, 59, 59, 999);
+  const whereHoje = { ...where, createdAt: { gte: inicioDia, lte: fimDia } };
   const whereAberto = { ...where, status: { notIn: ["ENTREGUE", "CANCELADO"] } };
   const wherePago = { ...where, pago: true };
-  const wherePagoHoje = { ...where, pago: true, createdAt: { gte: inicioDia } };
+  const wherePagoHoje = { ...where, pago: true, createdAt: { gte: inicioDia, lte: fimDia } };
 
   try {
     const [totalPedidos, pedidosHoje, faturamentoAgregado, faturamentoHojeAgregado, clientesUnicos, sessoesAtivas, emAberto] =
@@ -432,6 +446,104 @@ router.get("/stats", async (req, res) => {
         clientesUnicos: clientesUnicos.length,
         sessoesAtivas,
         emAberto,
+      },
+    });
+  } catch (err) {
+    res.status(500).json({ error: err.message });
+  }
+});
+
+// ── GET /admin/metricas?restauranteId=X&inicio=YYYY-MM-DD&fim=YYYY-MM-DD ──────
+router.get("/metricas", async (req, res) => {
+  const restauranteId = resolverRestauranteId(req);
+  const { inicio, fim } = req.query;
+
+  const dataFim = fim ? new Date(fim + "T23:59:59.999Z") : new Date();
+  const dataInicio = inicio
+    ? new Date(inicio + "T00:00:00.000Z")
+    : new Date(dataFim.getTime() - 29 * 24 * 60 * 60 * 1000);
+  dataInicio.setUTCHours(0, 0, 0, 0);
+
+  const where = { createdAt: { gte: dataInicio, lte: dataFim } };
+  if (restauranteId) where.restauranteId = restauranteId;
+  const whereNaoCancelado = { ...where, status: { not: "CANCELADO" } };
+
+  try {
+    const [pedidos, pedidosCancelados] = await prisma.$transaction([
+      prisma.pedido.findMany({
+        where: whereNaoCancelado,
+        select: { id: true, total: true, createdAt: true, itens: true, localizacao: true, status: true, clienteNumero: true, origem: true },
+        orderBy: { createdAt: "asc" },
+      }),
+      prisma.pedido.count({ where: { ...where, status: "CANCELADO" } }),
+    ]);
+
+    // KPIs
+    const totalPedidos = pedidos.length;
+    const totalFaturamento = pedidos.reduce((s, p) => s + (p.total || 0), 0);
+    const ticketMedio = totalPedidos ? totalFaturamento / totalPedidos : 0;
+    const clientesUnicos = new Set(pedidos.map((p) => p.clienteNumero)).size;
+
+    // Pedidos + faturamento por dia (preenche todos os dias do intervalo)
+    const porDiaMap = {};
+    pedidos.forEach((p) => {
+      const dia = p.createdAt.toISOString().slice(0, 10);
+      if (!porDiaMap[dia]) porDiaMap[dia] = { count: 0, revenue: 0 };
+      porDiaMap[dia].count++;
+      porDiaMap[dia].revenue += p.total || 0;
+    });
+    const porDia = [];
+    const cur = new Date(dataInicio);
+    while (cur <= dataFim) {
+      const d = cur.toISOString().slice(0, 10);
+      porDia.push({ data: d, pedidos: porDiaMap[d]?.count || 0, faturamento: porDiaMap[d]?.revenue || 0 });
+      cur.setUTCDate(cur.getUTCDate() + 1);
+    }
+
+    // Por hora do dia
+    const porHora = Array.from({ length: 24 }, (_, h) => ({ hora: h, count: 0 }));
+    pedidos.forEach((p) => { porHora[new Date(p.createdAt).getUTCHours()].count++; });
+
+    // Por dia da semana (0=Dom … 6=Sáb)
+    const porDiaSemana = Array.from({ length: 7 }, (_, d) => ({ dia: d, count: 0 }));
+    pedidos.forEach((p) => { porDiaSemana[new Date(p.createdAt).getUTCDay()].count++; });
+
+    // Ranking de itens
+    const itensMap = {};
+    pedidos.forEach((p) => {
+      const itens = Array.isArray(p.itens) ? p.itens : [];
+      itens.forEach((item) => {
+        const nome = item.nome || "?";
+        const qtd = item.quantidade || 1;
+        if (!itensMap[nome]) itensMap[nome] = { nome, quantidade: 0, revenue: 0 };
+        itensMap[nome].quantidade += qtd;
+        itensMap[nome].revenue += (item.preco || 0) * qtd;
+      });
+    });
+    const itensSorted = Object.values(itensMap).sort((a, b) => b.quantidade - a.quantidade);
+    const topItens = itensSorted.slice(0, 10);
+    const bottomItens = [...itensSorted].sort((a, b) => a.quantidade - b.quantidade).slice(0, 5);
+
+    // Canal de pedidos: Salão (MESA) | Delivery | Retirada
+    const salao    = pedidos.filter((p) => p.origem === "MESA").length;
+    const delivery = pedidos.filter((p) => p.origem !== "MESA" && p.localizacao !== null).length;
+    const retirada = pedidos.filter((p) => p.origem !== "MESA" && p.localizacao === null).length;
+
+    // Funil de status
+    const statusCount = {};
+    pedidos.forEach((p) => { statusCount[p.status] = (statusCount[p.status] || 0) + 1; });
+
+    res.json({
+      data: {
+        periodo: { inicio: dataInicio.toISOString().slice(0, 10), fim: dataFim.toISOString().slice(0, 10) },
+        kpis: { totalPedidos, totalFaturamento, ticketMedio, clientesUnicos, pedidosCancelados },
+        porDia,
+        porHora,
+        porDiaSemana,
+        topItens,
+        bottomItens,
+        entrega: { delivery, retirada, salao },
+        statusCount,
       },
     });
   } catch (err) {
@@ -496,6 +608,33 @@ router.patch("/conversas/:id/pausar", async (req, res) => {
   }
 });
 
+router.delete("/conversas/:id", async (req, res) => {
+  const io = req.app.get("io");
+  try {
+    const sessao = await prisma.sessao.findUnique({
+      where: { id: req.params.id },
+      include: { restaurante: true },
+    });
+    if (!sessao) return res.status(404).json({ error: "Sessão não encontrada" });
+
+    const despedida = "Olá! 👋 Esta conversa foi encerrada pelo nosso atendimento. Caso precise de mais alguma coisa, é só nos chamar. Obrigado! 😊";
+    await enviarMensagem(sessao.clienteNumero, despedida, sessao.restaurante.slugWhatsapp);
+    await prisma.mensagem.create({
+      data: { sessaoId: sessao.id, role: "bot", conteudo: `[admin] ${despedida}` },
+    });
+
+    await prisma.sessao.update({
+      where: { id: req.params.id },
+      data: { estado: "FINALIZADO" },
+    });
+
+    io?.to("admin").emit("conversa:encerrada", { sessaoId: req.params.id });
+    res.json({ ok: true });
+  } catch (err) {
+    res.status(500).json({ error: err.message });
+  }
+});
+
 router.post("/conversas/:id/mensagem", async (req, res) => {
   const { mensagem } = req.body;
   if (!mensagem?.trim()) return res.status(400).json({ error: "Mensagem vazia" });
@@ -526,27 +665,25 @@ router.post("/conversas/:id/mensagem", async (req, res) => {
 
 router.get("/clientes", async (req, res) => {
   const { busca, pagina = 1 } = req.query;
+  const restauranteId = resolverRestauranteId(req);
   const limite = 50;
   const offset = (Number(pagina) - 1) * limite;
 
-  const where = {};
-  if (busca) {
-    where.OR = [
-      { nome: { contains: busca, mode: "insensitive" } },
-      { numero: { contains: busca } },
-    ];
-  }
-
   try {
+    const where = {};
+    if (restauranteId) where.restauranteId = restauranteId;
+    if (busca) {
+      where.OR = [
+        { nome: { contains: busca, mode: "insensitive" } },
+        { numero: { contains: busca } },
+      ];
+    }
+
     const [clientes, total] = await prisma.$transaction([
-      prisma.clienteFidelidade.findMany({
-        where,
-        orderBy: { ultimoPedido: "desc" },
-        skip: offset,
-        take: limite,
-      }),
+      prisma.clienteFidelidade.findMany({ where, orderBy: { ultimoPedido: "desc" }, skip: offset, take: limite }),
       prisma.clienteFidelidade.count({ where }),
     ]);
+
     res.json({ data: clientes, meta: { total, pagina: Number(pagina), limite, paginas: Math.ceil(total / limite) } });
   } catch (err) {
     res.status(500).json({ error: err.message });
@@ -555,13 +692,29 @@ router.get("/clientes", async (req, res) => {
 
 // ── PATCH /admin/clientes/:id ─────────────────────────────────────────────────
 router.patch("/clientes/:id", async (req, res) => {
-  const { nome } = req.body;
+  const { nome, numero, totalPedidos } = req.body;
   try {
+    const data = {};
+    if (nome !== undefined) data.nome = nome || null;
+    if (numero !== undefined) data.numero = numero;
+    if (totalPedidos !== undefined) data.totalPedidos = Number(totalPedidos);
     const cliente = await prisma.clienteFidelidade.update({
       where: { id: req.params.id },
-      data: { nome: nome !== undefined ? (nome || null) : undefined },
+      data,
     });
     res.json({ data: cliente });
+  } catch (err) {
+    if (err.code === "P2025") return res.status(404).json({ error: "Cliente não encontrado" });
+    if (err.code === "P2002") return res.status(409).json({ error: "Número já cadastrado para outro cliente" });
+    res.status(500).json({ error: err.message });
+  }
+});
+
+// ── DELETE /admin/clientes/:id ────────────────────────────────────────────────
+router.delete("/clientes/:id", async (req, res) => {
+  try {
+    await prisma.clienteFidelidade.delete({ where: { id: req.params.id } });
+    res.json({ ok: true });
   } catch (err) {
     if (err.code === "P2025") return res.status(404).json({ error: "Cliente não encontrado" });
     res.status(500).json({ error: err.message });
@@ -586,25 +739,12 @@ router.post("/disparar", async (req, res) => {
 
     let numeros = [];
 
-    // Busca todos os clientes que têm histórico neste restaurante
-    const todosClientes = await prisma.clienteFidelidade.findMany();
-    const clientesDoRestaurante = todosClientes.filter((c) => {
-      const hist = Array.isArray(c.restaurantes) ? c.restaurantes : [];
-      return hist.some((h) => h.restauranteId === rid);
-    });
+    const clientesDoRestaurante = await prisma.clienteFidelidade.findMany({ where: { restauranteId: rid } });
 
     if (filtro && filtro !== "todos") {
-      // filtro = id do programa de fidelidade → apenas clientes qualificados
       const programa = await prisma.programaFidelidade.findUnique({ where: { id: filtro } });
       if (!programa) return res.status(404).json({ error: "Programa não encontrado" });
-
-      numeros = clientesDoRestaurante
-        .filter((c) => {
-          const hist = Array.isArray(c.restaurantes) ? c.restaurantes : [];
-          const r = hist.find((h) => h.restauranteId === rid);
-          return r ? clienteQualificado(r, programa) : false;
-        })
-        .map((c) => c.numero);
+      numeros = clientesDoRestaurante.filter((c) => clienteQualificado(c, programa)).map((c) => c.numero);
     } else {
       numeros = clientesDoRestaurante.map((c) => c.numero);
     }
@@ -629,10 +769,9 @@ router.post("/disparar", async (req, res) => {
 // ══ Programas de fidelidade ═══════════════════════════════════════════════════
 
 // Helper: verifica se cliente tem resgate pendente para um programa
-function clienteQualificado(histRestaurante, programa) {
-  const r = histRestaurante;
-  const resgatesFeitos = r.resgates || 0;
-  const progresso = programa.tipo === "PEDIDOS" ? (r.pedidos || 0) : (r.gasto || 0);
+function clienteQualificado(cliente, programa) {
+  const resgatesFeitos = cliente.resgates || 0;
+  const progresso = programa.tipo === "PEDIDOS" ? (cliente.totalPedidos || 0) : (cliente.totalGasto || 0);
   return Math.floor(progresso / programa.meta) > resgatesFeitos;
 }
 
@@ -701,22 +840,17 @@ router.get("/fidelidade/:id/qualificados", async (req, res) => {
     const programa = await prisma.programaFidelidade.findUnique({ where: { id: req.params.id } });
     if (!programa) return res.status(404).json({ error: "Programa não encontrado" });
 
-    const clientes = await prisma.clienteFidelidade.findMany();
+    const clientes = await prisma.clienteFidelidade.findMany({ where: { restauranteId: programa.restauranteId } });
     const qualificados = clientes
-      .map((c) => {
-        const hist = Array.isArray(c.restaurantes) ? c.restaurantes : [];
-        const r = hist.find((h) => h.restauranteId === programa.restauranteId);
-        if (!r || !clienteQualificado(r, programa)) return null;
-        return {
-          id: c.id,
-          nome: c.nome,
-          numero: c.numero,
-          pedidos: r.pedidos || 0,
-          gasto: r.gasto || 0,
-          resgates: r.resgates || 0,
-        };
-      })
-      .filter(Boolean);
+      .filter((c) => clienteQualificado(c, programa))
+      .map((c) => ({
+        id: c.id,
+        nome: c.nome,
+        numero: c.numero,
+        pedidos: c.totalPedidos,
+        gasto: c.totalGasto,
+        resgates: c.resgates,
+      }));
 
     res.json({ data: qualificados, total: qualificados.length });
   } catch (err) {
@@ -733,29 +867,22 @@ router.post("/fidelidade/:id/resgatar", async (req, res) => {
     const programa = await prisma.programaFidelidade.findUnique({ where: { id: req.params.id } });
     if (!programa) return res.status(404).json({ error: "Programa não encontrado" });
 
-    const cliente = await prisma.clienteFidelidade.findUnique({ where: { numero: clienteNumero } });
-    if (!cliente) return res.status(404).json({ error: "Cliente não encontrado" });
+    const cliente = await prisma.clienteFidelidade.findUnique({
+      where: { numero_restauranteId: { numero: clienteNumero, restauranteId: programa.restauranteId } },
+    });
+    if (!cliente) return res.status(400).json({ error: "Cliente sem histórico neste restaurante" });
 
-    const hist = Array.isArray(cliente.restaurantes) ? [...cliente.restaurantes] : [];
-    const idx = hist.findIndex((h) => h.restauranteId === programa.restauranteId);
-    if (idx < 0) return res.status(400).json({ error: "Cliente sem histórico neste restaurante" });
-
-    if (!clienteQualificado(hist[idx], programa)) {
+    if (!clienteQualificado(cliente, programa)) {
       return res.status(400).json({ error: "Cliente não qualificado para resgate" });
     }
 
-    hist[idx] = { ...hist[idx], resgates: (hist[idx].resgates || 0) + 1 };
-
-    // Determina quem está registrando
     const registradoPor = req.user.role === "admin" ? "super-admin" : (req.user.email || req.user.restauranteId || "restaurante");
 
     await prisma.$transaction([
-      // Atualiza contador no histórico do cliente
       prisma.clienteFidelidade.update({
-        where: { numero: clienteNumero },
-        data: { restaurantes: hist },
+        where: { numero_restauranteId: { numero: clienteNumero, restauranteId: programa.restauranteId } },
+        data: { resgates: { increment: 1 } },
       }),
-      // Salva registro no histórico de resgates
       prisma.resgateFidelidade.create({
         data: {
           programaId: programa.id,
@@ -766,7 +893,7 @@ router.post("/fidelidade/:id/resgatar", async (req, res) => {
       }),
     ]);
 
-    res.json({ ok: true, resgatesTotal: hist[idx].resgates });
+    res.json({ ok: true, resgatesTotal: cliente.resgates + 1 });
   } catch (err) {
     res.status(500).json({ error: err.message });
   }
@@ -874,7 +1001,7 @@ router.patch("/restaurantes/:id", async (req, res) => {
     return res.status(403).json({ error: "Acesso negado" });
   }
 
-  const { nome, donoWhatsapp, moeda, taxaEntrega, email, senha, ativo, horarioAtendimento, dadosTransferencia } = req.body;
+  const { nome, donoWhatsapp, moeda, taxaEntrega, email, senha, ativo, horarioAtendimento, dadosTransferencia, instrucoes } = req.body;
 
   try {
     const dados = {};
@@ -886,13 +1013,14 @@ router.patch("/restaurantes/:id", async (req, res) => {
     if (senha)                             dados.senhaHash = await bcrypt.hash(senha, 10);
     if (horarioAtendimento !== undefined)  dados.horarioAtendimento = horarioAtendimento ? JSON.stringify(horarioAtendimento) : null;
     if (dadosTransferencia !== undefined)  dados.dadosTransferencia = dadosTransferencia || null;
+    if (instrucoes !== undefined)          dados.instrucoes = instrucoes || null;
     // Só admin pode ativar/desativar
     if (ativo !== undefined && req.user.role === "admin") dados.ativo = ativo;
 
     const restaurante = await prisma.restaurante.update({
       where: { id },
       data: dados,
-      select: { id: true, nome: true, slugWhatsapp: true, donoWhatsapp: true, moeda: true, taxaEntrega: true, ativo: true, email: true, horarioAtendimento: true, cardapioPdfUrl: true, dadosTransferencia: true },
+      select: { id: true, nome: true, slugWhatsapp: true, donoWhatsapp: true, moeda: true, taxaEntrega: true, ativo: true, email: true, horarioAtendimento: true, cardapioPdfUrl: true, dadosTransferencia: true, instrucoes: true },
     });
 
     // Invalida cache para refletir mudanças imediatamente
@@ -1096,12 +1224,36 @@ router.get("/cardapio/:restauranteId", async (req, res) => {
     return res.status(403).json({ error: "Acesso negado" });
   }
   try {
-    const cardapio = await buscarCardapioDB(restauranteId);
-    res.json({ data: cardapio });
+    const [cardapio, rest] = await Promise.all([
+      buscarCardapioDB(restauranteId),
+      prisma.restaurante.findUnique({ where: { id: restauranteId }, select: { instrucoes: true } }),
+    ]);
+    res.json({ data: cardapio, instrucoes: rest?.instrucoes || null });
   } catch (err) {
     res.status(500).json({ error: err.message });
   }
 });
+
+// Helper: invalida o cache do bot pelo restauranteId (busca o slug no banco)
+async function invalidarCachePorRestauranteId(restauranteId) {
+  const r = await prisma.restaurante.findUnique({ where: { id: restauranteId }, select: { slugWhatsapp: true } });
+  if (r?.slugWhatsapp) invalidarCache(r.slugWhatsapp);
+}
+
+// Helper: invalida cache pelo categoriaId (faz join para chegar ao restaurante)
+async function invalidarCachePorCategoriaId(categoriaId) {
+  const cat = await prisma.categoria.findUnique({ where: { id: categoriaId }, select: { restauranteId: true } });
+  if (cat) await invalidarCachePorRestauranteId(cat.restauranteId);
+}
+
+// Helper: invalida cache pelo produtoId
+async function invalidarCachePorProdutoId(produtoId) {
+  const prod = await prisma.produto.findUnique({
+    where: { id: produtoId },
+    select: { categoria: { select: { restauranteId: true } } },
+  });
+  if (prod?.categoria) await invalidarCachePorRestauranteId(prod.categoria.restauranteId);
+}
 
 // POST /admin/cardapio/:restauranteId/categorias
 router.post("/cardapio/:restauranteId/categorias", async (req, res) => {
@@ -1113,7 +1265,7 @@ router.post("/cardapio/:restauranteId/categorias", async (req, res) => {
   if (!nome) return res.status(400).json({ error: "nome é obrigatório" });
   try {
     const cat = await criarCategoria(restauranteId, nome, ordem);
-    invalidarCache(req.body.slug || "");
+    await invalidarCachePorRestauranteId(restauranteId);
     res.status(201).json({ data: cat });
   } catch (err) {
     res.status(500).json({ error: err.message });
@@ -1124,6 +1276,7 @@ router.post("/cardapio/:restauranteId/categorias", async (req, res) => {
 router.patch("/cardapio/categorias/:id", async (req, res) => {
   try {
     const cat = await atualizarCategoria(req.params.id, req.body);
+    await invalidarCachePorCategoriaId(req.params.id);
     res.json({ data: cat });
   } catch (err) {
     res.status(500).json({ error: err.message });
@@ -1133,6 +1286,7 @@ router.patch("/cardapio/categorias/:id", async (req, res) => {
 // DELETE /admin/cardapio/categorias/:id
 router.delete("/cardapio/categorias/:id", async (req, res) => {
   try {
+    await invalidarCachePorCategoriaId(req.params.id);
     await deletarCategoria(req.params.id);
     res.json({ ok: true });
   } catch (err) {
@@ -1144,6 +1298,7 @@ router.delete("/cardapio/categorias/:id", async (req, res) => {
 router.post("/cardapio/categorias/:categoriaId/produtos", async (req, res) => {
   try {
     const produto = await criarProduto(req.params.categoriaId, req.body);
+    await invalidarCachePorCategoriaId(req.params.categoriaId);
     res.status(201).json({ data: produto });
   } catch (err) {
     res.status(500).json({ error: err.message });
@@ -1154,6 +1309,7 @@ router.post("/cardapio/categorias/:categoriaId/produtos", async (req, res) => {
 router.patch("/cardapio/produtos/:id", async (req, res) => {
   try {
     const produto = await atualizarProduto(req.params.id, req.body);
+    await invalidarCachePorProdutoId(req.params.id);
     res.json({ data: produto });
   } catch (err) {
     res.status(500).json({ error: err.message });
@@ -1163,6 +1319,7 @@ router.patch("/cardapio/produtos/:id", async (req, res) => {
 // DELETE /admin/cardapio/produtos/:id
 router.delete("/cardapio/produtos/:id", async (req, res) => {
   try {
+    await invalidarCachePorProdutoId(req.params.id);
     await deletarProduto(req.params.id);
     res.json({ ok: true });
   } catch (err) {
@@ -1371,6 +1528,534 @@ router.post("/cardapio/:restauranteId/confirmar-importacao", async (req, res) =>
     if (rest?.slugWhatsapp) invalidarCache(rest.slugWhatsapp);
 
     res.json({ ok: true });
+  } catch (err) {
+    res.status(500).json({ error: err.message });
+  }
+});
+
+// ══ CRM ═══════════════════════════════════════════════════════════════════════
+
+function calcularSegmentos(clientes, programas) {
+  const agora = Date.now();
+  const dias30 = new Date(agora - 30 * 86400000);
+  const dias60 = new Date(agora - 60 * 86400000);
+
+  const sorted = [...clientes].sort((a, b) => b.totalGasto - a.totalGasto);
+  const vipIdx = Math.max(0, Math.floor(sorted.length * 0.2) - 1);
+  const vipThreshold = sorted[vipIdx]?.totalGasto || 0;
+
+  const pertenceSegmento = (c, seg) => {
+    if (seg === 'todos') return true;
+    if (seg === 'novos') return c.totalPedidos === 1;
+    if (seg === 'recorrentes') return c.totalPedidos >= 3;
+    if (seg === 'vip') return vipThreshold > 0 && c.totalGasto >= vipThreshold;
+    if (seg === 'emRisco') return c.ultimoPedido && new Date(c.ultimoPedido) < dias30 && new Date(c.ultimoPedido) >= dias60;
+    if (seg === 'inativos') return c.ultimoPedido && new Date(c.ultimoPedido) < dias60;
+    if (seg === 'fidelidade') return programas.some(p => {
+      const prog = p.tipo === 'PEDIDOS' ? c.totalPedidos : c.totalGasto;
+      return Math.floor(prog / p.meta) > (c.resgates || 0);
+    });
+    return true;
+  };
+
+  return { pertenceSegmento, vipThreshold };
+}
+
+// ── GET /admin/crm/segmentos?restauranteId=X ─────────────────────────────────
+router.get("/crm/segmentos", async (req, res) => {
+  const restauranteId = resolverRestauranteId(req);
+  if (!restauranteId) return res.status(400).json({ error: "restauranteId obrigatório" });
+
+  try {
+    const [clientes, programas] = await Promise.all([
+      prisma.clienteFidelidade.findMany({
+        where: { restauranteId },
+        select: { totalPedidos: true, totalGasto: true, resgates: true, ultimoPedido: true },
+      }),
+      prisma.programaFidelidade.findMany({ where: { restauranteId, ativo: true } }),
+    ]);
+
+    const { pertenceSegmento } = calcularSegmentos(clientes, programas);
+    const segs = ['todos', 'novos', 'recorrentes', 'vip', 'emRisco', 'inativos', 'fidelidade'];
+    const counts = {};
+    segs.forEach(s => { counts[s] = clientes.filter(c => pertenceSegmento(c, s)).length; });
+
+    res.json({ data: counts });
+  } catch (err) {
+    res.status(500).json({ error: err.message });
+  }
+});
+
+// ── GET /admin/crm/clientes?restauranteId=X&segmento=todos&busca=&pagina=1 ───
+router.get("/crm/clientes", async (req, res) => {
+  const restauranteId = resolverRestauranteId(req);
+  const { segmento = 'todos', busca, pagina = 1 } = req.query;
+  const limite = 50;
+  if (!restauranteId) return res.status(400).json({ error: "restauranteId obrigatório" });
+
+  try {
+    const [todos, programas] = await Promise.all([
+      prisma.clienteFidelidade.findMany({ where: { restauranteId }, orderBy: { totalGasto: "desc" } }),
+      prisma.programaFidelidade.findMany({ where: { restauranteId, ativo: true } }),
+    ]);
+
+    const { pertenceSegmento, vipThreshold } = calcularSegmentos(todos, programas);
+
+    let filtrados = todos.filter(c => pertenceSegmento(c, segmento));
+    if (busca) {
+      const b = busca.toLowerCase();
+      filtrados = filtrados.filter(c => (c.nome || '').toLowerCase().includes(b) || c.numero.includes(busca));
+    }
+
+    const total = filtrados.length;
+    const paginated = filtrados.slice((Number(pagina) - 1) * limite, Number(pagina) * limite);
+
+    res.json({ data: paginated, meta: { total, pagina: Number(pagina), paginas: Math.ceil(total / limite) || 1 }, vipThreshold });
+  } catch (err) {
+    res.status(500).json({ error: err.message });
+  }
+});
+
+// ── GET /admin/crm/cliente/:numero?restauranteId=X ───────────────────────────
+router.get("/crm/cliente/:numero", async (req, res) => {
+  const restauranteId = resolverRestauranteId(req);
+  if (!restauranteId) return res.status(400).json({ error: "restauranteId obrigatório" });
+
+  try {
+    const [cliente, pedidos] = await Promise.all([
+      prisma.clienteFidelidade.findUnique({
+        where: { numero_restauranteId: { numero: req.params.numero, restauranteId } },
+      }),
+      prisma.pedido.findMany({
+        where: { clienteNumero: req.params.numero, restauranteId },
+        orderBy: { createdAt: "desc" },
+        take: 20,
+        select: { id: true, total: true, status: true, createdAt: true, itens: true, localizacao: true, metodoPagamento: true },
+      }),
+    ]);
+
+    if (!cliente) return res.status(404).json({ error: "Cliente não encontrado" });
+    res.json({ data: { ...cliente, pedidos } });
+  } catch (err) {
+    res.status(500).json({ error: err.message });
+  }
+});
+
+// ── POST /admin/crm/campanha ──────────────────────────────────────────────────
+router.post("/crm/campanha", async (req, res) => {
+  const restauranteId = resolverRestauranteId(req);
+  const { titulo, mensagem, segmento, destinatarios } = req.body;
+  if (!restauranteId || !mensagem?.trim() || !destinatarios?.length) {
+    return res.status(400).json({ error: "mensagem e destinatarios são obrigatórios" });
+  }
+
+  try {
+    const restaurante = await prisma.restaurante.findUnique({
+      where: { id: restauranteId },
+      select: { slugWhatsapp: true, nome: true },
+    });
+    if (!restaurante) return res.status(404).json({ error: "Restaurante não encontrado" });
+
+    let enviados = 0;
+    let erros = 0;
+
+    for (const { numero, nome } of destinatarios) {
+      const msg = mensagem
+        .replace(/\{\{nome\}\}/gi, nome || 'cliente')
+        .replace(/\{\{restaurante\}\}/gi, restaurante.nome);
+      try {
+        await enviarMensagem(numero, msg, restaurante.slugWhatsapp);
+        enviados++;
+        await new Promise(r => setTimeout(r, 800));
+      } catch {
+        erros++;
+      }
+    }
+
+    await prisma.campanhaMarketing.create({
+      data: {
+        restauranteId,
+        titulo: titulo?.trim() || `Campanha ${new Date().toLocaleDateString('pt-BR')}`,
+        mensagem,
+        segmento: segmento || 'custom',
+        totalEnviados: enviados,
+        totalErros: erros,
+        criadoPor: req.user?.email || req.user?.role || 'admin',
+      },
+    });
+
+    res.json({ ok: true, enviados, erros });
+  } catch (err) {
+    res.status(500).json({ error: err.message });
+  }
+});
+
+// ── GET /admin/crm/campanhas?restauranteId=X ─────────────────────────────────
+router.get("/crm/campanhas", async (req, res) => {
+  const restauranteId = resolverRestauranteId(req);
+  if (!restauranteId) return res.status(400).json({ error: "restauranteId obrigatório" });
+
+  try {
+    const campanhas = await prisma.campanhaMarketing.findMany({
+      where: { restauranteId },
+      orderBy: { criadoEm: "desc" },
+      take: 50,
+    });
+    res.json({ data: campanhas });
+  } catch (err) {
+    res.status(500).json({ error: err.message });
+  }
+});
+
+// ── ESTOQUE ───────────────────────────────────────────────────────────────────
+router.get("/estoque", async (req, res) => {
+  const restauranteId = resolverRestauranteId(req);
+  if (!restauranteId) return res.status(400).json({ error: "restauranteId obrigatório" });
+  const itens = await prisma.itemEstoque.findMany({
+    where: { restauranteId, ativo: true },
+    orderBy: [{ categoria: "asc" }, { nome: "asc" }],
+  });
+  res.json({ data: itens });
+});
+
+router.post("/estoque", async (req, res) => {
+  const restauranteId = resolverRestauranteId(req);
+  const { nome, categoria, unidade, quantidadeAtual, quantidadeMinima, precoUnitario, fornecedor } = req.body;
+  if (!restauranteId || !nome || !categoria || !unidade)
+    return res.status(400).json({ error: "nome, categoria e unidade são obrigatórios" });
+  const item = await prisma.itemEstoque.create({
+    data: {
+      restauranteId, nome, categoria, unidade,
+      quantidadeAtual: Number(quantidadeAtual) || 0,
+      quantidadeMinima: Number(quantidadeMinima) || 0,
+      precoUnitario: Number(precoUnitario) || 0,
+      fornecedor: fornecedor || null,
+    },
+  });
+  res.json({ data: item });
+});
+
+router.put("/estoque/:id", async (req, res) => {
+  const { nome, categoria, unidade, quantidadeAtual, quantidadeMinima, precoUnitario, fornecedor } = req.body;
+  const item = await prisma.itemEstoque.update({
+    where: { id: req.params.id },
+    data: {
+      nome, categoria, unidade,
+      quantidadeAtual: Number(quantidadeAtual),
+      quantidadeMinima: Number(quantidadeMinima),
+      precoUnitario: Number(precoUnitario),
+      fornecedor: fornecedor || null,
+    },
+  });
+  res.json({ data: item });
+});
+
+router.delete("/estoque/:id", async (req, res) => {
+  await prisma.itemEstoque.update({ where: { id: req.params.id }, data: { ativo: false } });
+  res.json({ ok: true });
+});
+
+router.post("/estoque/:id/movimentacao", async (req, res) => {
+  const { tipo, quantidade, precoUnitario, motivo, observacao } = req.body;
+  const qtd = Number(quantidade);
+  if (!tipo || !qtd || !motivo) return res.status(400).json({ error: "tipo, quantidade e motivo são obrigatórios" });
+  const item = await prisma.itemEstoque.findUnique({ where: { id: req.params.id } });
+  if (!item) return res.status(404).json({ error: "Item não encontrado" });
+
+  let novaQtd = item.quantidadeAtual;
+  if (tipo === "ENTRADA") novaQtd += qtd;
+  else if (tipo === "SAIDA") novaQtd = Math.max(0, novaQtd - qtd);
+  else if (tipo === "AJUSTE") novaQtd = qtd;
+
+  await prisma.$transaction([
+    prisma.movimentacaoEstoque.create({
+      data: {
+        restauranteId: item.restauranteId, itemId: req.params.id,
+        tipo, quantidade: qtd,
+        precoUnitario: precoUnitario ? Number(precoUnitario) : null,
+        motivo, observacao: observacao || null,
+      },
+    }),
+    prisma.itemEstoque.update({ where: { id: req.params.id }, data: { quantidadeAtual: novaQtd } }),
+  ]);
+  res.json({ ok: true, quantidadeAtual: novaQtd });
+});
+
+router.get("/estoque/:id/movimentacoes", async (req, res) => {
+  const movs = await prisma.movimentacaoEstoque.findMany({
+    where: { itemId: req.params.id },
+    orderBy: { createdAt: "desc" },
+    take: 50,
+  });
+  res.json({ data: movs });
+});
+
+// ── CUSTOS MENSAIS ────────────────────────────────────────────────────────────
+router.get("/custos", async (req, res) => {
+  const restauranteId = resolverRestauranteId(req);
+  const { mes } = req.query;
+  if (!restauranteId) return res.status(400).json({ error: "restauranteId obrigatório" });
+  const where = { restauranteId };
+  if (mes) where.mes = mes;
+  const custos = await prisma.custoMensal.findMany({
+    where,
+    orderBy: [{ categoria: "asc" }, { subcategoria: "asc" }, { createdAt: "asc" }],
+  });
+  res.json({ data: custos });
+});
+
+router.post("/custos", async (req, res) => {
+  const restauranteId = resolverRestauranteId(req);
+  const { nome, categoria, subcategoria, valor, mes, observacao } = req.body;
+  if (!restauranteId || !nome || !categoria || !subcategoria || !valor || !mes)
+    return res.status(400).json({ error: "campos obrigatórios faltando" });
+  const custo = await prisma.custoMensal.create({
+    data: { restauranteId, nome, categoria, subcategoria, valor: Number(valor), mes, observacao: observacao || null },
+  });
+  res.json({ data: custo });
+});
+
+router.put("/custos/:id", async (req, res) => {
+  const { nome, categoria, subcategoria, valor, mes, observacao } = req.body;
+  const custo = await prisma.custoMensal.update({
+    where: { id: req.params.id },
+    data: { nome, categoria, subcategoria, valor: Number(valor), mes, observacao: observacao || null },
+  });
+  res.json({ data: custo });
+});
+
+router.delete("/custos/:id", async (req, res) => {
+  await prisma.custoMensal.delete({ where: { id: req.params.id } });
+  res.json({ ok: true });
+});
+
+// ── FINANCEIRO (DRE mensal) ───────────────────────────────────────────────────
+router.get("/financeiro", async (req, res) => {
+  const restauranteId = resolverRestauranteId(req);
+  if (!restauranteId) return res.status(400).json({ error: "restauranteId obrigatório" });
+
+  const mesAtual = req.query.mes || new Date().toISOString().slice(0, 7);
+  const [year, month] = mesAtual.split("-").map(Number);
+  const inicio = new Date(Date.UTC(year, month - 1, 1));
+  const fim = new Date(Date.UTC(year, month, 0, 23, 59, 59, 999));
+
+  const tendMeses = [];
+  for (let i = 5; i >= 0; i--) {
+    const d = new Date(Date.UTC(year, month - 1 - i, 1));
+    tendMeses.push(`${d.getUTCFullYear()}-${String(d.getUTCMonth() + 1).padStart(2, "0")}`);
+  }
+  const inicioTend = new Date(Date.UTC(year, month - 6, 1));
+
+  const [pedidosMes, custos, pedidosTend, custosTend, movCMV] = await Promise.all([
+    prisma.pedido.findMany({
+      where: { restauranteId, status: { not: "CANCELADO" }, createdAt: { gte: inicio, lte: fim } },
+      select: { total: true },
+    }),
+    prisma.custoMensal.findMany({
+      where: { restauranteId, mes: mesAtual },
+      orderBy: [{ categoria: "asc" }, { subcategoria: "asc" }],
+    }),
+    prisma.pedido.findMany({
+      where: { restauranteId, status: { not: "CANCELADO" }, createdAt: { gte: inicioTend, lte: fim } },
+      select: { total: true, createdAt: true },
+    }),
+    prisma.custoMensal.findMany({
+      where: { restauranteId, mes: { in: tendMeses } },
+      select: { mes: true, valor: true },
+    }),
+    prisma.movimentacaoEstoque.findMany({
+      where: { restauranteId, tipo: "SAIDA", motivo: "PRODUCAO", createdAt: { gte: inicio, lte: fim } },
+      include: { item: { select: { precoUnitario: true } } },
+    }),
+  ]);
+
+  const faturamento = pedidosMes.reduce((s, p) => s + (p.total || 0), 0);
+  const fixos = custos.filter((c) => c.categoria === "FIXO");
+  const variaveis = custos.filter((c) => c.categoria === "VARIAVEL");
+  const totalFixos = fixos.reduce((s, c) => s + c.valor, 0);
+  const totalVariaveis = variaveis.reduce((s, c) => s + c.valor, 0);
+  const cmv = movCMV.reduce((s, m) => s + m.quantidade * (m.item?.precoUnitario || 0), 0);
+  const lucroBruto = faturamento - cmv;
+  const lucroLiquido = lucroBruto - totalFixos - totalVariaveis;
+  const margem = faturamento > 0 ? (lucroLiquido / faturamento) * 100 : 0;
+
+  const fatByMes = {};
+  pedidosTend.forEach((p) => {
+    const m = p.createdAt.toISOString().slice(0, 7);
+    fatByMes[m] = (fatByMes[m] || 0) + (p.total || 0);
+  });
+  const custosByMes = {};
+  custosTend.forEach((c) => { custosByMes[c.mes] = (custosByMes[c.mes] || 0) + c.valor; });
+
+  res.json({
+    data: {
+      mes: mesAtual, faturamento, cmv, totalFixos, totalVariaveis,
+      lucroBruto, lucroLiquido, margem, fixos, variaveis,
+      tendencia: tendMeses.map((m) => ({
+        mes: m,
+        faturamento: fatByMes[m] || 0,
+        custos: custosByMes[m] || 0,
+      })),
+    },
+  });
+});
+
+// ── Mesas ─────────────────────────────────────────────────────────────────────
+router.get("/mesas", async (req, res) => {
+  const restauranteId = resolverRestauranteId(req);
+  const pedidosAtivos = await prisma.pedido.findMany({
+    where: { restauranteId, mesa: { not: null }, status: { notIn: ["ENTREGUE", "CANCELADO"] } },
+    orderBy: { createdAt: "asc" },
+  });
+  const mesas = Array.from({ length: 30 }, (_, i) => i + 1).map((num) => ({
+    mesa: num,
+    pedido: pedidosAtivos.find((p) => p.mesa === num) || null,
+  }));
+  res.json({ mesas });
+});
+
+router.post("/pedidos/mesa", async (req, res) => {
+  const restauranteId = resolverRestauranteId(req);
+  const { mesa, itens, metodoPagamento } = req.body;
+  if (!mesa || !itens?.length) return res.status(400).json({ error: "mesa e itens são obrigatórios" });
+  const total = itens.reduce((s, i) => s + i.preco * i.quantidade, 0);
+  const numeroDia = await proximoNumeroDia(restauranteId);
+  const sessao = await prisma.sessao.create({
+    data: { clienteNumero: `mesa-${mesa}`, clienteNome: `Mesa ${mesa}`, restauranteId, estado: "FINALIZADO", carrinho: itens },
+  });
+  const pedido = await prisma.pedido.create({
+    data: {
+      sessaoId: sessao.id, restauranteId,
+      clienteNumero: `mesa-${mesa}`, clienteNome: `Mesa ${mesa}`,
+      itens, total, metodoPagamento: metodoPagamento || null,
+      status: "CONFIRMADO", mesa: Number(mesa), origem: "MESA", numeroDia,
+    },
+  });
+  res.json(pedido);
+});
+
+router.patch("/pedidos/:id/mesa", async (req, res) => {
+  const { itens, metodoPagamento } = req.body;
+  const total = itens.reduce((s, i) => s + i.preco * i.quantidade, 0);
+  const upd = { itens, total };
+  if (metodoPagamento !== undefined) upd.metodoPagamento = metodoPagamento;
+  const pedido = await prisma.pedido.update({ where: { id: req.params.id }, data: upd });
+  res.json(pedido);
+});
+
+router.get("/mesas/:num/historico", async (req, res) => {
+  const restauranteId = resolverRestauranteId(req);
+  const mesa = Number(req.params.num);
+  const historico = await prisma.pedido.findMany({
+    where: { restauranteId, mesa, status: { in: ["ENTREGUE", "CANCELADO"] } },
+    orderBy: { createdAt: "desc" },
+    take: 3,
+  });
+  res.json({ historico });
+});
+
+// ══ Caixa ═════════════════════════════════════════════════════════════════════
+
+router.get("/caixa/atual", async (req, res) => {
+  const restauranteId = resolverRestauranteId(req);
+  if (!restauranteId) return res.status(400).json({ error: "restauranteId obrigatório" });
+  try {
+    const turno = await prisma.turnoCaixa.findFirst({
+      where: { restauranteId, status: "ABERTO" },
+      orderBy: { abertoEm: "desc" },
+    });
+    res.json({ data: turno || null });
+  } catch (err) {
+    res.status(500).json({ error: err.message });
+  }
+});
+
+router.post("/caixa/abrir", async (req, res) => {
+  const restauranteId = resolverRestauranteId(req);
+  if (!restauranteId) return res.status(400).json({ error: "restauranteId obrigatório" });
+  const { valorAbertura = 0, abertoPor } = req.body;
+  try {
+    const aberto = await prisma.turnoCaixa.findFirst({ where: { restauranteId, status: "ABERTO" } });
+    if (aberto) return res.status(409).json({ error: "Já existe um caixa aberto" });
+    const turno = await prisma.turnoCaixa.create({
+      data: { restauranteId, valorAbertura: parseFloat(valorAbertura) || 0, abertoPor: abertoPor || req.user?.email || null },
+    });
+    res.json({ data: turno });
+  } catch (err) {
+    res.status(500).json({ error: err.message });
+  }
+});
+
+router.post("/caixa/:id/sangria", async (req, res) => {
+  const { id } = req.params;
+  const { valor, motivo } = req.body;
+  if (!valor || !motivo) return res.status(400).json({ error: "valor e motivo são obrigatórios" });
+  try {
+    const turno = await prisma.turnoCaixa.findUnique({ where: { id } });
+    if (!turno || turno.status !== "ABERTO") return res.status(400).json({ error: "Turno não encontrado ou já fechado" });
+    const sangrias = [...(turno.sangrias || []), {
+      valor: parseFloat(valor),
+      motivo,
+      registradoPor: req.user?.email || "admin",
+      criadoEm: new Date().toISOString(),
+    }];
+    const totalSangrias = sangrias.reduce((acc, s) => acc + s.valor, 0);
+    const updated = await prisma.turnoCaixa.update({ where: { id }, data: { sangrias, totalSangrias } });
+    res.json({ data: updated });
+  } catch (err) {
+    res.status(500).json({ error: err.message });
+  }
+});
+
+router.post("/caixa/:id/fechar", async (req, res) => {
+  const { id } = req.params;
+  const { valorFechamento, fechadoPor, observacao } = req.body;
+  try {
+    const turno = await prisma.turnoCaixa.findUnique({ where: { id } });
+    if (!turno || turno.status !== "ABERTO") return res.status(400).json({ error: "Turno não encontrado ou já fechado" });
+
+    const pedidosPagos = await prisma.pedido.findMany({
+      where: { restauranteId: turno.restauranteId, pago: true, createdAt: { gte: turno.abertoEm } },
+      select: { total: true, metodoPagamento: true },
+    });
+
+    let totalVendas = 0, totalDinheiro = 0, totalCartao = 0, totalPix = 0, totalOutros = 0;
+    for (const p of pedidosPagos) {
+      totalVendas += p.total;
+      const met = (p.metodoPagamento || "").toLowerCase();
+      if (met.includes("dinheiro")) totalDinheiro += p.total;
+      else if (met.includes("cart")) totalCartao += p.total;
+      else if (met.includes("pix") || met.includes("transfer")) totalPix += p.total;
+      else totalOutros += p.total;
+    }
+
+    const updated = await prisma.turnoCaixa.update({
+      where: { id },
+      data: {
+        status: "FECHADO",
+        valorFechamento: valorFechamento != null ? parseFloat(valorFechamento) : null,
+        fechadoPor: fechadoPor || req.user?.email || null,
+        fechadoEm: new Date(),
+        observacao: observacao || null,
+        totalVendas, totalDinheiro, totalCartao, totalPix, totalOutros,
+      },
+    });
+    res.json({ data: updated });
+  } catch (err) {
+    res.status(500).json({ error: err.message });
+  }
+});
+
+router.get("/caixa/historico", async (req, res) => {
+  const restauranteId = resolverRestauranteId(req);
+  if (!restauranteId) return res.status(400).json({ error: "restauranteId obrigatório" });
+  try {
+    const turnos = await prisma.turnoCaixa.findMany({
+      where: { restauranteId },
+      orderBy: { abertoEm: "desc" },
+      take: 30,
+    });
+    res.json({ data: turnos });
   } catch (err) {
     res.status(500).json({ error: err.message });
   }

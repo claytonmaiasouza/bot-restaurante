@@ -20,7 +20,7 @@ router.post("/login", async (req, res) => {
   try {
     const restaurante = await prisma.restaurante.findUnique({
       where: { email: email.toLowerCase().trim() },
-      select: { id: true, nome: true, slugWhatsapp: true, senhaHash: true, ativo: true, email: true },
+      select: { id: true, nome: true, slugWhatsapp: true, senhaHash: true, ativo: true, email: true, moeda: true },
     });
 
     if (!restaurante || !restaurante.senhaHash) {
@@ -44,7 +44,7 @@ router.post("/login", async (req, res) => {
 
     res.json({
       token,
-      restaurante: { id: restaurante.id, nome: restaurante.nome, slug: restaurante.slugWhatsapp },
+      restaurante: { id: restaurante.id, nome: restaurante.nome, slug: restaurante.slugWhatsapp, moeda: restaurante.moeda },
     });
   } catch (err) {
     res.status(500).json({ error: err.message });

@@ -1,7 +1,9 @@
 # Credenciais — NUNCA commitar
 .env
 .env.production
+.env.real
 bot/.env
+bot/.env.real
 strapi/.env
 
 # Dependências

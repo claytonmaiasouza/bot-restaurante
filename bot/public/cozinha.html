@@ -168,7 +168,11 @@ function imprimirPedido(p) {
   .nome { font-size:17px; font-weight:bold; vertical-align:top; padding:4px 0; line-height:1.3; }
   .origem { text-align:center; font-size:14px; font-weight:bold; margin-top:4px; }
   .endereco { text-align:center; font-size:11px; color:#444; margin-top:3px; word-break:break-word; }
-  @media print { body { width:auto; } }
+  .acoes { display:flex; gap:8px; justify-content:center; margin-top:14px; }
+  .acoes button { border:none; padding:9px 20px; border-radius:6px; cursor:pointer; font-size:13px; font-weight:bold; font-family:'Courier New',monospace; }
+  .btn-reimp { background:#111; color:#fff; }
+  .btn-fechar { background:#888; color:#fff; }
+  @media print { body { width:auto; } .acoes { display:none !important; } }
 </style></head><body>
   <p class="restaurante">${nomeRestaurante}</p>
   <div class="divider"></div>
@@ -179,6 +183,10 @@ function imprimirPedido(p) {
   <div class="divider"></div>
   <p class="origem">${origemLabel}</p>
   ${enderecoHtml}
+  <div class="acoes">
+    <button class="btn-reimp" onclick="window.print()">🖨 Imprimir</button>
+    <button class="btn-fechar" onclick="window.close()">✕ Fechar</button>
+  </div>
 </body></html>`;
 
   const win = window.open('', '_blank', 'width=420,height=600');
@@ -187,7 +195,6 @@ function imprimirPedido(p) {
   win.document.close();
   win.focus();
   win.print();
-  win.addEventListener('afterprint', () => win.close());
 }
 
 async function acao(id, rota) {
@@ -314,10 +321,14 @@ let historico = [];
 
 function statusLabel(s) {
   return {
+    CONFIRMADO:           '🟡 Aguardando preparo',
+    PAGO:                 '🟡 Aguardando preparo',
+    PREPARANDO:           '🔵 Em preparo',
     PRONTO_PARA_RETIRADA: '✅ Pronto para retirada',
-    AGUARDANDO_DESPACHO: '📦 Aguardando motoboy',
-    EM_CAMINHO: '🛵 Em caminho',
-    ENTREGUE: '✅ Entregue',
+    AGUARDANDO_DESPACHO:  '📦 Aguardando motoboy',
+    EM_CAMINHO:           '🛵 Em caminho',
+    ENTREGUE:             '✅ Entregue',
+    CANCELADO:            '❌ Cancelado',
   }[s] || s;
 }
 

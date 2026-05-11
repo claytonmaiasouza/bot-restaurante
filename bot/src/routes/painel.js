@@ -101,7 +101,7 @@ router.get("/pedidos", validarToken, async (req, res) => {
   if (tipo === "motoboy") {
     statusFiltro = ["AGUARDANDO_DESPACHO", "EM_CAMINHO"];
   } else if (tipo === "historico") {
-    statusFiltro = ["PRONTO_PARA_RETIRADA", "AGUARDANDO_DESPACHO", "EM_CAMINHO", "ENTREGUE"];
+    statusFiltro = ["CONFIRMADO", "PAGO", "PREPARANDO", "PRONTO_PARA_RETIRADA", "AGUARDANDO_DESPACHO", "EM_CAMINHO", "ENTREGUE", "CANCELADO"];
     const agora = new Date();
     const inicioDia = new Date(Date.UTC(agora.getUTCFullYear(), agora.getUTCMonth(), agora.getUTCDate(), 5, 0, 0, 0));
     if (agora < inicioDia) inicioDia.setUTCDate(inicioDia.getUTCDate() - 1);

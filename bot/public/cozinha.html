@@ -157,6 +157,11 @@ function criarCard(p) {
           <span class="text-sm text-slate-100 leading-tight">${i.nome}</span>
         </div>`).join('')}
     </div>
+    ${p.comprovanteUrl ? `
+    <a href="${p.comprovanteUrl}" target="_blank" class="block mb-3">
+      <p class="text-xs text-slate-400 mb-1">📸 Comprovante de pagamento</p>
+      <img src="${p.comprovanteUrl}" alt="Comprovante" class="w-full rounded-lg max-h-24 object-cover opacity-80 hover:opacity-100 transition" onerror="this.outerHTML='<span class=\\'text-xs text-blue-400 underline\\'>Ver comprovante</span>'">
+    </a>` : ''}
     ${p.clienteNome ? `<p class="text-xs text-slate-500 mb-3">👤 ${p.clienteNome}</p>` : ''}
     <button class="btn-acao w-full py-3 rounded-xl font-bold text-sm transition ${btnClasse}"
       onclick="acao('${p.id}','${btnRota}')">${btnTexto}</button>

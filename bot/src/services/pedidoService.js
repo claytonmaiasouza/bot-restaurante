@@ -3,6 +3,16 @@ const { enviarMensagem } = require("./evolutionService");
 
 const prisma = new PrismaClient();
 
+function detectarIdioma(mensagens) {
+  const texto = (mensagens || [])
+    .filter(m => m.role === "cliente")
+    .slice(0, 5)
+    .map(m => m.conteudo)
+    .join(" ")
+    .toLowerCase();
+  return /\b(hola|quiero|buenos|gracias|también|necesito|cuanto|cuánto|tengo|puedo|soy|hoy|voy|dónde|cómo)\b/.test(texto) ? "es" : "pt";
+}
+
 // ── Helpers ───────────────────────────────────────────────────────────────────
 
 function idCurto(uuid) {
@@ -56,7 +66,7 @@ function formatNumPedido(pedido) {
  * @param {string} localizacao - Endereço ou link Google Maps
  * @returns {object}           - Pedido criado (com itens e total)
  */
-async function finalizarPedido(sessaoId, localizacao, tipoEntrega = "delivery", metodoPagamento = null, mensagemExtra = "") {
+async function finalizarPedido(sessaoId, localizacao, tipoEntrega = "delivery", metodoPagamento = null, mensagemExtra = "", idioma = "pt") {
   // a) Buscar sessão e carrinho
   const sessao = await prisma.sessao.findUnique({
     where: { id: sessaoId },
@@ -91,7 +101,7 @@ async function finalizarPedido(sessaoId, localizacao, tipoEntrega = "delivery", 
         total,
         localizacao,
         metodoPagamento: metodoPagamento || null,
-        status: "NOVO",
+        status: metodoPagamento === "Transferência" ? "NOVO" : "CONFIRMADO",
         numeroDia,
       },
     }),
@@ -117,11 +127,11 @@ async function finalizarPedido(sessaoId, localizacao, tipoEntrega = "delivery", 
   // f) Confirmar ao cliente
   const instanceName = sessao.restaurante.slugWhatsapp;
   const numFormatado = formatNumPedido({ ...pedido, localizacao, origem: "WHATSAPP" });
-  await enviarMensagem(
-    sessao.clienteNumero,
-    `✅ *Pedido #${numFormatado} confirmado!*\n\nRecebemos seu pedido e já notificamos o restaurante. Em breve entraremos em contato sobre o tempo de entrega. 🍽️${mensagemExtra}\n\n💰 *Total: ${fmtValor(total, sessao.restaurante.moeda || "R$")}*\n\nObrigado pela preferência! 😊`,
-    instanceName
-  );
+  const pedirComprovante = metodoPagamento === "Transferência";
+  const msgConfirmacao = idioma === "es"
+    ? `✅ *¡Pedido #${numFormatado} confirmado!*\n\n¡Recibimos tu pedido y ya notificamos al restaurante. Pronto nos pondremos en contacto sobre el tiempo de entrega. 🍽️${mensagemExtra}\n\n💰 *Total: ${fmtValor(total, sessao.restaurante.moeda || "R$")}*${pedirComprovante ? "\n\n📸 *Por favor envía el comprobante de pago para que podamos confirmar el pedido!*" : ""}\n\n¡Gracias por tu preferencia! 😊`
+    : `✅ *Pedido #${numFormatado} confirmado!*\n\nRecebemos seu pedido e já notificamos o restaurante. Em breve entraremos em contato sobre o tempo de entrega. 🍽️${mensagemExtra}\n\n💰 *Total: ${fmtValor(total, sessao.restaurante.moeda || "R$")}*${pedirComprovante ? "\n\n📸 *Por favor envie o comprovante de pagamento para que possamos confirmar o pedido!*" : ""}\n\nObrigado pela preferência! 😊`;
+  await enviarMensagem(sessao.clienteNumero, msgConfirmacao, instanceName);
 
   return pedidoCompleto;
 }
@@ -184,11 +194,17 @@ async function confirmarPedido(pedidoId) {
     include: { restaurante: true },
   });
 
-  await enviarMensagem(
-    pedido.clienteNumero,
-    `🎉 Boa notícia! O restaurante *${pedido.restaurante.nome}* confirmou seu pedido #${formatNumPedido(pedido)} e já está preparando tudo para você. 🍽️`,
-    pedido.restaurante.slugWhatsapp
-  );
+  const sessao = await prisma.sessao.findUnique({
+    where: { id: pedido.sessaoId },
+    include: { mensagens: { orderBy: { createdAt: "asc" }, take: 10 } },
+  });
+  const idioma = detectarIdioma(sessao?.mensagens || []);
+
+  const msg = idioma === "es"
+    ? `🎉 ¡Buenas noticias! El restaurante *${pedido.restaurante.nome}* confirmó tu pedido #${formatNumPedido(pedido)} y ya lo está preparando. 🍽️`
+    : `🎉 Boa notícia! O restaurante *${pedido.restaurante.nome}* confirmou seu pedido #${formatNumPedido(pedido)} e já está preparando tudo para você. 🍽️`;
+
+  await enviarMensagem(pedido.clienteNumero, msg, pedido.restaurante.slugWhatsapp);
 
   return pedido;
 }
@@ -216,4 +232,68 @@ async function atualizarFidelidade(numero, nome, valorPedido, restauranteId) {
   });
 }
 
-module.exports = { finalizarPedido, enviarPedidoParaDono, confirmarPedido, proximoNumeroDia, formatNumPedido };
+// ── 5. salvarComprovante ──────────────────────────────────────────────────────
+
+async function salvarComprovante(sessaoId, comprovanteUrl) {
+  const pedido = await prisma.pedido.findFirst({ where: { sessaoId } });
+  if (!pedido) return { pedidoId: null, statusChanged: false };
+  const autoConfirmar = pedido.status === "NOVO" && pedido.metodoPagamento === "Transferência";
+  const atualizado = await prisma.pedido.update({
+    where: { id: pedido.id },
+    data: { comprovanteUrl, ...(autoConfirmar ? { status: "CONFIRMADO" } : {}) },
+  });
+  return { pedidoId: pedido.id, pedido: atualizado, statusChanged: autoConfirmar };
+}
+
+async function notificarStatusPedido(pedidoId, novoStatus) {
+  try {
+    const pedido = await prisma.pedido.findUnique({
+      where: { id: pedidoId },
+      include: { restaurante: true },
+    });
+    if (!pedido || !pedido.clienteNumero || pedido.origem === "MESA") return;
+
+    let idioma = "pt";
+    if (pedido.sessaoId) {
+      const sessao = await prisma.sessao.findUnique({
+        where: { id: pedido.sessaoId },
+        include: { mensagens: { orderBy: { createdAt: "asc" }, take: 10 } },
+      });
+      idioma = detectarIdioma(sessao?.mensagens || []);
+    }
+
+    const num = formatNumPedido(pedido);
+    const msgs = {
+      pt: {
+        PREPARANDO: `👨‍🍳 Seu pedido *#${num}* já está sendo preparado! Em breve ficará pronto. 🍽️`,
+        PRONTO_PARA_RETIRADA: `✅ Seu pedido *#${num}* está pronto para retirada no balcão! Pode vir buscar. 🏪`,
+        AGUARDANDO_DESPACHO: `✅ Seu pedido *#${num}* está pronto! Aguardando o motoboy para entrega. 📦`,
+        EM_CAMINHO: `🛵 Seu pedido *#${num}* está a caminho! O motoboy já saiu para a entrega.`,
+        ENTREGUE: `✅ Pedido *#${num}* entregue! Obrigado pela preferência! 😊`,
+      },
+      es: {
+        PREPARANDO: `👨‍🍳 ¡Tu pedido *#${num}* ya se está preparando! En breve estará listo. 🍽️`,
+        PRONTO_PARA_RETIRADA: `✅ ¡Tu pedido *#${num}* está listo para retirarlo en el mostrador! Puedes venir a buscarlo. 🏪`,
+        AGUARDANDO_DESPACHO: `✅ ¡Tu pedido *#${num}* está listo! Esperando al repartidor para la entrega. 📦`,
+        EM_CAMINHO: `🛵 ¡Tu pedido *#${num}* está en camino! El repartidor ya salió.`,
+        ENTREGUE: `✅ ¡Pedido *#${num}* entregado! ¡Gracias por tu preferencia! 😊`,
+      },
+    };
+
+    const msg = msgs[idioma]?.[novoStatus];
+    if (msg) {
+      await enviarMensagem(pedido.clienteNumero, msg, pedido.restaurante.slugWhatsapp);
+    }
+  } catch (e) {
+    console.error("[pedidoService] notificarStatusPedido:", e.message);
+  }
+}
+
+async function buscarPedidoAtivoDaSessao(sessaoId) {
+  return prisma.pedido.findFirst({
+    where: { sessaoId, status: { notIn: ["ENTREGUE", "CANCELADO"] } },
+    orderBy: { createdAt: "desc" },
+  });
+}
+
+module.exports = { finalizarPedido, enviarPedidoParaDono, confirmarPedido, proximoNumeroDia, formatNumPedido, salvarComprovante, buscarPedidoAtivoDaSessao, notificarStatusPedido };

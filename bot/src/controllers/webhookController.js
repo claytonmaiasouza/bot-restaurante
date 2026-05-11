@@ -1,9 +1,49 @@
+const fs = require("fs");
+const path = require("path");
 const { processarMensagem } = require("../services/claudeService");
-const { criarOuBuscarSessao, atualizarSessao, salvarMensagem } = require("../services/sessaoService");
+const { criarOuBuscarSessao, atualizarSessao, salvarMensagem, buscarSessaoFinalizada } = require("../services/sessaoService");
 const { enviarMensagem, enviarImagem, enviarDocumento, baixarMidiaBase64 } = require("../services/evolutionService");
-const { finalizarPedido } = require("../services/pedidoService");
+const { finalizarPedido, salvarComprovante, buscarPedidoAtivoDaSessao, formatNumPedido } = require("../services/pedidoService");
 const { transcreverAudio } = require("../services/transcricaoService");
 const { buscarContextoFidelidade } = require("../services/cardapioService");
+
+// ── Detecção de idioma ────────────────────────────────────────────────────────
+
+function detectarIdioma(mensagens) {
+  const texto = (mensagens || [])
+    .filter(m => m.role === "cliente")
+    .slice(0, 5)
+    .map(m => m.conteudo)
+    .join(" ")
+    .toLowerCase();
+  // Apenas palavras exclusivamente espanholas (não existem no português brasileiro)
+  return /\b(hola|quiero|buenos|gracias|también|necesito|cuanto|cuánto|tengo|puedo|soy|hoy|voy|dónde|cómo)\b/.test(texto) ? "es" : "pt";
+}
+
+const T = {
+  pt: {
+    comprovanteRecebido: "✅ Comprovante recebido! Seu pedido foi confirmado e a cozinha já foi notificada. 👨‍🍳",
+    fechado: (nome, desc) =>
+      `Olá${nome ? `, ${nome}` : ""}! 😊\n\nNo momento estamos fora do horário de atendimento.\n\n🕐 *Horário de funcionamento:*\n${desc}\n\nObrigado pelo contato! Assim que abrirmos, teremos o maior prazer em atendê-lo. 🍽️`,
+    formaPagamento: "📍 Localização recebida!\n\nQual será a forma de pagamento?\n\n💵 *Dinheiro*\n💳 *Cartão* (maquininha)\n🏦 *Transferência* (PIX/transferência bancária)",
+    formaPagamentoPedido: "\n\nQual será a forma de pagamento?\n\n💵 *Dinheiro*\n💳 *Cartão* (maquininha)\n🏦 *Transferência* (PIX/transferência bancária)",
+    pagamentoInvalido: "Não entendi. Por favor, escolha uma das formas de pagamento:\n\n💵 *Dinheiro*\n💳 *Cartão* (maquininha)\n🏦 *Transferência* (PIX/transferência bancária)",
+    troco: `💵 Ótimo! Pagamento em dinheiro.\n\nTroco para quanto? (Digite o valor ou "sem troco" se não precisar)`,
+    trocoInfo: (v) => `\n\n💵 Troco para: *${v}*`,
+    maquininha: "\n\n💳 O entregador levará a maquininha de cartão.",
+  },
+  es: {
+    comprovanteRecebido: "✅ ¡Comprobante recibido! Tu pedido fue confirmado y ya notificamos a la cocina. 👨‍🍳",
+    fechado: (nome, desc) =>
+      `¡Hola${nome ? `, ${nome}` : ""}! 😊\n\nEn este momento estamos fuera del horario de atención.\n\n🕐 *Horario de atención:*\n${desc}\n\n¡Gracias por contactarnos! En cuanto abramos, será un placer atenderte. 🍽️`,
+    formaPagamento: "📍 ¡Ubicación recibida!\n\n¿Cuál será el método de pago?\n\n💵 *Efectivo*\n💳 *Tarjeta* (datáfono)\n🏦 *Transferencia* (transferencia bancaria)",
+    formaPagamentoPedido: "\n\n¿Cuál será el método de pago?\n\n💵 *Efectivo*\n💳 *Tarjeta* (datáfono)\n🏦 *Transferencia* (transferencia bancaria)",
+    pagamentoInvalido: "No entendí. Por favor, elige una forma de pago:\n\n💵 *Efectivo*\n💳 *Tarjeta* (datáfono)\n🏦 *Transferencia* (transferencia bancaria)",
+    troco: `💵 ¡Perfecto! Pago en efectivo.\n\n¿Cambio para cuánto? (Escribe el valor o "sin cambio" si no necesitas)`,
+    trocoInfo: (v) => `\n\n💵 Cambio para: *${v}*`,
+    maquininha: "\n\n💳 El repartidor llevará el datáfono.",
+  },
+};
 
 // ── Verificação de horário de atendimento ─────────────────────────────────────
 
@@ -107,6 +147,43 @@ async function receberMensagem(req, res) {
   const instanceName = evento.instance || restaurante.slugWhatsapp;
 
   try {
+    // ── Comprovante: imagem/PDF enviado após pedido finalizado ────────────────
+    // Deve ser checado ANTES de criarOuBuscarSessao (que ignora sessões FINALIZADO)
+    const tiposMidia = ["imageMessage", "documentMessage", "documentWithCaptionMessage"];
+    if (tiposMidia.includes(mensagem.messageType)) {
+      const sessaoFinalizada = await buscarSessaoFinalizada(clienteNumero, restaurante.id);
+      if (sessaoFinalizada) {
+        const { base64, mimeType } = await baixarMidiaBase64(instanceName, mensagem);
+        if (base64) {
+          const isPdf = mimeType?.includes("pdf");
+          const ext = isPdf ? "pdf" : mimeType?.includes("png") ? "png" : mimeType?.includes("webp") ? "webp" : "jpg";
+          const filename = `comprovante-${sessaoFinalizada.id}-${Date.now()}.${ext}`;
+          const uploadsDir = path.resolve(__dirname, "../../public/uploads/comprovantes");
+          if (!fs.existsSync(uploadsDir)) fs.mkdirSync(uploadsDir, { recursive: true });
+          fs.writeFileSync(path.join(uploadsDir, filename), Buffer.from(base64, "base64"));
+          const comprovanteUrl = `${process.env.BOT_PUBLIC_URL}/uploads/comprovantes/${filename}`;
+          const { pedidoId, pedido: pedidoAtualizado, statusChanged } = await salvarComprovante(sessaoFinalizada.id, comprovanteUrl);
+          if (pedidoId) {
+            io?.to("admin").emit("pedido:comprovante", { pedidoId, comprovanteUrl });
+            io?.to(`restaurante:${restaurante.slugWhatsapp}`).emit("pedido:comprovante", { pedidoId, comprovanteUrl });
+            if (statusChanged) {
+              io?.to("admin").emit("pedido:novo", { restauranteId: restaurante.id, pedido: pedidoAtualizado });
+              io?.to(`restaurante:${restaurante.slugWhatsapp}`).emit("pedido:novo", { restauranteId: restaurante.id, pedido: pedidoAtualizado });
+            }
+          }
+          await salvarMensagem(sessaoFinalizada.id, "cliente", `[comprovante] ${comprovanteUrl}`);
+          io?.to("admin").emit("conversa:mensagem", {
+            sessaoId: sessaoFinalizada.id,
+            mensagem: { role: "cliente", conteudo: `[comprovante] ${comprovanteUrl}`, createdAt: new Date() },
+          });
+          const idiomaComp = detectarIdioma(sessaoFinalizada.mensagens || []);
+          await enviarMensagem(clienteNumero, T[idiomaComp].comprovanteRecebido, instanceName);
+          console.log(`[webhook] comprovante salvo: ${comprovanteUrl}`);
+        }
+        return;
+      }
+    }
+
     // ── a) Buscar/criar sessão + contexto de fidelidade ──────────────────────
     const [sessao, fidelidade] = await Promise.all([
       criarOuBuscarSessao(clienteNumero, restaurante.id),
@@ -118,6 +195,8 @@ async function receberMensagem(req, res) {
       await atualizarSessao(sessao.id, { clienteNome });
       sessao.clienteNome = clienteNome;
     }
+
+    const idioma = detectarIdioma(sessao.mensagens || []);
 
     // ── b) Extrair texto/áudio ────────────────────────────────────────────────
     let textoCliente = extrairTexto(mensagem);
@@ -134,13 +213,8 @@ async function receberMensagem(req, res) {
     // ── c) Verificar horário de atendimento ──────────────────────────────────
     const horario = verificarHorario(restaurante.horarioAtendimento);
     if (!horario.aberto) {
-      const descricao = horario.descricao || "Consulte nossos horários de funcionamento.";
-      const msgFechado =
-        `Olá${sessao.clienteNome ? `, ${sessao.clienteNome}` : ""}! 😊\n\n` +
-        `No momento estamos fora do horário de atendimento.\n\n` +
-        `🕐 *Horário de funcionamento:*\n${descricao}\n\n` +
-        `Obrigado pelo contato! Assim que abrirmos, teremos o maior prazer em atendê-lo. 🍽️`;
-      await enviarMensagem(clienteNumero, msgFechado, instanceName);
+      const descricao = horario.descricao || (idioma === "es" ? "Consulte nuestros horarios de atención." : "Consulte nossos horários de funcionamento.");
+      await enviarMensagem(clienteNumero, T[idioma].fechado(sessao.clienteNome, descricao), instanceName);
       return;
     }
 
@@ -157,7 +231,53 @@ async function receberMensagem(req, res) {
 
     if (!textoCliente && !eMensagemDeLocalizacao(mensagem)) return;
 
-    // ── d) Localização → guardar e perguntar pagamento ───────────────────────
+    // ── e) Sessão FINALIZADO com pedido ativo → informa status, não inicia nova ─
+    if (sessao.estado === "FINALIZADO") {
+      const pedidoAtivo = await buscarPedidoAtivoDaSessao(sessao.id);
+      if (pedidoAtivo) {
+        await salvarMensagem(sessao.id, "cliente", textoCliente);
+        io?.to("admin").emit("conversa:mensagem", {
+          sessaoId: sessao.id,
+          mensagem: { role: "cliente", conteudo: textoCliente, createdAt: new Date() },
+        });
+
+        const statusMsgs = {
+          pt: {
+            NOVO: "Recebemos seu pedido e estamos aguardando a confirmação do restaurante. Em breve retornaremos! 🍽️",
+            CONFIRMADO: "Ótima notícia! O restaurante confirmou seu pedido e já está preparando. 👨‍🍳",
+            PAGO: "Pagamento confirmado! O restaurante está preparando seu pedido. 👨‍🍳",
+            PREPARANDO: "Seu pedido está sendo preparado com carinho! Logo ficará pronto. ⏳",
+            SAIU_PARA_ENTREGA: "Seu pedido saiu para entrega! O motoboy está a caminho. 🛵",
+            PRONTO_PARA_RETIRADA: "Seu pedido está pronto para retirada no balcão! 🏪",
+            padrao: "Seu pedido está em andamento. Em breve temos novidades! 😊",
+          },
+          es: {
+            NOVO: "¡Recibimos tu pedido y estamos esperando la confirmación del restaurante. ¡Pronto te avisamos! 🍽️",
+            CONFIRMADO: "¡Buenas noticias! El restaurante confirmó tu pedido y ya lo está preparando. 👨‍🍳",
+            PAGO: "¡Pago confirmado! El restaurante está preparando tu pedido. 👨‍🍳",
+            PREPARANDO: "¡Tu pedido se está preparando con cariño! Ya casi está listo. ⏳",
+            SAIU_PARA_ENTREGA: "¡Tu pedido salió para entrega! El repartidor ya va en camino. 🛵",
+            PRONTO_PARA_RETIRADA: "¡Tu pedido está listo para retirarlo en el mostrador! 🏪",
+            padrao: "Tu pedido está en proceso. ¡Pronto te enviamos novedades! 😊",
+          },
+        };
+
+        const numFmt = formatNumPedido(pedidoAtivo);
+        const mapa = statusMsgs[idioma];
+        const statusMsg = mapa[pedidoAtivo.status] || mapa.padrao;
+        const resposta = `📦 *Pedido #${numFmt}*\n\n${statusMsg}`;
+
+        await enviarMensagem(clienteNumero, resposta, instanceName);
+        await salvarMensagem(sessao.id, "bot", resposta);
+        io?.to("admin").emit("conversa:mensagem", {
+          sessaoId: sessao.id,
+          mensagem: { role: "bot", conteudo: resposta, createdAt: new Date() },
+        });
+      }
+      return;
+    }
+
+    // ── f) Localização → guardar e perguntar pagamento ───────────────────────
     if (
       sessao.estado === "AGUARDANDO_LOCALIZACAO" &&
       eMensagemDeLocalizacao(mensagem)
@@ -170,12 +290,7 @@ async function receberMensagem(req, res) {
         localizacaoPendente: localizacao,
       });
 
-      const msgPagamento =
-        `📍 Localização recebida!\n\n` +
-        `Qual será a forma de pagamento?\n\n` +
-        `💵 *Dinheiro*\n` +
-        `💳 *Cartão* (maquininha)\n` +
-        `🏦 *Transferência* (PIX/transferência bancária)`;
+      const msgPagamento = T[idioma].formaPagamento;
 
       await salvarMensagem(sessao.id, "bot", msgPagamento);
       io?.to("admin").emit("conversa:mensagem", {
@@ -190,16 +305,13 @@ async function receberMensagem(req, res) {
     if (sessao.estado === "AGUARDANDO_PAGAMENTO" && textoCliente) {
       const texto = textoCliente.toLowerCase();
       let metodoPagamento = null;
-      if (/dinheiro|efectivo|cash|billete/i.test(texto)) metodoPagamento = "Dinheiro";
-      else if (/cart[aã]o|m[aá]quina|tarjeta|d[eé]bito|cr[eé]dito/i.test(texto)) metodoPagamento = "Cartão";
-      else if (/transfer[eê]ncia|pix|banco/i.test(texto)) metodoPagamento = "Transferência";
+      // Tolerância a erros de digitação via stems comuns
+      if (/dinh|efetiv|efectiv|\bcash\b|\bbillete\b/i.test(texto)) metodoPagamento = "Dinheiro";
+      else if (/cart[aã]|cartao|m[aá]quin|t[ae]rjet[ae]|d[eé]bit|cr[eé]dit/i.test(texto)) metodoPagamento = "Cartão";
+      else if (/transf|trasf|tranf|\bpix\b|\bbanco\b/i.test(texto)) metodoPagamento = "Transferência";
 
       if (!metodoPagamento) {
-        const msg =
-          `Não entendi. Por favor, escolha uma das formas de pagamento:\n\n` +
-          `💵 *Dinheiro*\n` +
-          `💳 *Cartão* (maquininha)\n` +
-          `🏦 *Transferência* (PIX/transferência bancária)`;
+        const msg = T[idioma].pagamentoInvalido;
         await salvarMensagem(sessao.id, "cliente", textoCliente);
         await salvarMensagem(sessao.id, "bot", msg);
         io?.to("admin").emit("conversa:mensagem", { sessaoId: sessao.id, mensagem: { role: "cliente", conteudo: textoCliente, createdAt: new Date() } });
@@ -214,7 +326,7 @@ async function receberMensagem(req, res) {
       // Dinheiro → perguntar troco
       if (metodoPagamento === "Dinheiro") {
         await atualizarSessao(sessao.id, { estado: "AGUARDANDO_TROCO" });
-        const msgTroco = `💵 Ótimo! Pagamento em dinheiro.\n\nTroco para quanto? (Digite o valor ou "sem troco" se não precisar)`;
+        const msgTroco = T[idioma].troco;
         await salvarMensagem(sessao.id, "bot", msgTroco);
         io?.to("admin").emit("conversa:mensagem", { sessaoId: sessao.id, mensagem: { role: "bot", conteudo: msgTroco, createdAt: new Date() } });
         await enviarMensagem(clienteNumero, msgTroco, instanceName);
@@ -227,7 +339,7 @@ async function receberMensagem(req, res) {
         const tipoEntrega = locPendente === "retirada" ? "retirada" : "delivery";
         const localizacao = tipoEntrega === "retirada" ? "Retirada no balcão" : locPendente;
         const pedido = await finalizarPedido(sessao.id, localizacao, tipoEntrega, metodoPagamento,
-          tipoEntrega === "delivery" ? "\n\n💳 O entregador levará a maquininha de cartão." : "");
+          tipoEntrega === "delivery" ? T[idioma].maquininha : "", idioma);
         io?.to("admin").emit("conversa:encerrada", { sessaoId: sessao.id });
         io?.to(`restaurante:${restaurante.slugWhatsapp}`).emit("pedido:novo", { restauranteId: restaurante.id, pedido });
         return;
@@ -241,7 +353,7 @@ async function receberMensagem(req, res) {
         const dadosTrans = restaurante.dadosTransferencia
           ? `\n\n🏦 *Dados para transferência:*\n${restaurante.dadosTransferencia}`
           : "";
-        const pedido = await finalizarPedido(sessao.id, localizacao, tipoEntrega, metodoPagamento, dadosTrans);
+        const pedido = await finalizarPedido(sessao.id, localizacao, tipoEntrega, metodoPagamento, dadosTrans, idioma);
         io?.to("admin").emit("conversa:encerrada", { sessaoId: sessao.id });
         io?.to(`restaurante:${restaurante.slugWhatsapp}`).emit("pedido:novo", { restauranteId: restaurante.id, pedido });
         return;
@@ -261,7 +373,7 @@ async function receberMensagem(req, res) {
       const tipoEntrega = locPendente === "retirada" ? "retirada" : "delivery";
       const localizacao = tipoEntrega === "retirada" ? "Retirada no balcão" : locPendente;
       const pedido = await finalizarPedido(sessao.id, localizacao, tipoEntrega, metodoPagamento,
-        semTroco ? "" : `\n\n💵 Troco para: *${trocoInfo}*`);
+        semTroco ? "" : T[idioma].trocoInfo(trocoInfo), idioma);
 
       io?.to("admin").emit("conversa:encerrada", { sessaoId: sessao.id });
       io?.to(`restaurante:${restaurante.slugWhatsapp}`).emit("pedido:novo", { restauranteId: restaurante.id, pedido });
@@ -356,11 +468,7 @@ async function receberMensagem(req, res) {
         localizacaoPendente: localizacao,
       });
 
-      const msgPagamento =
-        `\n\nQual será a forma de pagamento?\n\n` +
-        `💵 *Dinheiro*\n` +
-        `💳 *Cartão* (maquininha)\n` +
-        `🏦 *Transferência* (PIX/transferência bancária)`;
+      const msgPagamento = T[idioma].formaPagamentoPedido;
 
       await salvarMensagem(sessao.id, "bot", msgPagamento);
       io?.to("admin").emit("conversa:mensagem", {

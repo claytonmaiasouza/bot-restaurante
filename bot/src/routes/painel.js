@@ -2,6 +2,7 @@ const express = require("express");
 const crypto = require("crypto");
 const bcrypt = require("bcryptjs");
 const { PrismaClient } = require("@prisma/client");
+const { notificarStatusPedido } = require("../services/pedidoService");
 
 const router = express.Router();
 const prisma = new PrismaClient();
@@ -106,7 +107,7 @@ router.get("/pedidos", validarToken, async (req, res) => {
       id: true, numeroDia: true, origem: true, status: true,
       clienteNome: true, clienteNumero: true, localizacao: true,
       itens: true, total: true, metodoPagamento: true, mesa: true,
-      motoboyNome: true, motoboyId: true, createdAt: true,
+      motoboyNome: true, motoboyId: true, createdAt: true, comprovanteUrl: true,
     },
   });
 
@@ -123,6 +124,7 @@ router.post("/pedidos/:id/iniciar", validarToken, async (req, res) => {
   const io = req.app.get("io");
   io?.to("admin").emit("pedido:atualizado", pedido);
   io?.to(`restaurante:${req.painelSlug}`).emit("pedido:atualizado", pedido);
+  notificarStatusPedido(req.params.id, "PREPARANDO").catch(() => {});
   res.json({ ok: true });
 });
 
@@ -144,6 +146,7 @@ router.post("/pedidos/:id/pronto", validarToken, async (req, res) => {
   const io = req.app.get("io");
   io?.to("admin").emit("pedido:atualizado", pedido);
   io?.to(`restaurante:${req.painelSlug}`).emit("pedido:atualizado", pedido);
+  notificarStatusPedido(req.params.id, novoStatus).catch(() => {});
   res.json({ ok: true, status: novoStatus });
 });
 
@@ -172,6 +175,7 @@ router.post("/pedidos/:id/aceitar", validarToken, async (req, res) => {
   const io = req.app.get("io");
   io?.to("admin").emit("pedido:atualizado", pedido);
   io?.to(`restaurante:${req.painelSlug}`).emit("pedido:atualizado", pedido);
+  notificarStatusPedido(req.params.id, "EM_CAMINHO").catch(() => {});
   res.json({ ok: true });
 });
 
@@ -185,6 +189,7 @@ router.post("/pedidos/:id/entregar", validarToken, async (req, res) => {
   const io = req.app.get("io");
   io?.to("admin").emit("pedido:atualizado", pedido);
   io?.to(`restaurante:${req.painelSlug}`).emit("pedido:atualizado", pedido);
+  notificarStatusPedido(req.params.id, "ENTREGUE").catch(() => {});
   res.json({ ok: true });
 });
 

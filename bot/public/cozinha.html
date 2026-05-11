@@ -26,12 +26,30 @@
       </div>
     </div>
     <div class="flex items-center gap-3">
+      <button onclick="abrirHistorico()" class="text-xs bg-slate-700 hover:bg-slate-600 active:bg-slate-800 px-3 py-1.5 rounded-lg font-medium text-slate-300 transition">📋 Histórico</button>
       <div class="flex items-center gap-1.5">
         <span id="indicador-socket" class="w-2 h-2 rounded-full bg-red-500 transition-colors"></span>
         <span class="text-xs text-slate-400">Live</span>
       </div>
     </div>
   </header>
+
+  <!-- History Drawer Overlay -->
+  <div id="hist-overlay" onclick="fecharHistorico()" class="hidden fixed inset-0 bg-black/60 z-20" style="top:60px"></div>
+
+  <!-- History Drawer -->
+  <div id="hist-drawer" class="fixed right-0 bottom-0 w-80 bg-slate-900 border-l border-slate-700 z-30 flex flex-col transition-transform duration-300 translate-x-full" style="top:60px">
+    <div class="flex items-center justify-between px-4 py-3 border-b border-slate-700 flex-shrink-0">
+      <span class="font-bold text-base text-white">📋 Histórico do Dia</span>
+      <div class="flex items-center gap-2">
+        <button id="hist-refresh-btn" onclick="carregarHistorico()" class="text-xs text-slate-400 hover:text-white px-2 py-1 rounded bg-slate-800 hover:bg-slate-700 transition">↺ Atualizar</button>
+        <button onclick="fecharHistorico()" class="text-slate-400 hover:text-white text-xl leading-none">✕</button>
+      </div>
+    </div>
+    <div id="hist-list" class="flex-1 overflow-y-auto p-3 flex flex-col gap-2">
+      <p class="text-slate-500 text-sm text-center mt-8">Carregando...</p>
+    </div>
+  </div>
 
   <!-- Columns -->
   <main class="flex gap-4 p-4 overflow-x-auto" style="min-height:calc(100vh - 60px)">
@@ -282,13 +300,99 @@ socket.on('connect', () => {
 socket.on('disconnect', () => {
   document.getElementById('indicador-socket').className = 'w-2 h-2 rounded-full bg-red-500 transition-colors';
 });
-socket.on('pedido:novo', () => { beep(); carregar(); });
-socket.on('pedido:atualizado', carregar);
-socket.on('pedido:status', carregar);
+socket.on('pedido:novo', () => { beep(); carregar(); refreshHistoricoSeAberto(); });
+socket.on('pedido:atualizado', () => { carregar(); refreshHistoricoSeAberto(); });
+socket.on('pedido:status', () => { carregar(); refreshHistoricoSeAberto(); });
 
 // Initial load — silence beep on first load
 prevCount = -1;
 carregar().then(() => { prevCount = pedidos.length; });
+
+// ── Histórico ──────────────────────────────────────────────────────────────────
+
+let historico = [];
+
+function statusLabel(s) {
+  return {
+    PRONTO_PARA_RETIRADA: '✅ Pronto para retirada',
+    AGUARDANDO_DESPACHO: '📦 Aguardando motoboy',
+    EM_CAMINHO: '🛵 Em caminho',
+    ENTREGUE: '✅ Entregue',
+  }[s] || s;
+}
+
+function imprimirPorId(id) {
+  const p = historico.find(x => x.id === id) || pedidos.find(x => x.id === id);
+  if (p) imprimirPedido(p);
+}
+
+function criarCardHistorico(p) {
+  const itens = Array.isArray(p.itens) ? p.itens : [];
+  const num = numPedido(p);
+  const hora = new Date(p.createdAt).toLocaleTimeString('pt-BR', { hour: '2-digit', minute: '2-digit' });
+  const div = document.createElement('div');
+  div.className = 'bg-slate-800 border border-slate-700 rounded-xl p-3';
+  div.innerHTML = `
+    <div class="flex items-start justify-between mb-2">
+      <div class="flex items-center gap-2 flex-wrap">
+        <span class="font-black text-lg leading-none">#${num}</span>
+        ${origemTag(p)}
+      </div>
+      <span class="text-xs text-slate-500 flex-shrink-0 ml-1">${hora}</span>
+    </div>
+    <div class="space-y-1 mb-2">
+      ${itens.map(i => `
+        <div class="flex gap-2 text-sm">
+          <span class="font-bold text-amber-400 w-6 text-right flex-shrink-0">${i.quantidade||1}×</span>
+          <span class="text-slate-300 leading-tight">${i.nome}</span>
+        </div>`).join('')}
+    </div>
+    <div class="flex items-center justify-between pt-2 border-t border-slate-700">
+      <span class="text-xs text-slate-400">${statusLabel(p.status)}</span>
+      <button onclick="imprimirPorId('${p.id}')" class="text-xs bg-slate-700 hover:bg-slate-600 active:bg-slate-500 text-white px-2 py-1 rounded-lg font-medium transition">🖨 Reimprimir</button>
+    </div>
+  `;
+  return div;
+}
+
+async function carregarHistorico() {
+  const list = document.getElementById('hist-list');
+  const btn = document.getElementById('hist-refresh-btn');
+  if (btn) { btn.textContent = '...'; btn.disabled = true; }
+  try {
+    const res = await fetch(`/painel/pedidos?slug=${slug}&t=${token}&tipo=historico`);
+    if (!res.ok) throw new Error();
+    const { data } = await res.json();
+    historico = data;
+    list.innerHTML = '';
+    if (!data.length) {
+      list.innerHTML = '<p class="text-slate-500 text-sm text-center mt-8">Nenhum pedido finalizado hoje.</p>';
+    } else {
+      data.forEach(p => list.appendChild(criarCardHistorico(p)));
+    }
+  } catch {
+    list.innerHTML = '<p class="text-red-400 text-sm text-center mt-8">Erro ao carregar histórico.</p>';
+  } finally {
+    if (btn) { btn.textContent = '↺ Atualizar'; btn.disabled = false; }
+  }
+}
+
+function abrirHistorico() {
+  document.getElementById('hist-overlay').classList.remove('hidden');
+  document.getElementById('hist-drawer').classList.remove('translate-x-full');
+  carregarHistorico();
+}
+
+function fecharHistorico() {
+  document.getElementById('hist-overlay').classList.add('hidden');
+  document.getElementById('hist-drawer').classList.add('translate-x-full');
+}
+
+function refreshHistoricoSeAberto() {
+  if (!document.getElementById('hist-drawer').classList.contains('translate-x-full')) {
+    carregarHistorico();
+  }
+}
 </script>
 </body>
 </html>

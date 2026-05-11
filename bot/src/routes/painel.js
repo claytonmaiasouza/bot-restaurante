@@ -95,14 +95,24 @@ router.get("/pedidos", validarToken, async (req, res) => {
   });
   if (!restaurante) return res.status(404).json({ error: "Restaurante não encontrado" });
 
-  const statusFiltro =
-    tipo === "motoboy"
-      ? ["AGUARDANDO_DESPACHO", "EM_CAMINHO"]
-      : ["CONFIRMADO", "PAGO", "PREPARANDO"];
+  let statusFiltro;
+  let whereExtra = {};
+
+  if (tipo === "motoboy") {
+    statusFiltro = ["AGUARDANDO_DESPACHO", "EM_CAMINHO"];
+  } else if (tipo === "historico") {
+    statusFiltro = ["PRONTO_PARA_RETIRADA", "AGUARDANDO_DESPACHO", "EM_CAMINHO", "ENTREGUE"];
+    const agora = new Date();
+    const inicioDia = new Date(Date.UTC(agora.getUTCFullYear(), agora.getUTCMonth(), agora.getUTCDate(), 5, 0, 0, 0));
+    if (agora < inicioDia) inicioDia.setUTCDate(inicioDia.getUTCDate() - 1);
+    whereExtra = { createdAt: { gte: inicioDia } };
+  } else {
+    statusFiltro = ["CONFIRMADO", "PAGO", "PREPARANDO"];
+  }
 
   const pedidos = await prisma.pedido.findMany({
-    where: { restauranteId: restaurante.id, status: { in: statusFiltro } },
-    orderBy: { createdAt: "asc" },
+    where: { restauranteId: restaurante.id, status: { in: statusFiltro }, ...whereExtra },
+    orderBy: tipo === "historico" ? { createdAt: "desc" } : { createdAt: "asc" },
     select: {
       id: true, numeroDia: true, origem: true, status: true,
       clienteNome: true, clienteNumero: true, localizacao: true,

@@ -150,6 +150,7 @@
         <li><button id="nav-estoque" onclick="mostrarSecao('estoque')" class="sidebar-nav-item w-full text-left" data-i18n="nav.estoque">📦 Estoque</button></li>
         <li><button id="nav-financeiro" onclick="mostrarSecao('financeiro')" class="sidebar-nav-item w-full text-left" data-i18n="nav.financeiro">💰 Financeiro</button></li>
         <li><button id="nav-caixa" onclick="mostrarSecao('caixa')" class="sidebar-nav-item w-full text-left">💵 Caixa</button></li>
+        <li><button id="nav-comprovantes" onclick="mostrarSecao('comprovantes')" class="sidebar-nav-item w-full text-left">📋 Comprovantes</button></li>
         <li><button id="nav-configuracoes" onclick="mostrarSecao('configuracoes')" class="sidebar-nav-item w-full text-left" data-i18n="nav.configuracoes">⚙️ Configurações</button></li>
       </ul>
     </nav>
@@ -1475,6 +1476,76 @@
       </div>
     </div>
 
+    <!-- Modal Comprovante de Pagamento -->
+    <div id="modal-comprovante" class="hidden fixed inset-0 bg-black/50 z-50 flex items-center justify-center p-4">
+      <div class="bg-white rounded-2xl shadow-xl w-full max-w-md p-6">
+        <div class="flex items-center justify-between mb-3">
+          <h3 class="font-bold text-gray-800">📋 Comprovante de Pagamento</h3>
+          <button onclick="fecharModalComprovante()" class="text-gray-400 hover:text-gray-600 text-xl">✕</button>
+        </div>
+        <!-- Imagem -->
+        <div id="modal-comprovante-img-wrap" class="hidden mb-3">
+          <a id="modal-comprovante-link" href="#" target="_blank">
+            <img id="modal-comprovante-img" src="" alt="Comprovante" class="w-full max-h-96 object-contain rounded-lg cursor-pointer border border-gray-200" />
+          </a>
+        </div>
+        <!-- PDF -->
+        <div id="modal-comprovante-pdf-wrap" class="hidden mb-3">
+          <iframe id="modal-comprovante-iframe" src="" class="w-full h-80 rounded-lg border border-gray-200"></iframe>
+          <a id="modal-comprovante-pdf-link" href="#" target="_blank" class="block text-center text-sm text-blue-600 underline mt-2">Abrir PDF em nova aba</a>
+        </div>
+        <p class="text-sm text-gray-500 mb-4">Verifique o comprovante acima e confirme o pagamento.</p>
+        <div class="flex gap-2">
+          <button onclick="fecharModalComprovante()" class="flex-1 px-4 py-2 border border-gray-300 rounded-lg text-sm text-gray-700 hover:bg-gray-50 transition">Cancelar</button>
+          <button id="modal-comprovante-confirmar" class="flex-1 px-4 py-2 bg-green-500 hover:bg-green-600 text-white rounded-lg text-sm font-semibold transition">✅ Pago</button>
+        </div>
+      </div>
+    </div>
+
+    <!-- Comprovantes -->
+    <div id="secao-comprovantes" class="hidden px-6 pb-8">
+      <div class="flex flex-wrap items-end gap-3 mb-4">
+        <h2 class="font-bold text-gray-800 mr-2">📋 Comprovantes de Pagamento</h2>
+        <div class="flex flex-wrap gap-2 ml-auto items-end">
+          <div class="flex flex-col gap-0.5">
+            <label class="text-xs text-gray-400">De</label>
+            <input type="date" id="comprovantes-inicio" onchange="carregarComprovantes()" class="border border-gray-200 rounded-lg px-2 py-1.5 text-sm focus:outline-none focus:ring-2 focus:ring-orange-400">
+          </div>
+          <div class="flex flex-col gap-0.5">
+            <label class="text-xs text-gray-400">Até</label>
+            <input type="date" id="comprovantes-fim" onchange="carregarComprovantes()" class="border border-gray-200 rounded-lg px-2 py-1.5 text-sm focus:outline-none focus:ring-2 focus:ring-orange-400">
+          </div>
+          <select id="comprovantes-filtro" onchange="carregarComprovantes()" class="border border-gray-200 rounded-lg px-3 py-1.5 text-sm text-gray-700 focus:outline-none focus:ring-2 focus:ring-orange-400">
+            <option value="">Todos</option>
+            <option value="false">Aguardando</option>
+            <option value="true">Pagos</option>
+          </select>
+          <button onclick="comprovantesOrdem=(comprovantesOrdem==='desc'?'asc':'desc');carregarComprovantes()" id="comprovantes-ordem-btn" class="border border-gray-200 rounded-lg px-3 py-1.5 text-sm bg-white hover:bg-gray-50 transition text-gray-700">↓ Mais recentes</button>
+          <button onclick="carregarComprovantes()" class="bg-gray-100 hover:bg-gray-200 text-gray-700 text-sm font-semibold px-3 py-1.5 rounded-lg transition">↺</button>
+        </div>
+      </div>
+      <div class="bg-white rounded-2xl shadow-sm border border-gray-100 overflow-hidden">
+        <table class="w-full text-sm">
+          <thead>
+            <tr class="bg-gray-50 border-b border-gray-100 text-left">
+              <th class="px-4 py-3 text-xs font-semibold text-gray-500 w-20">Pedido</th>
+              <th class="px-4 py-3 text-xs font-semibold text-gray-500">Data</th>
+              <th class="px-4 py-3 text-xs font-semibold text-gray-500">Cliente</th>
+              <th class="px-4 py-3 text-xs font-semibold text-gray-500">Itens</th>
+              <th class="px-4 py-3 text-xs font-semibold text-gray-500 text-right">Total</th>
+              <th class="px-4 py-3 text-xs font-semibold text-gray-500">Pagamento</th>
+              <th class="px-4 py-3 text-xs font-semibold text-gray-500 text-center">Status</th>
+              <th class="px-4 py-3 text-xs font-semibold text-gray-500 text-center">Comprovante</th>
+              <th class="px-4 py-3 text-xs font-semibold text-gray-500 text-center">Ação</th>
+            </tr>
+          </thead>
+          <tbody id="comprovantes-tbody"></tbody>
+        </table>
+        <p id="comprovantes-vazio" class="hidden text-sm text-gray-400 text-center py-10">Nenhum comprovante recebido.</p>
+      </div>
+      <p id="comprovantes-total-linha" class="text-xs text-gray-400 mt-2 text-right"></p>
+    </div>
+
     <!-- Cardápio -->
     <div id="secao-cardapio" class="hidden px-6 pb-8">
       <div class="flex items-center justify-between mb-4">
@@ -2195,7 +2266,7 @@ const COLUNAS_KANBAN = [
   { status:'ENTREGUE',             border:'border-t-green-400',  bg:'bg-green-50',   text:'text-green-700'   },
   { status:'CANCELADO',            border:'border-t-red-400',    bg:'bg-red-50',     text:'text-red-700'     },
 ];
-const CORES_BADGE = { NOVO:'bg-orange-100 text-orange-700', CONFIRMADO:'bg-blue-100 text-blue-700', PAGO:'bg-cyan-100 text-cyan-700', PREPARANDO:'bg-amber-100 text-amber-700', SAIU_PARA_ENTREGA:'bg-purple-100 text-purple-700', PRONTO_PARA_RETIRADA:'bg-indigo-100 text-indigo-700', ENTREGUE:'bg-green-100 text-green-700', CANCELADO:'bg-red-100 text-red-700' };
+const CORES_BADGE = { NOVO:'bg-orange-100 text-orange-700', CONFIRMADO:'bg-blue-100 text-blue-700', PAGO:'bg-cyan-100 text-cyan-700', PREPARANDO:'bg-amber-100 text-amber-700', SAIU_PARA_ENTREGA:'bg-purple-100 text-purple-700', PRONTO_PARA_RETIRADA:'bg-indigo-100 text-indigo-700', SERVIDO:'bg-teal-100 text-teal-700', ENTREGUE:'bg-green-100 text-green-700', CANCELADO:'bg-red-100 text-red-700' };
 function getAcoes(status) {
   const acoes = {
     NOVO: [{ tkey:'acao.confirmar', status:'CONFIRMADO', cor:'bg-blue-500 hover:bg-blue-600' }, { tkey:'acao.cancelar', status:'CANCELADO', cor:'bg-red-100 hover:bg-red-200 text-red-700' }],
@@ -2629,6 +2700,7 @@ let pedidosViewAtual = 'kanban';
 let mesasData = [];
 let mesaCardapio = [];
 let mesaCarrinho = [];
+let mesaCarrinhoOriginal = [];
 let mesaCatAtiva = null;
 let mesaTamanhoAtivo = null;
 let mesaSaboresSelecionados = []; // [{nome, preco, precoComBorda}]
@@ -2724,6 +2796,7 @@ async function abrirMesa(num) {
   document.getElementById('modal-mesa-titulo').textContent = pedido ? `Mesa ${num}` : `Nova comanda — Mesa ${num}`;
   document.getElementById('mesa-pagamento').value = pedido?.metodoPagamento || '';
   mesaCarrinho = pedido ? JSON.parse(JSON.stringify(pedido.itens)) : [];
+  mesaCarrinhoOriginal = JSON.parse(JSON.stringify(mesaCarrinho));
   renderizarMesaCarrinho();
   renderizarMesaHistorico([]);
   if (!mesaCardapio.length) await carregarMesaCardapio();
@@ -3061,22 +3134,54 @@ async function _persistirPedidoMesa() {
   const mesa = Number(document.getElementById('mesa-num').value);
   const pedidoId = document.getElementById('mesa-pedido-id').value;
   const metodoPagamento = document.getElementById('mesa-pagamento').value || null;
-  let res;
+
   if (pedidoId) {
-    res = await fetch(`/admin/pedidos/${pedidoId}/mesa`, {
-      method: 'PATCH', headers: { ...getHeaders(), 'Content-Type': 'application/json' },
-      body: JSON.stringify({ itens: mesaCarrinho, metodoPagamento }),
-    });
+    const nomesOriginais = new Set(mesaCarrinhoOriginal.map(i => i.nome));
+    const novosItens = mesaCarrinho.filter(i => !nomesOriginais.has(i.nome));
+    const itensExistentes = mesaCarrinho.filter(i => nomesOriginais.has(i.nome));
+
+    let pedido = null;
+
+    if (novosItens.length > 0) {
+      // Atualiza pedido existente com itens que permaneceram (se houver)
+      if (itensExistentes.length > 0) {
+        const resPatch = await fetch(`/admin/pedidos/${pedidoId}/mesa`, {
+          method: 'PATCH', headers: { ...getHeaders(), 'Content-Type': 'application/json' },
+          body: JSON.stringify({ itens: itensExistentes, metodoPagamento }),
+        });
+        if (!resPatch.ok) { const e = await resPatch.json(); alert('Erro: ' + (e.error || 'Falha ao salvar')); return null; }
+        pedido = await resPatch.json();
+      }
+      // Cria novo pedido NOVO para os itens adicionados
+      const resPost = await fetch('/admin/pedidos/mesa', {
+        method: 'POST', headers: { ...getHeaders(), 'Content-Type': 'application/json' },
+        body: JSON.stringify({ mesa, itens: novosItens, restauranteId: restauranteAtual, status: 'NOVO' }),
+      });
+      if (!resPost.ok) { const e = await resPost.json(); alert('Erro: ' + (e.error || 'Falha ao salvar')); return null; }
+      pedido = await resPost.json();
+    } else {
+      // Sem itens novos — apenas atualiza o pedido existente
+      const res = await fetch(`/admin/pedidos/${pedidoId}/mesa`, {
+        method: 'PATCH', headers: { ...getHeaders(), 'Content-Type': 'application/json' },
+        body: JSON.stringify({ itens: mesaCarrinho, metodoPagamento }),
+      });
+      if (!res.ok) { const e = await res.json(); alert('Erro: ' + (e.error || 'Falha ao salvar')); return null; }
+      pedido = await res.json();
+      document.getElementById('mesa-pedido-id').value = pedido.id;
+    }
+
+    return pedido;
   } else {
-    res = await fetch('/admin/pedidos/mesa', {
+    // Primeiro pedido desta mesa
+    const res = await fetch('/admin/pedidos/mesa', {
       method: 'POST', headers: { ...getHeaders(), 'Content-Type': 'application/json' },
       body: JSON.stringify({ mesa, itens: mesaCarrinho, metodoPagamento, restauranteId: restauranteAtual }),
     });
+    if (!res.ok) { const e = await res.json(); alert('Erro: ' + (e.error || 'Falha ao salvar')); return null; }
+    const pedido = await res.json();
+    document.getElementById('mesa-pedido-id').value = pedido.id;
+    return pedido;
   }
-  if (!res.ok) { const e = await res.json(); alert('Erro: ' + (e.error || 'Falha ao salvar')); return null; }
-  const pedido = await res.json();
-  document.getElementById('mesa-pedido-id').value = pedido.id;
-  return pedido;
 }
 
 async function salvarPedidoMesa() {
@@ -3128,32 +3233,35 @@ async function fecharContaMesa() {
   const textoOriginal = btn ? btn.innerHTML : '';
   if (btn) { btn.disabled = true; btn.textContent = '⏳ Salvando...'; }
 
-  let pedido = null;
   try {
-    // Salva o pedido antes de fechar a conta (cria se novo, atualiza se já existe)
-    pedido = await _persistirPedidoMesa();
+    // Salva quaisquer itens novos pendentes (cria sub-pedido NOVO se necessário)
+    await _persistirPedidoMesa();
   } catch (err) {
     alert('Erro ao salvar pedido: ' + err.message);
-  }
-
-  if (!pedido) {
     if (btn) { btn.disabled = false; btn.innerHTML = textoOriginal; }
     return;
   }
 
-  const metodoPagamento = document.getElementById('mesa-pagamento').value || null;
   const mesaNum = Number(document.getElementById('mesa-num').value);
-  imprimirContaMesa(mesaNum, mesaCarrinho, pedido.total, metodoPagamento);
-  await Promise.all([
-    fetch(`/admin/pedidos/${pedido.id}/status`, {
-      method: 'PATCH', headers: { ...getHeaders(), 'Content-Type': 'application/json' },
-      body: JSON.stringify({ status: 'ENTREGUE' }),
-    }),
-    fetch(`/admin/pedidos/${pedido.id}/pago`, {
-      method: 'PATCH', headers: { ...getHeaders(), 'Content-Type': 'application/json' },
-      body: JSON.stringify({ pago: true }),
-    }),
-  ]);
+  const metodoPagamento = document.getElementById('mesa-pagamento').value || null;
+  const params = new URLSearchParams();
+  if (restauranteAtual) params.set('restauranteId', restauranteAtual);
+
+  // Fecha todos os pedidos ativos da mesa de uma vez
+  const res = await fetch(`/admin/mesas/${mesaNum}/fechar?${params}`, {
+    method: 'POST',
+    headers: { ...getHeaders(), 'Content-Type': 'application/json' },
+    body: JSON.stringify({ metodoPagamento }),
+  });
+
+  if (!res.ok) {
+    if (btn) { btn.disabled = false; btn.innerHTML = textoOriginal; }
+    mostrarToast('Erro ao fechar a mesa. Tente novamente.');
+    return;
+  }
+
+  const { total, itens } = await res.json();
+  imprimirContaMesa(mesaNum, itens.length ? itens : mesaCarrinho, total, metodoPagamento);
   fecharModalMesa();
   carregarMesas();
   carregarPedidos();
@@ -3176,15 +3284,18 @@ function renderizarPedidos() {
   const colHeight = 'calc(100vh - 230px)';
   COLUNAS_KANBAN.forEach(col => {
     const colPedidos = pedidos.filter(p => p.status === col.status);
-    const collapsed = colapsadasKanban.has(col.status);
+    const autoVazia = colPedidos.length === 0;
+    const collapsed = colapsadasKanban.has(col.status) || autoVazia;
     const div = document.createElement('div');
     div.className = `kanban-col border-t-4 ${col.border}${collapsed ? ' col-collapsed' : ''}`;
     div.id = `kanban-col-${col.status}`;
 
     if (collapsed) {
-      // Coluna minimizada — barra vertical clicável
-      div.title = `Expandir ${t('status.' + col.status)}`;
-      div.onclick = (e) => toggleKanbanCol(col.status, e);
+      // Coluna minimizada — só expande se houver pedidos E foi colapsada manualmente
+      if (!autoVazia) {
+        div.title = `Expandir ${t('status.' + col.status)}`;
+        div.onclick = (e) => toggleKanbanCol(col.status, e);
+      }
       div.innerHTML = `
         <div class="kanban-col-header">
           <span class="col-count text-xs font-bold px-1.5 py-0.5 rounded-full ${col.bg} ${col.text}">${colPedidos.length}</span>
@@ -3202,11 +3313,7 @@ function renderizarPedidos() {
         </div>
         <div class="kanban-cards" style="max-height:${colHeight}"></div>`;
       const cardsDiv = div.querySelector('.kanban-cards');
-      if (!colPedidos.length) {
-        cardsDiv.innerHTML = '<p class="text-center text-[#718096] text-xs py-6 italic">Vazio</p>';
-      } else {
-        colPedidos.forEach(p => cardsDiv.appendChild(criarCard(p)));
-      }
+      colPedidos.forEach(p => cardsDiv.appendChild(criarCard(p)));
     }
     board.appendChild(div);
   });
@@ -3276,9 +3383,20 @@ function criarCard(pedido) {
     ${pedido.motoboyNome ? `<p class="text-xs font-medium text-blue-500">🛵 Despachado: ${pedido.motoboyNome}</p>` : ''}
 
     <div class="flex gap-2 flex-wrap">
-      ${!pedido.pago && pedido.status !== 'CANCELADO'
-        ? `<button onclick="marcarPago('${pedido.id}')" class="bg-green-500 hover:bg-green-600 text-white text-xs font-medium px-3 py-1.5 rounded-lg transition">💳 Pago</button>`
-        : ''}
+      ${(() => {
+        if (isMesa) return ''; // Mesa: pagamento confirmado ao fechar conta no modal
+        const isMaquininha = pedido.metodoPagamento?.toLowerCase().includes('cartão');
+        if (isMaquininha && !pedido.pago) {
+          return `<span class="inline-flex items-center gap-1 px-2.5 py-1 rounded-lg text-xs font-medium bg-blue-50 text-blue-600 border border-blue-200">💳 Cobrar na entrega</span>`;
+        }
+        if (pedido.comprovanteUrl && !pedido.pago) {
+          return `<button onclick="marcarPago('${pedido.id}')" class="bg-amber-500 hover:bg-amber-600 text-white text-xs font-medium px-3 py-1.5 rounded-lg transition">📋 Mostrar Comprovante</button>`;
+        }
+        if (!pedido.pago && pedido.status !== 'CANCELADO') {
+          return `<button onclick="marcarPago('${pedido.id}')" class="bg-green-500 hover:bg-green-600 text-white text-xs font-medium px-3 py-1.5 rounded-lg transition">💳 Pago</button>`;
+        }
+        return '';
+      })()}
       ${pedido.status === 'PREPARANDO' && !isRetirada && !isMesa
         ? `<button onclick="abrirModalDespachar('${pedido.id}', '${(pedido.clienteNome || pedido.clienteNumero).replace(/'/g, '')}')" class="bg-blue-500 hover:bg-blue-600 text-white text-xs font-medium px-3 py-1.5 rounded-lg transition">🛵 Despachar</button>`
         : ''}
@@ -3300,6 +3418,9 @@ function obterAcoes(pedido) {
       { label, status, cor: 'bg-purple-500 hover:bg-purple-600' },
       { label: t('acao.cancelar'), status: 'CANCELADO', cor: 'bg-red-100 hover:bg-red-200 text-red-700' },
     ];
+  }
+  if (pedido.status === 'PRONTO_PARA_RETIRADA' && pedido.origem === 'MESA') {
+    return [{ label: '✅ Servido à mesa', status: 'SERVIDO', cor: 'bg-green-500 hover:bg-green-600' }];
   }
   return getAcoes(pedido.status);
 }
@@ -3335,7 +3456,6 @@ function imprimirTicketCozinha(pedido) {
 ${cliente ? `<p class="cliente">Cliente: ${cliente}</p>` : ''}
 <div class="sep"></div>
 ${linhas}
-${pedido.localizacao && !isRetirada && !isMesa ? `<div class="sep"></div><p class="cliente">📍 ${pedido.localizacao}</p>` : ''}
 <script>window.onload=function(){window.print();}<\/script>
 </body></html>`;
   const win = window.open('', '_blank', 'width=420,height=560');
@@ -3365,7 +3485,39 @@ async function atualizarStatus(id, status) {
   carregarStats();
 }
 
-async function marcarPago(id) {
+function marcarPago(id) {
+  const pedido = pedidos.find(p => p.id === id);
+  if (pedido?.comprovanteUrl) {
+    const url = pedido.comprovanteUrl;
+    const isPdf = url.toLowerCase().endsWith('.pdf');
+    const imgWrap = document.getElementById('modal-comprovante-img-wrap');
+    const pdfWrap = document.getElementById('modal-comprovante-pdf-wrap');
+    imgWrap.classList.add('hidden');
+    pdfWrap.classList.add('hidden');
+    if (isPdf) {
+      document.getElementById('modal-comprovante-iframe').src = url;
+      document.getElementById('modal-comprovante-pdf-link').href = url;
+      pdfWrap.classList.remove('hidden');
+    } else {
+      document.getElementById('modal-comprovante-img').src = url;
+      document.getElementById('modal-comprovante-link').href = url;
+      imgWrap.classList.remove('hidden');
+    }
+    document.getElementById('modal-comprovante-confirmar').onclick = () => executarMarcarPago(id);
+    document.getElementById('modal-comprovante').classList.remove('hidden');
+  } else {
+    if (!confirm('Nenhum comprovante recebido. Confirmar pagamento mesmo assim?')) return;
+    executarMarcarPago(id);
+  }
+}
+
+function fecharModalComprovante() {
+  document.getElementById('modal-comprovante').classList.add('hidden');
+  document.getElementById('modal-comprovante-iframe').src = '';
+}
+
+async function executarMarcarPago(id) {
+  fecharModalComprovante();
   const res = await fetch(`/admin/pedidos/${id}/pago`, {
     method: 'PATCH',
     headers: getHeaders(),
@@ -3419,6 +3571,18 @@ function iniciarSocket() {
     const idx = pedidos.findIndex(p => p.id === pedido.id);
     if (idx >= 0) pedidos[idx] = pedido;
     atualizarCardNaTela(pedido);
+  });
+
+  socket.on('pedido:comprovante', ({ pedidoId, comprovanteUrl }) => {
+    if (!pedidoId) return;
+    const idx = pedidos.findIndex(p => p.id === pedidoId);
+    if (idx >= 0) {
+      pedidos[idx].comprovanteUrl = comprovanteUrl;
+      renderizarPedidos();
+    }
+    tocarSom();
+    mostrarToast('📋 Comprovante de pagamento recebido!');
+    if (secaoAtual === 'comprovantes') carregarComprovantes();
   });
 
   socket.on('conversa:mensagem', ({ sessaoId, mensagem }) => {
@@ -3517,7 +3681,7 @@ let secaoAtual = 'pedidos';
 
 function mostrarSecao(secao) {
   secaoAtual = secao;
-  ['pedidos', 'conversas', 'clientes', 'cardapio', 'configuracoes', 'motoboys', 'crm', 'metricas', 'estoque', 'financeiro', 'caixa'].forEach(s => {
+  ['pedidos', 'conversas', 'clientes', 'cardapio', 'configuracoes', 'motoboys', 'crm', 'metricas', 'estoque', 'financeiro', 'caixa', 'comprovantes'].forEach(s => {
     document.getElementById(`secao-${s}`).classList.toggle('hidden', secao !== s);
   });
   // mesas está dentro do contexto pedidos — garante estado correto ao navegar
@@ -3529,7 +3693,7 @@ function mostrarSecao(secao) {
   if (toolbar) toolbar.classList.toggle('hidden', secao !== 'pedidos');
 
   // Sidebar active state
-  ['pedidos', 'conversas', 'clientes', 'cardapio', 'configuracoes', 'motoboys', 'crm', 'metricas', 'estoque', 'financeiro', 'caixa'].forEach(s => {
+  ['pedidos', 'conversas', 'clientes', 'cardapio', 'configuracoes', 'motoboys', 'crm', 'metricas', 'estoque', 'financeiro', 'caixa', 'comprovantes'].forEach(s => {
     const el = document.getElementById(`nav-${s}`);
     if (!el) return;
     el.classList.remove('sidebar-nav-active');
@@ -3550,6 +3714,7 @@ function mostrarSecao(secao) {
   if (secao === 'estoque') carregarEstoque();
   if (secao === 'financeiro') iniciarFinanceiro();
   if (secao === 'caixa') carregarCaixa();
+  if (secao === 'comprovantes') carregarComprovantes();
   if (secao === 'restaurantes-admin') carregarListaRestaurantes();
 }
 
@@ -3748,9 +3913,11 @@ function renderizarClientes(clientes, meta) {
         </td>
         <td class="px-4 py-3 text-right font-semibold text-gray-800">${totalGasto}</td>
         <td class="px-4 py-3 text-gray-400 text-xs">${ultimoPedido}</td>
-        <td class="px-4 py-3 text-right">
+        <td class="px-4 py-3 text-right flex items-center justify-end gap-2">
           <button onclick="abrirModalEditarCliente('${c.id}', '${nomeEscapado}', '${c.numero}', ${c.totalPedidos || 0})"
             class="text-xs text-gray-400 hover:text-gray-600 transition" title="Editar">✏️</button>
+          <button onclick="deletarCliente('${c.id}', '${nomeEscapado}')"
+            class="text-xs text-gray-400 hover:text-red-500 transition" title="Deletar">🗑️</button>
         </td>
       `;
       tbody.appendChild(tr);
@@ -3790,6 +3957,12 @@ function buscarClientes() {
     clientesPagina = 1;
     carregarClientes();
   }, 400);
+}
+
+async function deletarCliente(id, nome) {
+  if (!confirm(`Deletar o cliente "${nome || 'sem nome'}"?\n\nIsso removerá o histórico de fidelidade deste cliente.`)) return;
+  const res = await fetch(`/admin/clientes/${id}`, { method: 'DELETE', headers: getHeaders() });
+  if (res.ok) carregarClientes();
 }
 
 // ── Importar PDF / Foto ───────────────────────────────────────────────────────
@@ -5135,7 +5308,7 @@ async function salvarConfiguracoes() {
   if (idx >= 0) Object.assign(restaurantes[idx], json.data);
   if (userRole === 'restaurante') {
     document.getElementById('user-label').textContent = json.data.nome;
-    restauranteInfo = { ...restauranteInfo, nome: json.data.nome };
+    restauranteInfo = { ...restauranteInfo, nome: json.data.nome, moeda: json.data.moeda };
   }
 
   document.getElementById('cfg-senha').value = '';
@@ -5565,7 +5738,7 @@ async function abrirModalDisparar() {
         data.forEach(p => {
           const opt = document.createElement('option');
           opt.value = p.id;
-          const unidade = p.tipo === 'PEDIDOS' ? `${p.meta} pedidos` : `R$ ${p.meta}`;
+          const unidade = p.tipo === 'PEDIDOS' ? `${p.meta} pedidos` : `${getMoeda() || 'R$'} ${p.meta}`;
           opt.textContent = `🏆 ${p.nome} (${unidade}+)`;
           sel.appendChild(opt);
         });
@@ -5833,6 +6006,114 @@ function fecharModalHistorico() {
 }
 
 // ── Caixa ─────────────────────────────────────────────────────────────────────
+// ── Comprovantes ──────────────────────────────────────────────────────────────
+let comprovantesOrdem = 'desc';
+
+async function carregarComprovantes() {
+  const rid = restauranteAtual;
+  if (!rid) return;
+  const filtro = document.getElementById('comprovantes-filtro')?.value ?? '';
+  const inicio = document.getElementById('comprovantes-inicio')?.value || '';
+  const fim = document.getElementById('comprovantes-fim')?.value || '';
+  const params = new URLSearchParams({ restauranteId: rid });
+  if (filtro !== '') params.set('pago', filtro);
+  if (inicio) params.set('inicio', inicio);
+  if (fim) params.set('fim', fim);
+
+  const res = await fetch(`/admin/comprovantes?${params}`, { headers: getHeaders() });
+  const { data } = await res.json();
+
+  // Atualiza botão de ordem
+  const ordemBtn = document.getElementById('comprovantes-ordem-btn');
+  if (ordemBtn) ordemBtn.textContent = comprovantesOrdem === 'desc' ? '↓ Mais recentes' : '↑ Mais antigos';
+
+  const tbody = document.getElementById('comprovantes-tbody');
+  const vazio = document.getElementById('comprovantes-vazio');
+  const totalLinha = document.getElementById('comprovantes-total-linha');
+
+  if (!data?.length) {
+    tbody.innerHTML = '';
+    vazio.classList.remove('hidden');
+    totalLinha.textContent = '';
+    return;
+  }
+  vazio.classList.add('hidden');
+
+  // Ordena client-side
+  const ordenados = [...data].sort((a, b) => {
+    const diff = new Date(a.createdAt) - new Date(b.createdAt);
+    return comprovantesOrdem === 'desc' ? -diff : diff;
+  });
+
+  const locale = idioma === 'pt' ? 'pt-BR' : 'es-PY';
+  const moedaGlobal = getMoeda() || 'R$';
+
+  tbody.innerHTML = ordenados.map((p, idx) => {
+    const moeda = p.restaurante?.moeda || moedaGlobal;
+    const total = formatarPreco(p.total, moeda);
+    const dt = new Date(p.createdAt).toLocaleString(locale, { day:'2-digit', month:'2-digit', year:'numeric', hour:'2-digit', minute:'2-digit' });
+    const isMesa = p.origem === 'MESA';
+    const isRet = !isMesa && (!p.localizacao || p.localizacao === 'Retirada no balcão');
+    const pref = isMesa ? 'M' : isRet ? 'B' : 'D';
+    const numFmt = p.numeroDia ? `${pref}${p.numeroDia}` : p.id.split('-')[0].toUpperCase();
+    const isPdf = p.comprovanteUrl?.toLowerCase().endsWith('.pdf');
+    const itensTexto = Array.isArray(p.itens)
+      ? p.itens.map(i => `${i.quantidade || 1}x ${i.nome}`).join(', ')
+      : '';
+    const statusCor = p.pago ? 'bg-green-100 text-green-700' : 'bg-amber-100 text-amber-700';
+    const statusLabel = p.pago ? '✅ Pago' : '⏳ Aguardando';
+    const comprovanteLink = isPdf
+      ? `<a href="${p.comprovanteUrl}" target="_blank" class="inline-flex items-center gap-1 text-red-600 hover:text-red-700 font-medium"><span>📄</span> PDF</a>`
+      : `<button onclick="abrirComprovanteModal('${p.id}','${p.comprovanteUrl}')" class="inline-flex items-center gap-1 text-blue-600 hover:text-blue-700 font-medium"><span>🖼️</span> Ver</button>`;
+    const acaoBotao = !p.pago
+      ? `<button onclick="confirmarPagoComprovante('${p.id}')" class="bg-green-500 hover:bg-green-600 text-white text-xs font-semibold px-2.5 py-1 rounded-lg transition whitespace-nowrap">✅ Confirmar</button>`
+      : `<span class="text-green-600 text-xs font-medium">Confirmado</span>`;
+    const rowBg = idx % 2 === 0 ? '' : 'bg-gray-50/60';
+    return `<tr class="${rowBg} border-b border-gray-50 hover:bg-orange-50/30 transition">
+      <td class="px-4 py-3 font-bold text-gray-700 whitespace-nowrap">#${numFmt}</td>
+      <td class="px-4 py-3 text-gray-500 whitespace-nowrap text-xs">${dt}</td>
+      <td class="px-4 py-3 text-gray-700 font-medium">${p.clienteNome || p.clienteNumero}</td>
+      <td class="px-4 py-3 text-gray-500 text-xs max-w-[200px] truncate" title="${itensTexto}">${itensTexto}</td>
+      <td class="px-4 py-3 font-bold text-gray-800 text-right whitespace-nowrap">${total}</td>
+      <td class="px-4 py-3 text-gray-500 text-xs whitespace-nowrap">${p.metodoPagamento || '—'}</td>
+      <td class="px-4 py-3 text-center"><span class="text-xs px-2 py-0.5 rounded-full font-medium ${statusCor}">${statusLabel}</span></td>
+      <td class="px-4 py-3 text-center">${comprovanteLink}</td>
+      <td class="px-4 py-3 text-center">${acaoBotao}</td>
+    </tr>`;
+  }).join('');
+
+  // Totalizador
+  const totalGeral = ordenados.reduce((s, p) => s + (p.total || 0), 0);
+  const moedaT = ordenados[0]?.restaurante?.moeda || moedaGlobal;
+  totalLinha.textContent = `${ordenados.length} comprovante(s) · Total: ${formatarPreco(totalGeral, moedaT)}`;
+}
+
+function abrirComprovanteModal(pedidoId, url) {
+  const isPdf = url.toLowerCase().endsWith('.pdf');
+  const imgWrap = document.getElementById('modal-comprovante-img-wrap');
+  const pdfWrap = document.getElementById('modal-comprovante-pdf-wrap');
+  imgWrap.classList.add('hidden');
+  pdfWrap.classList.add('hidden');
+  if (isPdf) {
+    document.getElementById('modal-comprovante-iframe').src = url;
+    document.getElementById('modal-comprovante-pdf-link').href = url;
+    pdfWrap.classList.remove('hidden');
+  } else {
+    document.getElementById('modal-comprovante-img').src = url;
+    document.getElementById('modal-comprovante-link').href = url;
+    imgWrap.classList.remove('hidden');
+  }
+  document.getElementById('modal-comprovante-confirmar').onclick = () => executarMarcarPago(pedidoId);
+  document.getElementById('modal-comprovante').classList.remove('hidden');
+}
+
+async function confirmarPagoComprovante(pedidoId) {
+  await executarMarcarPago(pedidoId);
+  carregarComprovantes();
+}
+
+// ── Caixa ─────────────────────────────────────────────────────────────────────
+
 let caixaTurnoAtual = null;
 
 function fmtData(iso) {
@@ -6593,7 +6874,7 @@ window.addEventListener('DOMContentLoaded', () => {
           throw new Error('unauthorized');
         })
         .then(({ data }) => {
-          if (data?.length) restauranteInfo = { id: data[0].id, nome: data[0].nome, slug: data[0].slugWhatsapp };
+          if (data?.length) restauranteInfo = { id: data[0].id, nome: data[0].nome, slug: data[0].slugWhatsapp, moeda: data[0].moeda };
           iniciarDashboard();
         })
         .catch(() => {

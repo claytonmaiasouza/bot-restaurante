@@ -72,18 +72,51 @@ function idCurto(uuid) {
 
 const STATUS_VALIDOS = [
   "NOVO", "CONFIRMADO", "PAGO", "PREPARANDO",
-  "SAIU_PARA_ENTREGA", "PRONTO_PARA_RETIRADA", "ENTREGUE", "CANCELADO",
+  "SAIU_PARA_ENTREGA", "PRONTO_PARA_RETIRADA", "SERVIDO", "ENTREGUE", "CANCELADO",
 ];
 
-const NOTIFICACOES = {
-  CONFIRMADO: (id) => `✅ Seu pedido *#${id}* foi confirmado pelo restaurante! Logo começaremos a preparar. 🍽️`,
-  PAGO: (id) => `💳 Pagamento do pedido *#${id}* confirmado! Obrigado! ✅`,
-  PREPARANDO: (id) => `👨‍🍳 Seu pedido *#${id}* está sendo preparado com carinho! Em breve ficará pronto. 🍕`,
-  SAIU_PARA_ENTREGA: (id) => `🛵 Seu pedido *#${id}* saiu para entrega! Em breve chegará até você. 😊`,
-  PRONTO_PARA_RETIRADA: (id) => `🏪 Seu pedido *#${id}* está pronto! Pode vir retirar no balcão. 😊`,
-  ENTREGUE: (id) => `✅ Pedido *#${id}* entregue com sucesso! Obrigado pela preferência. 😊`,
-  CANCELADO: (id) => `❌ Seu pedido *#${id}* foi cancelado. Entre em contato com o restaurante para mais informações.`,
+function detectarIdioma(mensagens) {
+  const texto = (mensagens || [])
+    .filter(m => m.role === "cliente")
+    .slice(0, 5)
+    .map(m => m.conteudo)
+    .join(" ")
+    .toLowerCase();
+  return /\b(hola|quiero|buenos|gracias|también|necesito|cuanto|cuánto|tengo|puedo|soy|hoy|voy|dónde|cómo)\b/.test(texto) ? "es" : "pt";
+}
+
+const NOTIFICACOES_MSGS = {
+  pt: {
+    CONFIRMADO: (id) => `✅ Seu pedido *#${id}* foi confirmado pelo restaurante! Logo começaremos a preparar. 🍽️`,
+    PAGO: (id) => `💳 Pagamento do pedido *#${id}* confirmado! Obrigado! ✅`,
+    PREPARANDO: (id) => `👨‍🍳 Seu pedido *#${id}* está sendo preparado com carinho! Em breve ficará pronto. 🍕`,
+    SAIU_PARA_ENTREGA: (id) => `🛵 Seu pedido *#${id}* saiu para entrega! Em breve chegará até você. 😊`,
+    PRONTO_PARA_RETIRADA: (id) => `🏪 Seu pedido *#${id}* está pronto! Pode vir retirar no balcão. 😊`,
+    ENTREGUE: (id) => `✅ Pedido *#${id}* entregue com sucesso! Obrigado pela preferência. 😊`,
+    CANCELADO: (id) => `❌ Seu pedido *#${id}* foi cancelado. Entre em contato com o restaurante para mais informações.`,
+  },
+  es: {
+    CONFIRMADO: (id) => `✅ ¡Tu pedido *#${id}* fue confirmado por el restaurante! Pronto comenzaremos a prepararlo. 🍽️`,
+    PAGO: (id) => `💳 ¡Pago del pedido *#${id}* confirmado! ¡Gracias! ✅`,
+    PREPARANDO: (id) => `👨‍🍳 ¡Tu pedido *#${id}* se está preparando con cariño! Pronto estará listo. 🍕`,
+    SAIU_PARA_ENTREGA: (id) => `🛵 ¡Tu pedido *#${id}* salió para entrega! Pronto llegará. 😊`,
+    PRONTO_PARA_RETIRADA: (id) => `🏪 ¡Tu pedido *#${id}* está listo! Puedes venir a retirarlo en el mostrador. 😊`,
+    ENTREGUE: (id) => `✅ ¡Pedido *#${id}* entregado con éxito! ¡Gracias por tu preferencia! 😊`,
+    CANCELADO: (id) => `❌ Tu pedido *#${id}* fue cancelado. Comunícate con el restaurante para más información.`,
+  },
 };
+
+async function getNotificacao(status, numPedido, sessaoId) {
+  let idioma = "pt";
+  if (sessaoId) {
+    const sessao = await prisma.sessao.findUnique({
+      where: { id: sessaoId },
+      include: { mensagens: { where: { role: "cliente" }, orderBy: { createdAt: "asc" }, take: 5 } },
+    });
+    idioma = detectarIdioma(sessao?.mensagens || []);
+  }
+  return (NOTIFICACOES_MSGS[idioma] || NOTIFICACOES_MSGS.pt)[status]?.(numPedido);
+}
 
 // ── Middleware: autenticação (admin token ou JWT do restaurante) ───────────────
 router.use(authMiddleware);
@@ -178,14 +211,24 @@ router.patch("/pedidos/:id/status", async (req, res) => {
   }
 
   try {
+    // Maquininha de cartão e mesa: ao marcar ENTREGUE, confirma pagamento automaticamente
+    const isMaquininha = (mp) => mp && mp.toLowerCase().includes("cartão");
+    const extraData = {};
+    if (status === "ENTREGUE") {
+      const atual = await prisma.pedido.findUnique({ where: { id }, select: { metodoPagamento: true, pago: true, origem: true } });
+      if (atual && !atual.pago && (isMaquininha(atual.metodoPagamento) || atual.origem === "MESA")) {
+        extraData.pago = true;
+      }
+    }
+
     const pedido = await prisma.pedido.update({
       where: { id },
-      data: { status },
+      data: { status, ...extraData },
       include: { restaurante: { select: { nome: true, slugWhatsapp: true, moeda: true, taxaEntrega: true } } },
     });
 
-    // Notifica o cliente via WhatsApp
-    const mensagem = NOTIFICACOES[status]?.(formatNumPedido(pedido));
+    // Notifica o cliente via WhatsApp (bilíngue: detecta idioma da sessão)
+    const mensagem = await getNotificacao(status, formatNumPedido(pedido), pedido.sessaoId);
     if (mensagem) {
       await enviarMensagem(pedido.clienteNumero, mensagem, pedido.restaurante.slugWhatsapp).catch(() => {});
     }
@@ -221,7 +264,7 @@ router.patch("/pedidos/:id/pago", async (req, res) => {
     });
 
     if (novoStatus === "PAGO") {
-      const mensagem = NOTIFICACOES["PAGO"]?.(formatNumPedido(pedido));
+      const mensagem = await getNotificacao("PAGO", formatNumPedido(pedido), pedido.sessaoId);
       if (mensagem) {
         await enviarMensagem(pedido.clienteNumero, mensagem, pedido.restaurante.slugWhatsapp).catch(() => {});
       }
@@ -253,13 +296,15 @@ router.get("/motoboys", async (req, res) => {
   }
 });
 
+const normalizarTelefone = (t) => t ? t.replace(/\D/g, "") : t;
+
 router.post("/motoboys", async (req, res) => {
   try {
     const restauranteId = resolverRestauranteId(req);
     if (!restauranteId) return res.status(400).json({ error: "restauranteId obrigatório" });
     const { nome, telefone } = req.body;
     if (!nome || !telefone) return res.status(400).json({ error: "nome e telefone são obrigatórios" });
-    const motoboy = await prisma.motoboy.create({ data: { nome, telefone, restauranteId } });
+    const motoboy = await prisma.motoboy.create({ data: { nome, telefone: normalizarTelefone(telefone), restauranteId } });
     res.json({ data: motoboy });
   } catch (err) {
     res.status(500).json({ error: err.message });
@@ -271,7 +316,7 @@ router.patch("/motoboys/:id", async (req, res) => {
   const { nome, telefone, ativo } = req.body;
   const data = {};
   if (nome !== undefined) data.nome = nome;
-  if (telefone !== undefined) data.telefone = telefone;
+  if (telefone !== undefined) data.telefone = normalizarTelefone(telefone);
   if (ativo !== undefined) data.ativo = ativo;
   try {
     const motoboy = await prisma.motoboy.update({ where: { id }, data });
@@ -558,6 +603,7 @@ router.get("/conversas", async (req, res) => {
   const { encerradas } = req.query;
   const where = encerradas === "true" ? { estado: "FINALIZADO" } : { estado: { not: "FINALIZADO" } };
   if (restauranteId) where.restauranteId = restauranteId;
+  where.clienteNumero = { not: { startsWith: "mesa-" } };
 
   try {
     const sessoes = await prisma.sessao.findMany({
@@ -1916,10 +1962,11 @@ router.get("/mesas", async (req, res) => {
 
 router.post("/pedidos/mesa", async (req, res) => {
   const restauranteId = resolverRestauranteId(req);
-  const { mesa, itens, metodoPagamento } = req.body;
+  const { mesa, itens, metodoPagamento, status } = req.body;
   if (!mesa || !itens?.length) return res.status(400).json({ error: "mesa e itens são obrigatórios" });
   const total = itens.reduce((s, i) => s + i.preco * i.quantidade, 0);
   const numeroDia = await proximoNumeroDia(restauranteId);
+  const statusPedido = status === "NOVO" ? "NOVO" : "CONFIRMADO";
   const sessao = await prisma.sessao.create({
     data: { clienteNumero: `mesa-${mesa}`, clienteNome: `Mesa ${mesa}`, restauranteId, estado: "FINALIZADO", carrinho: itens },
   });
@@ -1928,10 +1975,45 @@ router.post("/pedidos/mesa", async (req, res) => {
       sessaoId: sessao.id, restauranteId,
       clienteNumero: `mesa-${mesa}`, clienteNome: `Mesa ${mesa}`,
       itens, total, metodoPagamento: metodoPagamento || null,
-      status: "CONFIRMADO", mesa: Number(mesa), origem: "MESA", numeroDia,
+      status: statusPedido, mesa: Number(mesa), origem: "MESA", numeroDia,
     },
   });
+  const io = req.app.get("io");
+  io?.to("admin").emit("pedido:novo", { restauranteId, pedido });
   res.json(pedido);
+});
+
+router.post("/mesas/:num/fechar", async (req, res) => {
+  const restauranteId = resolverRestauranteId(req);
+  const mesa = Number(req.params.num);
+  const { metodoPagamento } = req.body;
+  const io = req.app.get("io");
+
+  const pedidosAtivos = await prisma.pedido.findMany({
+    where: { restauranteId, mesa, status: { notIn: ["ENTREGUE", "CANCELADO"] } },
+    include: { restaurante: { select: { slugWhatsapp: true } } },
+  });
+
+  if (!pedidosAtivos.length) return res.status(404).json({ error: "Nenhum pedido ativo para esta mesa" });
+
+  const todosItens = pedidosAtivos.flatMap(p => Array.isArray(p.itens) ? p.itens : []);
+  const totalCombinado = todosItens.reduce((s, i) => s + i.preco * (i.quantidade || 1), 0);
+
+  const upd = { status: "ENTREGUE", pago: true };
+  if (metodoPagamento) upd.metodoPagamento = metodoPagamento;
+
+  await prisma.pedido.updateMany({
+    where: { id: { in: pedidosAtivos.map(p => p.id) } },
+    data: upd,
+  });
+
+  const slug = pedidosAtivos[0]?.restaurante?.slugWhatsapp;
+  pedidosAtivos.forEach(p => {
+    io?.to("admin").emit("pedido:status", { pedidoId: p.id, status: "ENTREGUE" });
+    if (slug) io?.to(`restaurante:${slug}`).emit("pedido:status", { pedidoId: p.id, status: "ENTREGUE" });
+  });
+
+  res.json({ total: totalCombinado, itens: todosItens, pedidosEncerrados: pedidosAtivos.length });
 });
 
 router.patch("/pedidos/:id/mesa", async (req, res) => {
@@ -2056,6 +2138,38 @@ router.get("/caixa/historico", async (req, res) => {
       take: 30,
     });
     res.json({ data: turnos });
+  } catch (err) {
+    res.status(500).json({ error: err.message });
+  }
+});
+
+// ── GET /admin/comprovantes — pedidos com comprovante de pagamento ────────────
+router.get("/comprovantes", async (req, res) => {
+  const restauranteId = resolverRestauranteId(req);
+  if (!restauranteId) return res.status(400).json({ error: "restauranteId obrigatório" });
+  const { pago, inicio, fim } = req.query;
+  const where = { restauranteId, comprovanteUrl: { not: null } };
+  if (pago === "true") where.pago = true;
+  if (pago === "false") where.pago = false;
+  if (inicio || fim) {
+    where.createdAt = {};
+    if (inicio) where.createdAt.gte = new Date(inicio + "T00:00:00");
+    if (fim) where.createdAt.lte = new Date(fim + "T23:59:59");
+  }
+  try {
+    const pedidos = await prisma.pedido.findMany({
+      where,
+      orderBy: { createdAt: "desc" },
+      take: 500,
+      select: {
+        id: true, numeroDia: true, origem: true, localizacao: true,
+        clienteNome: true, clienteNumero: true,
+        total: true, metodoPagamento: true, pago: true, status: true,
+        comprovanteUrl: true, createdAt: true, itens: true,
+        restaurante: { select: { moeda: true } },
+      },
+    });
+    res.json({ data: pedidos });
   } catch (err) {
     res.status(500).json({ error: err.message });
   }

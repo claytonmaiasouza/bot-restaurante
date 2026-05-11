@@ -1530,7 +1530,7 @@
         <p class="text-sm text-gray-500 mb-4">Verifique o comprovante acima e confirme o pagamento.</p>
         <div class="flex gap-2">
           <button onclick="fecharModalComprovante()" class="flex-1 px-4 py-2 border border-gray-300 rounded-lg text-sm text-gray-700 hover:bg-gray-50 transition">Cancelar</button>
-          <button id="modal-comprovante-confirmar" class="flex-1 px-4 py-2 bg-green-500 hover:bg-green-600 text-white rounded-lg text-sm font-semibold transition">✅ Pago</button>
+          <button id="modal-comprovante-confirmar" class="flex-1 px-4 py-2 bg-green-500 hover:bg-green-600 text-white rounded-lg text-sm font-semibold transition">✅ Confirmar Pagamento</button>
         </div>
       </div>
     </div>
@@ -3474,6 +3474,10 @@ function obterAcoes(pedido) {
   }
   if (pedido.status === 'PRONTO_PARA_RETIRADA' && pedido.origem === 'MESA') {
     return [{ label: '✅ Servido à mesa', status: 'SERVIDO', cor: 'bg-green-500 hover:bg-green-600' }];
+  }
+  // Pedido NOVO com comprovante pendente: só permite cancelar (confirmação via modal do comprovante)
+  if (pedido.status === 'NOVO' && pedido.comprovanteUrl) {
+    return [{ label: t('acao.cancelar'), status: 'CANCELADO', cor: 'bg-red-100 hover:bg-red-200 text-red-700' }];
   }
   return getAcoes(pedido.status);
 }

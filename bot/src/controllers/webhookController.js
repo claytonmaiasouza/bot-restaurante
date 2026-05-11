@@ -22,7 +22,7 @@ function detectarIdioma(mensagens) {
 
 const T = {
   pt: {
-    comprovanteRecebido: "✅ Comprovante recebido! Seu pedido foi confirmado e a cozinha já foi notificada. 👨‍🍳",
+    comprovanteRecebido: "✅ Comprovante recebido! Aguardando confirmação do pagamento pelo restaurante. Em breve você será notificado. 🍽️",
     fechado: (nome, desc) =>
       `Olá${nome ? `, ${nome}` : ""}! 😊\n\nNo momento estamos fora do horário de atendimento.\n\n🕐 *Horário de funcionamento:*\n${desc}\n\nObrigado pelo contato! Assim que abrirmos, teremos o maior prazer em atendê-lo. 🍽️`,
     formaPagamento: "📍 Localização recebida!\n\nQual será a forma de pagamento?\n\n💵 *Dinheiro*\n💳 *Cartão* (maquininha)\n🏦 *Transferência* (PIX/transferência bancária)",
@@ -33,7 +33,7 @@ const T = {
     maquininha: "\n\n💳 O entregador levará a maquininha de cartão.",
   },
   es: {
-    comprovanteRecebido: "✅ ¡Comprobante recibido! Tu pedido fue confirmado y ya notificamos a la cocina. 👨‍🍳",
+    comprovanteRecebido: "✅ ¡Comprobante recibido! Esperando confirmación del pago por el restaurante. Pronto te notificaremos. 🍽️",
     fechado: (nome, desc) =>
       `¡Hola${nome ? `, ${nome}` : ""}! 😊\n\nEn este momento estamos fuera del horario de atención.\n\n🕐 *Horario de atención:*\n${desc}\n\n¡Gracias por contactarnos! En cuanto abramos, será un placer atenderte. 🍽️`,
     formaPagamento: "📍 ¡Ubicación recibida!\n\n¿Cuál será el método de pago?\n\n💵 *Efectivo*\n💳 *Tarjeta* (datáfono)\n🏦 *Transferencia* (transferencia bancaria)",

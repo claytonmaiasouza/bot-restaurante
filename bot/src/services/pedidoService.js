@@ -237,12 +237,11 @@ async function atualizarFidelidade(numero, nome, valorPedido, restauranteId) {
 async function salvarComprovante(sessaoId, comprovanteUrl) {
   const pedido = await prisma.pedido.findFirst({ where: { sessaoId } });
   if (!pedido) return { pedidoId: null, statusChanged: false };
-  const autoConfirmar = pedido.status === "NOVO" && pedido.metodoPagamento === "Transferência";
   const atualizado = await prisma.pedido.update({
     where: { id: pedido.id },
-    data: { comprovanteUrl, ...(autoConfirmar ? { status: "CONFIRMADO" } : {}) },
+    data: { comprovanteUrl },
   });
-  return { pedidoId: pedido.id, pedido: atualizado, statusChanged: autoConfirmar };
+  return { pedidoId: pedido.id, pedido: atualizado, statusChanged: false };
 }
 
 async function notificarStatusPedido(pedidoId, novoStatus) {

@@ -3293,11 +3293,18 @@ async function fecharContaMesa() {
   if (restauranteAtual) params.set('restauranteId', restauranteAtual);
 
   // Fecha todos os pedidos ativos da mesa de uma vez
-  const res = await fetch(`/admin/mesas/${mesaNum}/fechar?${params}`, {
-    method: 'POST',
-    headers: { ...getHeaders(), 'Content-Type': 'application/json' },
-    body: JSON.stringify({ metodoPagamento }),
-  });
+  let res;
+  try {
+    res = await fetch(`/admin/mesas/${mesaNum}/fechar?${params}`, {
+      method: 'POST',
+      headers: { ...getHeaders(), 'Content-Type': 'application/json' },
+      body: JSON.stringify({ metodoPagamento }),
+    });
+  } catch (err) {
+    if (btn) { btn.disabled = false; btn.innerHTML = textoOriginal; }
+    mostrarToast('Erro de rede ao fechar a mesa. Tente novamente.');
+    return;
+  }
 
   if (!res.ok) {
     if (btn) { btn.disabled = false; btn.innerHTML = textoOriginal; }
@@ -3306,6 +3313,7 @@ async function fecharContaMesa() {
   }
 
   const { total, itens } = await res.json();
+  if (btn) { btn.disabled = false; btn.innerHTML = textoOriginal; }
   imprimirContaMesa(mesaNum, itens.length ? itens : mesaCarrinho, total, metodoPagamento);
   fecharModalMesa();
   carregarMesas();

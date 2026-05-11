@@ -45,6 +45,19 @@ const T = {
   },
 };
 
+function detectarMetodoPagamento(mensagens) {
+  const clienteMsgs = (mensagens || [])
+    .filter(m => m.role === "cliente")
+    .map(m => m.conteudo)
+    .reverse();
+  for (const texto of clienteMsgs) {
+    if (/dinh|efetiv|efectiv|\bcash\b|\bbillete\b/i.test(texto)) return "Dinheiro";
+    if (/cart[aã]|cartao|m[aá]quin|t[ae]rjet[ae]|d[eé]bit|cr[eé]dit/i.test(texto)) return "Cartão";
+    if (/transf|trasf|tranf|\btrans\b|\bpix\b|\bbanco\b/i.test(texto)) return "Transferência";
+  }
+  return null;
+}
+
 // ── Verificação de horário de atendimento ─────────────────────────────────────
 
 function verificarHorario(horarioAtendimento) {
@@ -277,27 +290,44 @@ async function receberMensagem(req, res) {
       return;
     }
 
-    // ── f) Localização → guardar e perguntar pagamento ───────────────────────
+    // ── f) Localização → guardar e perguntar pagamento (se não informado antes) ─
     if (
       sessao.estado === "AGUARDANDO_LOCALIZACAO" &&
       eMensagemDeLocalizacao(mensagem)
     ) {
       const localizacao = extrairLocalizacao(mensagem);
-
       await salvarMensagem(sessao.id, "cliente", `[localização] ${localizacao}`);
-      await atualizarSessao(sessao.id, {
-        estado: "AGUARDANDO_PAGAMENTO",
-        localizacaoPendente: localizacao,
-      });
 
-      const msgPagamento = T[idioma].formaPagamento;
-
-      await salvarMensagem(sessao.id, "bot", msgPagamento);
-      io?.to("admin").emit("conversa:mensagem", {
-        sessaoId: sessao.id,
-        mensagem: { role: "bot", conteudo: msgPagamento, createdAt: new Date() },
-      });
-      await enviarMensagem(clienteNumero, msgPagamento, instanceName);
+      const metodoPago = detectarMetodoPagamento(sessao.mensagens);
+      if (metodoPago === "Dinheiro") {
+        await atualizarSessao(sessao.id, { estado: "AGUARDANDO_TROCO", localizacaoPendente: localizacao });
+        const msgTroco = T[idioma].troco;
+        await salvarMensagem(sessao.id, "bot", msgTroco);
+        io?.to("admin").emit("conversa:mensagem", { sessaoId: sessao.id, mensagem: { role: "bot", conteudo: msgTroco, createdAt: new Date() } });
+        await enviarMensagem(clienteNumero, msgTroco, instanceName);
+      } else if (metodoPago === "Cartão") {
+        const pedido = await finalizarPedido(sessao.id, localizacao, "delivery", "Cartão", T[idioma].maquininha, idioma);
+        io?.to("admin").emit("conversa:encerrada", { sessaoId: sessao.id });
+        io?.to(`restaurante:${restaurante.slugWhatsapp}`).emit("pedido:novo", { restauranteId: restaurante.id, pedido });
+      } else if (metodoPago === "Transferência") {
+        const dadosTrans = restaurante.dadosTransferencia
+          ? `\n\n🏦 *Dados para transferência:*\n${restaurante.dadosTransferencia}` : "";
+        const pedido = await finalizarPedido(sessao.id, localizacao, "delivery", "Transferência", dadosTrans, idioma);
+        io?.to("admin").emit("conversa:encerrada", { sessaoId: sessao.id });
+        io?.to(`restaurante:${restaurante.slugWhatsapp}`).emit("pedido:novo", { restauranteId: restaurante.id, pedido });
+      } else {
+        await atualizarSessao(sessao.id, {
+          estado: "AGUARDANDO_PAGAMENTO",
+          localizacaoPendente: localizacao,
+        });
+        const msgPagamento = T[idioma].formaPagamento;
+        await salvarMensagem(sessao.id, "bot", msgPagamento);
+        io?.to("admin").emit("conversa:mensagem", {
+          sessaoId: sessao.id,
+          mensagem: { role: "bot", conteudo: msgPagamento, createdAt: new Date() },
+        });
+        await enviarMensagem(clienteNumero, msgPagamento, instanceName);
+      }
       return;
     }
 
@@ -308,7 +338,7 @@ async function receberMensagem(req, res) {
       // Tolerância a erros de digitação via stems comuns
       if (/dinh|efetiv|efectiv|\bcash\b|\bbillete\b/i.test(texto)) metodoPagamento = "Dinheiro";
       else if (/cart[aã]|cartao|m[aá]quin|t[ae]rjet[ae]|d[eé]bit|cr[eé]dit/i.test(texto)) metodoPagamento = "Cartão";
-      else if (/transf|trasf|tranf|\bpix\b|\bbanco\b/i.test(texto)) metodoPagamento = "Transferência";
+      else if (/transf|trasf|tranf|\btrans\b|\bpix\b|\bbanco\b/i.test(texto)) metodoPagamento = "Transferência";
 
       if (!metodoPagamento) {
         const msg = T[idioma].pagamentoInvalido;
@@ -457,25 +487,42 @@ async function receberMensagem(req, res) {
       }
     }
 
-    // ── g) Pedido pronto → perguntar pagamento antes de finalizar ────────────
+    // ── g) Pedido pronto → finalizar direto se pagamento já foi informado ───────
     if (pedidoPronto && novoEstado === "FINALIZADO") {
       sessao.carrinho = carrinhoAtualizado;
       const localizacao = tipoEntrega === "retirada" ? "Retirada no balcão" : textoCliente;
 
-      // Guarda localização e muda estado para aguardar pagamento
-      await atualizarSessao(sessao.id, {
-        estado: "AGUARDANDO_PAGAMENTO",
-        localizacaoPendente: localizacao,
-      });
-
-      const msgPagamento = T[idioma].formaPagamentoPedido;
-
-      await salvarMensagem(sessao.id, "bot", msgPagamento);
-      io?.to("admin").emit("conversa:mensagem", {
-        sessaoId: sessao.id,
-        mensagem: { role: "bot", conteudo: msgPagamento, createdAt: new Date() },
-      });
-      await enviarMensagem(clienteNumero, msgPagamento, instanceName);
+      const metodoPago = detectarMetodoPagamento([...sessao.mensagens, { role: "cliente", conteudo: textoCliente }]);
+      if (metodoPago === "Dinheiro") {
+        await atualizarSessao(sessao.id, { estado: "AGUARDANDO_TROCO", localizacaoPendente: localizacao });
+        const msgTroco = T[idioma].troco;
+        await salvarMensagem(sessao.id, "bot", msgTroco);
+        io?.to("admin").emit("conversa:mensagem", { sessaoId: sessao.id, mensagem: { role: "bot", conteudo: msgTroco, createdAt: new Date() } });
+        await enviarMensagem(clienteNumero, msgTroco, instanceName);
+      } else if (metodoPago === "Cartão") {
+        const pedido = await finalizarPedido(sessao.id, localizacao, tipoEntrega, "Cartão",
+          tipoEntrega === "delivery" ? T[idioma].maquininha : "", idioma);
+        io?.to("admin").emit("conversa:encerrada", { sessaoId: sessao.id });
+        io?.to(`restaurante:${restaurante.slugWhatsapp}`).emit("pedido:novo", { restauranteId: restaurante.id, pedido });
+      } else if (metodoPago === "Transferência") {
+        const dadosTrans = restaurante.dadosTransferencia
+          ? `\n\n🏦 *Dados para transferência:*\n${restaurante.dadosTransferencia}` : "";
+        const pedido = await finalizarPedido(sessao.id, localizacao, tipoEntrega, "Transferência", dadosTrans, idioma);
+        io?.to("admin").emit("conversa:encerrada", { sessaoId: sessao.id });
+        io?.to(`restaurante:${restaurante.slugWhatsapp}`).emit("pedido:novo", { restauranteId: restaurante.id, pedido });
+      } else {
+        await atualizarSessao(sessao.id, {
+          estado: "AGUARDANDO_PAGAMENTO",
+          localizacaoPendente: localizacao,
+        });
+        const msgPagamento = T[idioma].formaPagamentoPedido;
+        await salvarMensagem(sessao.id, "bot", msgPagamento);
+        io?.to("admin").emit("conversa:mensagem", {
+          sessaoId: sessao.id,
+          mensagem: { role: "bot", conteudo: msgPagamento, createdAt: new Date() },
+        });
+        await enviarMensagem(clienteNumero, msgPagamento, instanceName);
+      }
     }
   } catch (err) {
     console.error(`[webhook] erro (${restaurante.slugWhatsapp}):`, err.message);

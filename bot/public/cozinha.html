@@ -76,6 +76,7 @@ if (!slug || !token) {
 
 let pedidos = [];
 let prevCount = 0;
+let nomeRestaurante = 'Cozinha';
 
 function beep() {
   try {
@@ -119,7 +120,63 @@ function origemTag(p) {
   return `<span class="text-xs bg-blue-500/25 text-blue-300 px-2 py-0.5 rounded-full font-medium">🛵 Delivery</span>`;
 }
 
+function imprimirPedido(p) {
+  const itens = Array.isArray(p.itens) ? p.itens : [];
+  const num = numPedido(p);
+  const hora = new Date(p.createdAt).toLocaleTimeString('pt-BR', { hour: '2-digit', minute: '2-digit' });
+  const isMesa = p.origem === 'MESA';
+  const isRetirada = !p.localizacao || p.localizacao === 'Retirada no balcão';
+  const origemLabel = isMesa ? `🪑 Mesa ${p.mesa}` : isRetirada ? '🏪 Retirada no balcão' : '🛵 Delivery';
+  const enderecoHtml = !isMesa && !isRetirada && p.localizacao
+    ? `<p class="endereco">${p.localizacao}</p>` : '';
+
+  const itensHtml = itens.map(i => `
+    <tr>
+      <td class="qty">${i.quantidade || 1}×</td>
+      <td class="nome">${i.nome}</td>
+    </tr>`).join('');
+
+  const html = `<!DOCTYPE html><html><head><meta charset="UTF-8">
+<style>
+  * { margin:0; padding:0; box-sizing:border-box; }
+  body { font-family:'Courier New',monospace; font-size:14px; width:80mm; padding:10px; }
+  .center { text-align:center; }
+  .divider { border-top:1px dashed #000; margin:7px 0; }
+  .num { font-size:32px; font-weight:900; text-align:center; letter-spacing:3px; margin:6px 0; }
+  .hora { text-align:center; font-size:12px; color:#555; margin-bottom:2px; }
+  .restaurante { text-align:center; font-weight:bold; font-size:15px; margin-bottom:2px; }
+  table { width:100%; border-collapse:collapse; margin:4px 0; }
+  .qty { font-size:22px; font-weight:900; width:2.8em; vertical-align:top; padding:4px 6px 4px 0; }
+  .nome { font-size:17px; font-weight:bold; vertical-align:top; padding:4px 0; line-height:1.3; }
+  .origem { text-align:center; font-size:14px; font-weight:bold; margin-top:4px; }
+  .endereco { text-align:center; font-size:11px; color:#444; margin-top:3px; word-break:break-word; }
+  @media print { body { width:auto; } }
+</style></head><body>
+  <p class="restaurante">${nomeRestaurante}</p>
+  <div class="divider"></div>
+  <p class="num">#${num}</p>
+  <p class="hora">${hora}</p>
+  <div class="divider"></div>
+  <table>${itensHtml}</table>
+  <div class="divider"></div>
+  <p class="origem">${origemLabel}</p>
+  ${enderecoHtml}
+</body></html>`;
+
+  const win = window.open('', '_blank', 'width=420,height=600');
+  if (!win) return;
+  win.document.write(html);
+  win.document.close();
+  win.focus();
+  win.print();
+  win.addEventListener('afterprint', () => win.close());
+}
+
 async function acao(id, rota) {
+  if (rota === 'iniciar') {
+    const p = pedidos.find(x => x.id === id);
+    if (p) imprimirPedido(p);
+  }
   const btn = document.querySelector(`[data-pedido="${id}"] .btn-acao`);
   if (btn) { btn.disabled = true; btn.textContent = '...'; }
   try {
@@ -189,7 +246,8 @@ async function carregar() {
     prevCount = total;
     pedidos = data;
 
-    document.getElementById('nome-restaurante').textContent = restaurante?.nome || 'Cozinha';
+    nomeRestaurante = restaurante?.nome || 'Cozinha';
+    document.getElementById('nome-restaurante').textContent = nomeRestaurante;
     document.getElementById('ultimo-update').textContent = `Atualizado ${new Date().toLocaleTimeString('pt-BR',{hour:'2-digit',minute:'2-digit',second:'2-digit'})}`;
 
     const confirmados = data.filter(p => p.status === 'CONFIRMADO' || p.status === 'PAGO');

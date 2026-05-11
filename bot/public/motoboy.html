@@ -232,7 +232,10 @@ function criarCardDisponivel(p, moeda) {
       <span class="text-xl font-black">#${numPedido(p)}</span>
       <span class="text-sm font-bold text-orange-500">${fmtValor(p.total, moeda)}</span>
     </div>
-    ${p.clienteNome ? `<p class="text-sm text-gray-600 mb-2">👤 ${p.clienteNome}</p>` : ''}
+    <div class="flex items-center gap-3 mb-2 flex-wrap">
+      ${p.clienteNome ? `<span class="text-sm text-gray-600">👤 ${p.clienteNome}</span>` : ''}
+      ${p.clienteNumero ? `<a href="https://wa.me/${p.clienteNumero}" target="_blank" class="text-xs text-emerald-600 font-medium bg-emerald-50 border border-emerald-200 px-2 py-0.5 rounded-full inline-flex items-center gap-1 hover:bg-emerald-100 transition">📱 ${p.clienteNumero}</a>` : ''}
+    </div>
     <div class="text-xs text-gray-500 space-y-0.5 mb-3">
       ${itens.slice(0,4).map(i => `<div>${i.quantidade||1}× ${i.nome}</div>`).join('')}
       ${itens.length > 4 ? `<div class="text-gray-400">+ ${itens.length-4} item(s)...</div>` : ''}
@@ -267,7 +270,10 @@ function criarCardMeu(p, moeda) {
       </div>
       <span class="text-sm font-bold text-blue-600">${fmtValor(p.total, moeda)}</span>
     </div>
-    ${p.clienteNome ? `<p class="text-sm text-gray-600 mb-2">👤 ${p.clienteNome}</p>` : ''}
+    <div class="flex items-center gap-3 mb-2 flex-wrap">
+      ${p.clienteNome ? `<span class="text-sm text-gray-600">👤 ${p.clienteNome}</span>` : ''}
+      ${p.clienteNumero ? `<a href="https://wa.me/${p.clienteNumero}" target="_blank" class="text-xs text-emerald-600 font-medium bg-emerald-50 border border-emerald-200 px-2 py-0.5 rounded-full inline-flex items-center gap-1 hover:bg-emerald-100 transition">📱 ${p.clienteNumero}</a>` : ''}
+    </div>
     <div class="text-xs text-gray-500 space-y-0.5 mb-3">
       ${itens.slice(0,4).map(i => `<div>${i.quantidade||1}× ${i.nome}</div>`).join('')}
       ${itens.length > 4 ? `<div class="text-gray-400">+ ${itens.length-4} item(s)...</div>` : ''}

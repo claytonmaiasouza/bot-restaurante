@@ -132,7 +132,7 @@ async function acao(id, rota) {
 
 function criarCard(p) {
   const itens = Array.isArray(p.itens) ? p.itens : [];
-  const isConf = p.status === 'CONFIRMADO';
+  const isConf = p.status === 'CONFIRMADO' || p.status === 'PAGO';
   const btnClasse = isConf
     ? 'bg-amber-500 hover:bg-amber-400 active:bg-amber-600 text-black'
     : 'bg-emerald-500 hover:bg-emerald-400 active:bg-emerald-600 text-black';
@@ -197,7 +197,7 @@ async function carregar() {
     document.getElementById('nome-restaurante').textContent = restaurante?.nome || 'Cozinha';
     document.getElementById('ultimo-update').textContent = `Atualizado ${new Date().toLocaleTimeString('pt-BR',{hour:'2-digit',minute:'2-digit',second:'2-digit'})}`;
 
-    const confirmados = data.filter(p => p.status === 'CONFIRMADO');
+    const confirmados = data.filter(p => p.status === 'CONFIRMADO' || p.status === 'PAGO');
     const preparando  = data.filter(p => p.status === 'PREPARANDO');
 
     document.getElementById('count-confirmado').textContent = confirmados.length;

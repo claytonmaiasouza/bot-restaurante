@@ -9,8 +9,10 @@
   <style>
     .card-new { animation: slideDown 0.3s ease; }
     @keyframes slideDown { from { opacity:0; transform:translateY(-12px); } to { opacity:1; transform:translateY(0); } }
-    ::-webkit-scrollbar { width: 4px; height: 4px; }
-    ::-webkit-scrollbar-thumb { background: #cbd5e0; border-radius: 9999px; }
+    ::-webkit-scrollbar { width: 8px; height: 8px; }
+    ::-webkit-scrollbar-thumb { background: #94a3b8; border-radius: 9999px; }
+    ::-webkit-scrollbar-thumb:hover { background: #64748b; }
+    ::-webkit-scrollbar-track { background: transparent; }
     .sidebar-nav-item {
       display: flex; align-items: center; gap: 10px;
       padding: 9px 12px; border-radius: 10px;
@@ -27,8 +29,13 @@
     .kanban-col.col-collapsed .kanban-cards { display: none; }
     .kanban-col-header { padding: 10px 12px; display: flex; align-items: center; justify-content: space-between; border-bottom: 1px solid #e2e8f0; }
     .kanban-cards { display: flex; flex-direction: column; gap: 8px; padding: 8px; overflow-y: auto; }
-    #main-sidebar { transition: width 0.2s ease; }
-    #main-sidebar.sidebar-hidden { width: 0 !important; overflow: hidden; padding: 0; }
+    #main-sidebar { position: fixed; left: 0; top: 0; bottom: 0; width: 240px; overflow: hidden; transition: width 0.2s ease; z-index: 20; }
+    #main-sidebar.sidebar-hidden { width: 0 !important; }
+    html, body { height: 100%; margin: 0; }
+    #app { height: 100vh; }
+    #main-scroll { position: fixed; left: 240px; right: 0; top: 0; bottom: 0; overflow-y: auto; overflow-x: hidden; transition: left 0.2s ease; z-index: 1; }
+    #main-scroll.sidebar-hidden { left: 28px; }
+    #login { display: flex; align-items: center; justify-content: center; min-height: 100vh; }
   </style>
 </head>
 <body class="bg-[#f4f6f8]">
@@ -115,14 +122,14 @@
   </div>
 
   <!-- PAINEL PRINCIPAL (sidebar + conteúdo) -->
-  <div id="painel-principal" class="hidden flex flex-1 overflow-hidden">
+  <div id="painel-principal" class="hidden">
 
   <!-- Botão flutuante para expandir sidebar quando oculta -->
   <button id="sidebar-expand-btn" onclick="toggleSidebar()" title="Abrir menu"
     class="hidden fixed left-0 top-0 z-50 h-full w-7 bg-[#1a202c] hover:bg-[#2d3748] transition flex items-center justify-center text-white/50 hover:text-white text-sm">›</button>
 
   <!-- SIDEBAR -->
-  <aside id="main-sidebar" class="w-60 bg-[#1a202c] flex flex-col shrink-0 h-full z-10">
+  <aside id="main-sidebar" class="bg-[#1a202c] flex flex-col">
     <div class="px-4 py-4 border-b border-white/10">
       <div class="flex items-center gap-2.5">
         <div class="w-8 h-8 rounded-lg bg-[#2B7DD4] flex items-center justify-center text-base shrink-0">🍕</div>
@@ -173,10 +180,11 @@
   </aside>
 
   <!-- MAIN -->
-  <div class="flex-1 overflow-y-auto flex flex-col min-w-0">
-    <!-- Stats -->
-    <div class="px-6 pt-5 pb-0 shrink-0">
-      <div class="grid grid-cols-2 md:grid-cols-4 gap-3 mb-4">
+  <div id="main-content">
+    <div id="main-scroll">
+    <!-- Stats — visível apenas na seção Pedidos -->
+    <div id="stats-bar" class="px-6 pt-4 pb-0 shrink-0 bg-[#f4f6f8]">
+      <div class="grid grid-cols-2 md:grid-cols-4 gap-3 mb-0">
       <div class="bg-white rounded-xl p-4 shadow-sm">
         <p class="text-xs text-gray-400 mb-1" data-i18n="stat.hoje">Pedidos hoje</p>
         <p id="stat-hoje" class="text-2xl font-bold text-gray-800">—</p>
@@ -196,8 +204,8 @@
     </div>
     </div><!-- /stats wrapper -->
 
-    <!-- Toolbar Pedidos -->
-    <div id="pedidos-toolbar" class="px-6 pb-3 shrink-0 hidden">
+    <!-- Toolbar Pedidos — fora do scroll container para não criar gap nas outras seções -->
+    <div id="pedidos-toolbar" class="px-6 pt-3 pb-3 shrink-0 hidden">
       <div class="flex items-center justify-between gap-3 flex-wrap">
         <div class="flex items-center gap-2 flex-wrap">
           <!-- View toggle -->
@@ -378,7 +386,7 @@
     </div>
 
     <!-- Clientes -->
-    <div id="secao-clientes" class="hidden px-6 pb-8">
+    <div id="secao-clientes" class="hidden px-6 pt-6 pb-8">
       <!-- Sub-tabs -->
       <div class="flex gap-2 mb-4">
         <button id="sub-tab-btn-clientes" onclick="mostrarSubTab('clientes')"
@@ -438,7 +446,7 @@
     </div>
 
     <!-- Conversas -->
-    <div id="secao-conversas" class="hidden px-6 pb-8">
+    <div id="secao-conversas" class="hidden px-6 pt-6 pb-8">
       <div class="flex gap-4 h-[70vh]">
         <!-- Lista de sessões -->
         <div class="w-72 shrink-0 bg-white rounded-2xl shadow-sm overflow-y-auto">
@@ -495,7 +503,7 @@
       </div>
     </div>
     <!-- Configurações -->
-    <div id="secao-configuracoes" class="hidden px-6 pb-8">
+    <div id="secao-configuracoes" class="hidden px-6 pt-6 pb-8">
       <div class="max-w-2xl">
         <h2 class="font-bold text-gray-800 mb-4" data-i18n="cfg.titulo">Configurações do Restaurante</h2>
 
@@ -692,8 +700,6 @@
             </div>
           </div>
 
-          </div>
-
           <p id="cfg-erro" class="text-red-500 text-sm mt-3 hidden"></p>
           <p id="cfg-sucesso" class="text-green-600 text-sm mt-3 hidden">✅ Configurações salvas com sucesso!</p>
 
@@ -710,7 +716,7 @@
     </div>
 
     <!-- CRM -->
-    <div id="secao-crm" class="hidden px-6 pb-8">
+    <div id="secao-crm" class="hidden px-6 pt-6 pb-8">
       <!-- Tabs -->
       <div class="flex gap-2 mb-5">
         <button id="crm-tab-btn-clientes" onclick="crmMostrarTab('clientes')"
@@ -961,7 +967,7 @@
     </div>
 
     <!-- Métricas -->
-    <div id="secao-metricas" class="hidden px-6 pb-8">
+    <div id="secao-metricas" class="hidden px-6 pt-6 pb-8">
       <!-- Header + período -->
       <div class="flex flex-wrap items-center justify-between gap-3 mb-5">
         <h2 class="font-bold text-gray-800" data-i18n="met.titulo">📊 Métricas do Restaurante</h2>
@@ -1060,7 +1066,7 @@
     </div>
 
     <!-- Estoque -->
-    <div id="secao-estoque" class="hidden px-6 pb-8">
+    <div id="secao-estoque" class="hidden px-6 pt-6 pb-8">
       <div class="flex items-center justify-between mb-4">
         <h2 class="font-bold text-gray-800" data-i18n="est.titulo">📦 Gestão de Estoque</h2>
         <button onclick="abrirModalEstoqueItem()" class="bg-orange-500 hover:bg-orange-600 text-white text-xs font-semibold px-4 py-2 rounded-xl transition" data-i18n="est.novo">+ Novo Item</button>
@@ -1113,7 +1119,7 @@
     </div>
 
     <!-- Financeiro -->
-    <div id="secao-financeiro" class="hidden px-6 pb-8">
+    <div id="secao-financeiro" class="hidden px-6 pt-6 pb-8">
       <div class="flex items-center justify-between mb-4 flex-wrap gap-3">
         <h2 class="font-bold text-gray-800" data-i18n="fin.titulo">💰 Financeiro</h2>
         <div class="flex items-center gap-3 flex-wrap">
@@ -1194,7 +1200,7 @@
     </div>
 
     <!-- Caixa -->
-    <div id="secao-caixa" class="hidden px-6 pb-8">
+    <div id="secao-caixa" class="hidden px-6 pt-6 pb-8">
       <div class="flex items-center justify-between mb-4 flex-wrap gap-3">
         <h2 class="font-bold text-gray-800">💵 Caixa</h2>
         <div id="caixa-btn-abrir-container">
@@ -1286,7 +1292,7 @@
     </div>
 
     <!-- Restaurantes (super admin) -->
-    <div id="secao-restaurantes-admin" class="hidden px-6 pb-8">
+    <div id="secao-restaurantes-admin" class="hidden px-6 pt-6 pb-8">
       <div class="flex items-center justify-between mb-4">
         <h2 class="font-bold text-gray-800">Restaurantes cadastrados</h2>
         <button onclick="abrirModalNovoRestaurante()" class="bg-orange-500 hover:bg-orange-600 text-white text-sm font-semibold px-4 py-2 rounded-lg transition">+ Novo Restaurante</button>
@@ -1296,7 +1302,7 @@
     </div>
 
     <!-- Motoboys -->
-    <div id="secao-motoboys" class="hidden px-6 pb-8">
+    <div id="secao-motoboys" class="hidden px-6 pt-6 pb-8">
       <div class="flex items-center justify-between mb-4">
         <h2 class="font-bold text-gray-800" data-i18n="moto.titulo">Motoboys</h2>
         <button onclick="abrirModalMotoboy()" class="bg-orange-500 hover:bg-orange-600 text-white text-sm font-semibold px-4 py-2 rounded-lg transition" data-i18n="moto.novo">+ Novo Motoboy</button>
@@ -1530,7 +1536,7 @@
     </div>
 
     <!-- Comprovantes -->
-    <div id="secao-comprovantes" class="hidden px-6 pb-8">
+    <div id="secao-comprovantes" class="hidden px-6 pt-6 pb-8">
       <div class="flex flex-wrap items-end gap-3 mb-4">
         <h2 class="font-bold text-gray-800 mr-2">📋 Comprovantes de Pagamento</h2>
         <div class="flex flex-wrap gap-2 ml-auto items-end">
@@ -1574,7 +1580,7 @@
     </div>
 
     <!-- Cardápio -->
-    <div id="secao-cardapio" class="hidden px-6 pb-8">
+    <div id="secao-cardapio" class="hidden px-6 pt-6 pb-8">
       <div class="flex items-center justify-between mb-4">
         <h2 class="font-bold text-gray-800" data-i18n="card.titulo">Cardápio</h2>
         <div class="flex gap-2">
@@ -1591,6 +1597,7 @@
       <div id="cardapio-lista" class="flex flex-col gap-4"></div>
     </div>
 
+    </div><!-- /inner scroll -->
   </div>
   </div><!-- /painel-principal -->
 </div>
@@ -2396,7 +2403,9 @@ function sair() {
 // ── Init ──────────────────────────────────────────────────────────────────────
 async function iniciarDashboard() {
   document.getElementById('login').classList.add('hidden');
+  document.getElementById('login').style.display = 'none';
   document.getElementById('app').classList.remove('hidden');
+  document.getElementById('app').style.display = 'flex';
 
   if (userRole === 'restaurante') {
     document.getElementById('user-label').textContent = restauranteInfo?.nome || '';
@@ -2417,7 +2426,7 @@ async function iniciarDashboard() {
 function entrarNoPainel(nomeRestaurante) {
   document.getElementById('tela-restaurantes').classList.add('hidden');
   document.getElementById('painel-principal').classList.remove('hidden');
-  document.getElementById('painel-principal').style.display = 'flex';
+  document.getElementById('painel-principal').style.display = 'block';
   if (nomeRestaurante) {
     document.getElementById('sidebar-restaurante-nome').classList.remove('hidden');
     document.getElementById('sidebar-restaurante-label').textContent = nomeRestaurante;
@@ -2708,12 +2717,15 @@ function toggleSidebar() {
 function _aplicarEstadoSidebar() {
   const sidebar = document.getElementById('main-sidebar');
   const expandBtn = document.getElementById('sidebar-expand-btn');
+  const mainScroll = document.getElementById('main-scroll');
   if (!sidebar) return;
   if (sidebarOculta) {
     sidebar.classList.add('sidebar-hidden');
+    mainScroll?.classList.add('sidebar-hidden');
     expandBtn?.classList.remove('hidden');
   } else {
     sidebar.classList.remove('sidebar-hidden');
+    mainScroll?.classList.remove('sidebar-hidden');
     expandBtn?.classList.add('hidden');
   }
 }
@@ -3714,6 +3726,8 @@ let secaoAtual = 'pedidos';
 
 function mostrarSecao(secao) {
   secaoAtual = secao;
+  const mainScroll = document.getElementById('main-scroll');
+  if (mainScroll) mainScroll.scrollTop = 0;
   ['pedidos', 'conversas', 'clientes', 'cardapio', 'configuracoes', 'motoboys', 'crm', 'metricas', 'estoque', 'financeiro', 'caixa', 'comprovantes'].forEach(s => {
     document.getElementById(`secao-${s}`).classList.toggle('hidden', secao !== s);
   });
@@ -3724,6 +3738,8 @@ function mostrarSecao(secao) {
   if (secaoRest) secaoRest.classList.add('hidden');
   const toolbar = document.getElementById('pedidos-toolbar');
   if (toolbar) toolbar.classList.toggle('hidden', secao !== 'pedidos');
+  const statsBar = document.getElementById('stats-bar');
+  if (statsBar) statsBar.classList.toggle('hidden', secao !== 'pedidos');
 
   // Sidebar active state
   ['pedidos', 'conversas', 'clientes', 'cardapio', 'configuracoes', 'motoboys', 'crm', 'metricas', 'estoque', 'financeiro', 'caixa', 'comprovantes'].forEach(s => {

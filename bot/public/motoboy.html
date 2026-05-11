@@ -192,6 +192,10 @@ async function aceitar(id) {
       headers: { 'Content-Type': 'application/json' },
       body: JSON.stringify({ motoboyId: meuId }),
     });
+    if (res.status === 409) {
+      await carregar(); // atualiza a lista para refletir que o pedido foi aceito por outro
+      return;
+    }
     if (!res.ok) {
       if (btn) { btn.disabled = false; btn.textContent = 'Aceitar'; }
       alert('Erro ao aceitar. Tente novamente.');

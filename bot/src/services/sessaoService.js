@@ -24,12 +24,31 @@ async function criarOuBuscarSessao(clienteNumero, restauranteId) {
   });
 
   if (sessaoExistente) {
-    // Atualiza timestamp de atividade
     await prisma.sessao.update({
       where: { id: sessaoExistente.id },
       data: { ultimaAtividade: new Date(), lembreteEnviado: false },
     });
     return sessaoExistente;
+  }
+
+  // Verifica se há sessão FINALIZADO com pedido ainda não entregue/cancelado
+  const sessaoComPedidoAtivo = await prisma.sessao.findFirst({
+    where: {
+      clienteNumero,
+      restauranteId,
+      estado: "FINALIZADO",
+      pedido: { status: { notIn: ["ENTREGUE", "CANCELADO"] } },
+    },
+    include: { mensagens: { orderBy: { createdAt: "asc" } } },
+    orderBy: { ultimaAtividade: "desc" },
+  });
+
+  if (sessaoComPedidoAtivo) {
+    await prisma.sessao.update({
+      where: { id: sessaoComPedidoAtivo.id },
+      data: { ultimaAtividade: new Date() },
+    });
+    return sessaoComPedidoAtivo;
   }
 
   // Cria nova sessão
@@ -100,9 +119,18 @@ async function encerrarSessoesInativas() {
   return count;
 }
 
+async function buscarSessaoFinalizada(clienteNumero, restauranteId) {
+  return prisma.sessao.findFirst({
+    where: { clienteNumero, restauranteId, estado: "FINALIZADO" },
+    orderBy: { ultimaAtividade: "desc" },
+    include: { mensagens: { orderBy: { createdAt: "asc" }, take: 10 } },
+  });
+}
+
 module.exports = {
   criarOuBuscarSessao,
   atualizarSessao,
   salvarMensagem,
   encerrarSessoesInativas,
+  buscarSessaoFinalizada,
 };

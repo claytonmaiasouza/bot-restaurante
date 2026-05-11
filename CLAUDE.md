@@ -23,18 +23,13 @@ Deve **perguntar antes** de executar:
 
 ## O que é este projeto
 
-SaaS de chatbot para restaurantes via WhatsApp e Telegram. Cada restaurante tem seu próprio número WhatsApp (instância na Evolution API) e cardápio gerido localmente via painel admin. O bot Node.js atende múltiplos restaurantes simultaneamente (multi-tenant).
+SaaS de chatbot para restaurantes via WhatsApp. Cada restaurante tem seu próprio número WhatsApp (instância na Evolution API) e cardápio gerido localmente via painel admin. O bot Node.js atende múltiplos restaurantes simultaneamente (multi-tenant).
 
 Fluxo WhatsApp:
 1. Cliente manda mensagem → Evolution API dispara `POST /webhook/:slug`
 2. `tenantMiddleware` identifica o restaurante pelo slug e injeta `req.restaurante` + `req.cardapio`
 3. `claudeService` conduz a conversa (ver cardápio, adicionar itens, confirmar pedido)
 4. Pedido finalizado → dono notificado via WhatsApp + painel em tempo real (Socket.IO)
-
-Fluxo Telegram:
-1. Cliente manda mensagem → Telegram Bot API dispara `POST /telegram/webhook`
-2. `telegramController` resolve o restaurante via `TELEGRAM_RESTAURANTE_SLUG`
-3. Mesmo fluxo de conversa do WhatsApp (Claude AI, sessão, pedido)
 
 ---
 
@@ -119,7 +114,6 @@ ssh root@185.137.92.141 "docker restart bot-app"
 | IA | Claude Sonnet via OpenRouter (`openrouter.ai/api/v1`) |
 | Banco | PostgreSQL 15 + Prisma ORM |
 | WhatsApp | Evolution API (self-hosted, Docker) |
-| Telegram | Telegram Bot API (webhook) |
 | Painel admin | HTML/JS vanilla em `bot/public/painel.html` |
 | Tempo real | Socket.IO |
 | Agendamento | node-cron |
@@ -137,13 +131,11 @@ Ficam em `/opt/bot-restaurante/.env` e são passadas ao container via `docker-co
 | `OPENROUTER_API_KEY` | Chave OpenRouter (acesso ao Claude AI) |
 | `EVOLUTION_API_URL` | `http://185.137.92.141:59439` |
 | `EVOLUTION_API_KEY` | Chave de autenticação da Evolution API |
-| `ADMIN_TOKEN` | Token para rotas `/admin`, `/onboarding` e webhook do Telegram |
+| `ADMIN_TOKEN` | Token para rotas `/admin` e `/onboarding` |
 | `BOT_PUBLIC_URL` | `https://bot.guiafinanceiro.pro` |
 | `OPENAI_API_KEY` | Whisper para transcrição de áudios |
 | `STRAPI_URL` | `http://185.137.92.141:1337` (CMS legado, pode estar inativo) |
 | `STRAPI_TOKEN` | Token de API do Strapi |
-| `TELEGRAM_BOT_TOKEN` | Token do bot Telegram |
-| `TELEGRAM_RESTAURANTE_SLUG` | Slug do restaurante associado ao bot Telegram (`31645730876`) |
 | `PORT` | `3000` |
 
 ---
@@ -162,10 +154,9 @@ bot-restaurante/
       painel.html             — painel admin completo (~6400 linhas, SPA vanilla JS)
       uploads/                — fotos de cardápio enviadas pelo painel
     src/
-      server.js               — Express + Socket.IO + jobs + auto-config webhook Telegram
+      server.js               — Express + Socket.IO + jobs
       controllers/
         webhookController.js  — mensagens WhatsApp (Evolution API)
-        telegramController.js — mensagens Telegram
       middleware/
         tenantMiddleware.js   — resolve restaurante pelo slug, valida plano
         authMiddleware.js     — JWT para rotas do painel admin
@@ -173,11 +164,9 @@ bot-restaurante/
         admin.js              — /admin/* (pedidos, cardápio, restaurantes, uploads, stats)
         auth.js               — /auth/login
         onboarding.js         — /onboarding/restaurante (cadastro + QR code)
-        telegram.js           — /telegram/webhook
       services/
         claudeService.js      — system prompt dinâmico, JSON estruturado, sinal mostrarFotos
         evolutionService.js   — enviarMensagem / enviarImagem / enviarDocumento / baixarMidia
-        telegramService.js    — enviarMensagemTelegram / enviarFotoTelegram / configurarWebhook
         pedidoService.js      — finalizarPedido, notifica dono, atualiza fidelidade
         sessaoService.js      — criarOuBuscarSessao / atualizarSessao / salvarMensagem
         cardapioService.js    — CRUD cardápio local + buscarContextoFidelidade
@@ -196,7 +185,7 @@ bot-restaurante/
 |---|---|
 | `Restaurante` | `slugWhatsapp` (PK lógica), `horarioAtendimento` (JSON), `cardapioPdfUrl` (URL ou JSON array de URLs), `dadosTransferencia`, `instrucoes` (prompt livre para o Claude) |
 | `Sessao` | `estado` (INICIO→FINALIZADO), `carrinho` (JSON), `botPausado`, `localizacaoPendente` |
-| `Pedido` | `itens` (JSON), `status` (NOVO→ENTREGUE), `metodoPagamento`, `numeroDia`, `origem` (WHATSAPP\|MESA) |
+| `Pedido` | `itens` (JSON), `status` (NOVO→ENTREGUE), `metodoPagamento`, `numeroDia`, `comprovanteUrl`, `origem` (WHATSAPP\|MESA) |
 | `ClienteFidelidade` | Por `(numero, restauranteId)` — `totalPedidos`, `totalGasto`, `resgates` |
 | `ProgramaFidelidade` | `tipo` (PEDIDOS\|VALOR), `meta` |
 | `Motoboy` | `nome`, `telefone` (WhatsApp) |
@@ -205,7 +194,7 @@ bot-restaurante/
 | `CampanhaMarketing` | Disparos em massa |
 | `CustoMensal` | Custos fixos e variáveis por mês |
 
-> O schema local em `bot/prisma/schema.prisma` é a fonte da verdade. O container Docker pode ter o Prisma client desatualizado se o schema mudou após o último build — nesse caso rodar `docker exec bot-app sh -c 'cd /app && npx prisma generate'` + `docker restart bot-app`.
+> O schema local em `bot/prisma/schema.prisma` é a fonte da verdade. O container Docker pode ter o Prisma client desatualizado se o schema evoluiu depois do último build — nesse caso rodar `docker exec bot-app sh -c 'cd /app && npx prisma generate'` + `docker restart bot-app`.
 
 ---
 
@@ -214,7 +203,6 @@ bot-restaurante/
 ```
 GET  /health                          — health check
 POST /webhook/:restauranteSlug        — Evolution API (WhatsApp)
-POST /telegram/webhook                — Telegram Bot API
 POST /auth/login                      — login do painel admin
 POST /onboarding/restaurante          — cadastro de novo restaurante
 
@@ -251,7 +239,6 @@ GET  /admin/campanhas/:restauranteId
 | Contexto | Mecanismo |
 |---|---|
 | Webhooks Evolution API | Header `apikey` verificado contra `EVOLUTION_API_KEY` |
-| Webhook Telegram | Header `x-telegram-bot-api-secret-token` verificado contra `ADMIN_TOKEN` |
 | Rotas `/admin/*` | JWT — gerado em `/auth/login`, verificado por `authMiddleware` |
 | Rotas `/onboarding/*` | Header `x-admin-token` verificado contra `ADMIN_TOKEN` |
 
@@ -279,7 +266,7 @@ Resposta estruturada — Claude retorna JSON entre delimitadores `|||JSON|||` e 
   "mostrarFotos": false
 }
 ```
-- `mostrarFotos: true` → controllers enviam as fotos do cardápio via `enviarImagem` (WhatsApp) ou `enviarFotoTelegram` (Telegram)
+- `mostrarFotos: true` → `webhookController` envia as fotos do cardápio via `enviarImagem`
 
 ---
 
@@ -290,6 +277,7 @@ Resposta estruturada — Claude retorna JSON entre delimitadores `|||JSON|||` e 
 | `conversa:mensagem` | Nova mensagem de cliente ou bot |
 | `conversa:encerrada` | Sessão encerrada (pedido finalizado) |
 | `pedido:novo` | Novo pedido criado |
+| `pedido:comprovante` | Cliente enviou foto do comprovante de pagamento |
 
 Salas:
 - `admin` — painel geral (todos os restaurantes)
@@ -309,6 +297,18 @@ Upload via painel: `POST /admin/restaurantes/:id/upload-cardapio-fotos`
 
 ---
 
+## Comprovante de Pagamento
+
+Quando o cliente envia uma foto após o pedido ser finalizado:
+1. `webhookController` detecta `messageType === "imageMessage"` + `sessao.estado === "FINALIZADO"`
+2. Baixa a imagem via `baixarMidiaBase64` (Evolution API)
+3. Salva em `/app/public/uploads/comprovantes/`
+4. Atualiza `Pedido.comprovanteUrl` via `salvarComprovante(sessaoId, url)`
+5. Emite `pedido:comprovante` via Socket.IO para o painel
+6. Painel exibe thumbnail no card do pedido e transforma o botão "💳 Pago" em "✅ Confirmar Pagamento"
+
+---
+
 ## Jobs Agendados
 
 | Job | Cron | Função |
@@ -320,10 +320,10 @@ Upload via painel: `POST /admin/restaurantes/:id/upload-cardapio-fotos`
 
 ## Restaurantes em Produção
 
-| Restaurante | Slug WhatsApp | Observação |
+| Restaurante | Slug WhatsApp | Moeda |
 |---|---|---|
-| (principal, Telegram) | `31645730876` | Slug usado em `TELEGRAM_RESTAURANTE_SLUG` |
-| (segundo restaurante) | `595984743801` | |
+| Don Pedro Pizzeria & Heladeria | `31645730876` | G$ |
+| Fuego Burger | `595984743801` | Gs |
 
 ---
 
@@ -363,7 +363,7 @@ ssh root@185.137.92.141 "docker exec bot-app sh -c 'cd /app && npx prisma genera
 - **CommonJS** (`require`/`module.exports`) — não usar ESM
 - **Async/await** — sem callbacks ou `.then()`
 - **Prisma** para todas as queries — sem SQL raw
-- **Logs com prefixo** — `[webhook]`, `[telegram]`, `[tenant]`, `[evolution]`, `[jobs]`
+- **Logs com prefixo** — `[webhook]`, `[tenant]`, `[evolution]`, `[jobs]`
 - **Variáveis de ambiente** sempre via `process.env.*` — nunca hardcode
 
 ---
@@ -377,5 +377,3 @@ ssh root@185.137.92.141 "docker exec bot-app sh -c 'cd /app && npx prisma genera
 3. **Função não exportada** — ao adicionar funções em services, verificar que estão no `module.exports`. Erro típico: `buscarContextoFidelidade is not a function`.
 
 4. **Fotos não enviadas** — instrução de oferecer fotos deve estar no passo 2 do fluxo (`VENDO_CARDAPIO`) no system prompt, não nas regras gerais (o Claude ignora regras de comportamento durante o fluxo).
-
-5. **`TELEGRAM_RESTAURANTE_SLUG`** — ao adicionar Telegram para um segundo restaurante, precisará de uma segunda instância do bot ou lógica de roteamento por token.

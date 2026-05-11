@@ -114,7 +114,7 @@ function montarSystemPrompt(restaurante, cardapio, fidelidade = null) {
       if (/\.(jpg|jpeg|png|webp)$/i.test(restaurante.cardapioPdfUrl)) temFotos = true;
     }
     if (temFotos) {
-      oferecerFotosFluxo = ` Ao terminar de listar os sabores de pizzas salgadas, **OBRIGATÓRIO**: finalize SEMPRE com a pergunta "\\n\\n📸 Deseja ver o cardápio completo?" — sem exceção. Quando o cliente confirmar (sim, quero, pode mandar, yes, claro, manda…), defina "mostrarFotos": true no JSON daquela resposta.`;
+      oferecerFotosFluxo = ` Ao terminar de listar os sabores de pizzas salgadas, **OBRIGATÓRIO**: finalize SEMPRE com a pergunta "\\n\\n📸 Deseja ver o cardápio completo?" — sem exceção. Somente quando o cliente responder afirmativamente a ESSA pergunta específica sobre as fotos (ex: "sim", "quero", "pode mandar", "claro", "manda"), defina "mostrarFotos": true. NUNCA defina "mostrarFotos": true em outras situações, como confirmação de pedido ou qualquer outra etapa do atendimento.`;
     } else {
       fotosInfo = `\n- Temos cardápio disponível em PDF. NÃO mencione nem ofereça proativamente.`;
     }
@@ -146,9 +146,11 @@ Seu trabalho é receber pedidos de forma simpática, informal e eficiente, como 
    - Pedido maior (pizza média, grande ou família; 2+ hambúrgueres; ou qualquer combinação com mais de 1 item principal): sugira um refrigerante de 2 litros do cardápio.
    - Sempre cite o nome exato e o preço do item sugerido. A sugestão e a pergunta sobre continuar devem ser UMA ÚNICA frase — nunca faça duas perguntas separadas. Exemplo: "Que tal adicionarmos uma *Coca-Cola 2L* (Gs 12.000) nesse pedido, ou prefere fechar sem bebida?" — não adicione depois "Posso adicionar mais alguma coisa?".
    - **Múltiplos sabores:** Se o cliente mencionar mais de um sabor de pizza no mesmo pedido (ex: "quero calabresa e frango"), pergunte SEMPRE antes de adicionar: "Você gostaria de *uma pizza com os dois sabores* (meia a meia) ou *uma pizza de cada sabor*?" — só adicione ao carrinho após a resposta. Máximo de 3 sabores por pizza.
-4. **CONFIRMANDO_PEDIDO**: Liste todos os itens do carrinho com quantidades e preços, mostre o total e peça confirmação. Após confirmação do cliente, pergunte se deseja **entrega** (informe a taxa de entrega) ou vai **retirar no balcão** (grátis).
-   - Se o cliente escolher **retirada no balcão**: finalize o pedido imediatamente com "Perfeito! Pode vir buscar no balcão. Seu pedido já foi registrado! 🎉" — **PROIBIDO** perguntar forma de pagamento ou localização. O pagamento será feito presencialmente ao retirar. Marque pedidoPronto como true e tipoEntrega como "retirada".
-   - Se o cliente escolher **entrega**: siga para o passo 5.
+4. **CONFIRMANDO_PEDIDO**: Liste todos os itens do carrinho com quantidades e preços, mostre o total e peça confirmação. Após confirmação do cliente:
+   - **Se o tipo de entrega já foi mencionado** em qualquer momento da conversa (ex: "para entrega", "quero entrega", "delivery", "para retirar", "vou buscar", "no balcão"), **NÃO pergunte de novo** — prossiga diretamente para o passo correspondente abaixo.
+   - **Se ainda não foi mencionado**, pergunte se deseja **entrega** (informe a taxa de entrega) ou vai **retirar no balcão** (grátis).
+   - Se o tipo for **retirada no balcão**: finalize o pedido imediatamente com "Perfeito! Pode vir buscar no balcão. Seu pedido já foi registrado! 🎉" — **PROIBIDO** perguntar forma de pagamento ou localização. O pagamento será feito presencialmente ao retirar. Marque pedidoPronto como true e tipoEntrega como "retirada".
+   - Se o tipo for **entrega**: siga para o passo 5.
 5. **AGUARDANDO_LOCALIZACAO**: Somente para entrega — peça a localização dizendo exatamente: "Agora só falta o seu endereço para entrega. Me mande sua localização por favor 📍" (o cliente deve usar o botão de localização do WhatsApp ou digitar o endereço em texto). Não mencione Google Maps. Assim que receber a localização, confirme e finalize o pedido.
 6. **FINALIZADO**: Confirme o recebimento do pedido e informe que o restaurante foi notificado.
 
@@ -173,7 +175,7 @@ Ao final de CADA resposta, inclua obrigatoriamente um bloco JSON no seguinte for
 - "carrinho" reflete o estado atual do carrinho após a interação
 - "tipoEntrega" deve ser "delivery" ou "retirada"
 - "pedidoPronto" deve ser true quando: (a) cliente de entrega fornecer o endereço/localização, OU (b) cliente escolher retirada e confirmar o pedido
-- "mostrarFotos": true quando o cliente confirmar que quer ver as fotos do cardápio ou pedir as fotos diretamente
+- "mostrarFotos": true SOMENTE quando o cliente responder afirmativamente à pergunta "Deseja ver o cardápio completo?" — NUNCA em confirmações de pedido ou outras etapas
 - IMPORTANTE: o campo "preco" no carrinho deve ser SEMPRE o valor numérico inteiro completo, SEM pontos ou vírgulas. Os preços no cardápio já estão no formato inteiro sem separadores (ex: "G$ 90000" significa noventa mil — use 90000, NUNCA 90; "G$ 10000" = dez mil = use 10000)`;
 }
 
@@ -222,7 +224,7 @@ async function processarMensagem(sessao, mensagemCliente, restaurante, cardapio,
 
   const { data } = await openRouterClient.post("/chat/completions", {
     model: MODEL,
-    max_tokens: 1024,
+    max_tokens: 4096,
     messages: [
       { role: "system", content: systemPrompt },
       ...historico,

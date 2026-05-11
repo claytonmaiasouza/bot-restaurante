@@ -98,7 +98,7 @@ router.get("/pedidos", validarToken, async (req, res) => {
   const statusFiltro =
     tipo === "motoboy"
       ? ["AGUARDANDO_DESPACHO", "EM_CAMINHO"]
-      : ["CONFIRMADO", "PREPARANDO"];
+      : ["CONFIRMADO", "PAGO", "PREPARANDO"];
 
   const pedidos = await prisma.pedido.findMany({
     where: { restauranteId: restaurante.id, status: { in: statusFiltro } },
@@ -159,6 +159,16 @@ router.post("/pedidos/:id/aceitar", validarToken, async (req, res) => {
     where: { slugWhatsapp: req.painelSlug, ativo: true },
     select: { id: true },
   });
+
+  // Verifica se o pedido ainda está disponível (evita aceite simultâneo)
+  const atual = await prisma.pedido.findUnique({
+    where: { id: req.params.id },
+    select: { status: true, motoboyId: true },
+  });
+  if (!atual || atual.status !== "AGUARDANDO_DESPACHO" || atual.motoboyId) {
+    return res.status(409).json({ error: "Este pedido já foi aceito por outro repartidor." });
+  }
+
   const motoboy = await prisma.motoboy.findFirst({
     where: { id: motoboyId, restauranteId: restaurante?.id },
     select: { nome: true },

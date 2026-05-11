@@ -1,0 +1,235 @@
+<!DOCTYPE html>
+<html lang="pt-BR">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>Cozinha</title>
+  <script src="https://cdn.tailwindcss.com"></script>
+  <script src="/socket.io/socket.io.js"></script>
+  <style>
+    body { background: #0f172a; }
+    .card-in { animation: slideIn 0.35s ease; }
+    @keyframes slideIn { from { opacity:0; transform:translateY(-10px); } to { opacity:1; transform:translateY(0); } }
+    ::-webkit-scrollbar { width: 4px; }
+    ::-webkit-scrollbar-thumb { background: #334155; border-radius: 9999px; }
+  </style>
+</head>
+<body class="min-h-screen text-white">
+
+  <!-- Header -->
+  <header class="bg-slate-800 border-b border-slate-700 px-4 py-3 flex items-center justify-between sticky top-0 z-10">
+    <div class="flex items-center gap-3">
+      <span class="text-xl">👨‍🍳</span>
+      <div>
+        <h1 class="font-bold text-base leading-tight" id="nome-restaurante">Cozinha</h1>
+        <p class="text-xs text-slate-400" id="ultimo-update">Carregando...</p>
+      </div>
+    </div>
+    <div class="flex items-center gap-3">
+      <div class="flex items-center gap-1.5">
+        <span id="indicador-socket" class="w-2 h-2 rounded-full bg-red-500 transition-colors"></span>
+        <span class="text-xs text-slate-400">Live</span>
+      </div>
+    </div>
+  </header>
+
+  <!-- Columns -->
+  <main class="flex gap-4 p-4 overflow-x-auto" style="min-height:calc(100vh - 60px)">
+
+    <!-- Aguardando Preparo -->
+    <div class="flex-shrink-0" style="width:300px">
+      <div class="flex items-center gap-2 mb-3 px-1">
+        <div class="w-3 h-3 rounded-full bg-amber-400 flex-shrink-0"></div>
+        <span class="font-bold text-amber-400 uppercase text-xs tracking-widest">Aguardando Preparo</span>
+        <span id="count-confirmado" class="ml-auto bg-amber-400/20 text-amber-300 text-xs font-bold px-2 py-0.5 rounded-full min-w-[1.5rem] text-center">0</span>
+      </div>
+      <div id="col-confirmado" class="flex flex-col gap-3"></div>
+    </div>
+
+    <!-- Em Preparo -->
+    <div class="flex-shrink-0" style="width:300px">
+      <div class="flex items-center gap-2 mb-3 px-1">
+        <div class="w-3 h-3 rounded-full bg-blue-400 flex-shrink-0"></div>
+        <span class="font-bold text-blue-400 uppercase text-xs tracking-widest">Em Preparo</span>
+        <span id="count-preparando" class="ml-auto bg-blue-400/20 text-blue-300 text-xs font-bold px-2 py-0.5 rounded-full min-w-[1.5rem] text-center">0</span>
+      </div>
+      <div id="col-preparando" class="flex flex-col gap-3"></div>
+    </div>
+
+  </main>
+
+  <!-- Empty state -->
+  <div id="empty-state" class="hidden fixed inset-0 flex flex-col items-center justify-center pointer-events-none" style="top:60px">
+    <div class="text-6xl mb-4">✅</div>
+    <p class="text-slate-400 text-lg font-medium">Cozinha em dia!</p>
+    <p class="text-slate-600 text-sm mt-1">Nenhum pedido pendente no momento</p>
+  </div>
+
+<script>
+const params = new URLSearchParams(location.search);
+const slug = params.get('slug');
+const token = params.get('t');
+
+if (!slug || !token) {
+  document.body.innerHTML = '<div class="flex items-center justify-center h-screen"><div class="text-center"><p class="text-2xl font-bold text-slate-200 mb-2">Link inválido</p><p class="text-slate-400">Solicite um novo link ao administrador.</p></div></div>';
+}
+
+let pedidos = [];
+let prevCount = 0;
+
+function beep() {
+  try {
+    const ctx = new AudioContext();
+    [0, 0.15, 0.3].forEach(delay => {
+      const osc = ctx.createOscillator();
+      const g = ctx.createGain();
+      osc.connect(g); g.connect(ctx.destination);
+      osc.frequency.value = 880; osc.type = 'sine';
+      g.gain.setValueAtTime(0.25, ctx.currentTime + delay);
+      g.gain.exponentialRampToValueAtTime(0.001, ctx.currentTime + delay + 0.25);
+      osc.start(ctx.currentTime + delay);
+      osc.stop(ctx.currentTime + delay + 0.25);
+    });
+  } catch {}
+}
+
+function elapsed(dt) {
+  const s = Math.floor((Date.now() - new Date(dt)) / 1000);
+  if (s < 60) return `${s}s`;
+  if (s < 3600) return `${Math.floor(s/60)}min`;
+  return `${Math.floor(s/3600)}h${Math.floor((s%3600)/60)}min`;
+}
+
+function urgencyClass(dt) {
+  const m = (Date.now() - new Date(dt)) / 60000;
+  if (m < 5) return 'text-emerald-400';
+  if (m < 12) return 'text-amber-400';
+  return 'text-red-400 font-black';
+}
+
+function numPedido(p) {
+  if (!p.numeroDia) return p.id.substring(0,6).toUpperCase();
+  const pre = p.origem === 'MESA' ? 'M' : (!p.localizacao || p.localizacao === 'Retirada no balcão') ? 'B' : 'D';
+  return `${pre}${p.numeroDia}`;
+}
+
+function origemTag(p) {
+  if (p.origem === 'MESA') return `<span class="text-xs bg-purple-500/25 text-purple-300 px-2 py-0.5 rounded-full font-medium">Mesa ${p.mesa}</span>`;
+  if (!p.localizacao || p.localizacao === 'Retirada no balcão') return `<span class="text-xs bg-slate-500/40 text-slate-300 px-2 py-0.5 rounded-full font-medium">🏪 Retirada</span>`;
+  return `<span class="text-xs bg-blue-500/25 text-blue-300 px-2 py-0.5 rounded-full font-medium">🛵 Delivery</span>`;
+}
+
+async function acao(id, rota) {
+  const btn = document.querySelector(`[data-pedido="${id}"] .btn-acao`);
+  if (btn) { btn.disabled = true; btn.textContent = '...'; }
+  try {
+    await fetch(`/painel/pedidos/${id}/${rota}?slug=${slug}&t=${token}`, { method: 'POST' });
+    await carregar();
+  } catch {
+    if (btn) { btn.disabled = false; }
+  }
+}
+
+function criarCard(p) {
+  const itens = Array.isArray(p.itens) ? p.itens : [];
+  const isConf = p.status === 'CONFIRMADO';
+  const btnClasse = isConf
+    ? 'bg-amber-500 hover:bg-amber-400 active:bg-amber-600 text-black'
+    : 'bg-emerald-500 hover:bg-emerald-400 active:bg-emerald-600 text-black';
+  const btnTexto = isConf ? '▶ Iniciar Preparo' : '✓ Marcar Pronto';
+  const btnRota = isConf ? 'iniciar' : 'pronto';
+
+  const div = document.createElement('div');
+  div.className = 'bg-slate-800 border border-slate-700 rounded-2xl p-4 card-in';
+  div.setAttribute('data-pedido', p.id);
+  div.innerHTML = `
+    <div class="flex items-start justify-between mb-3">
+      <div class="flex items-center gap-2 flex-wrap">
+        <span class="text-2xl font-black leading-none">#${numPedido(p)}</span>
+        ${origemTag(p)}
+      </div>
+      <span class="text-sm font-semibold ${urgencyClass(p.createdAt)} flex-shrink-0 ml-2" id="tempo-${p.id}">${elapsed(p.createdAt)}</span>
+    </div>
+    <div class="space-y-1.5 mb-3 border-t border-slate-700 pt-3">
+      ${itens.map(i => `
+        <div class="flex items-baseline gap-2">
+          <span class="text-base font-black text-amber-400 leading-tight">${i.quantidade||1}×</span>
+          <span class="text-sm text-slate-100 leading-tight">${i.nome}</span>
+        </div>`).join('')}
+    </div>
+    ${p.clienteNome ? `<p class="text-xs text-slate-500 mb-3">👤 ${p.clienteNome}</p>` : ''}
+    <button class="btn-acao w-full py-3 rounded-xl font-bold text-sm transition ${btnClasse}"
+      onclick="acao('${p.id}','${btnRota}')">${btnTexto}</button>
+  `;
+  return div;
+}
+
+function updateTimers() {
+  pedidos.forEach(p => {
+    const el = document.getElementById(`tempo-${p.id}`);
+    if (el) {
+      el.textContent = elapsed(p.createdAt);
+      el.className = `text-sm font-semibold ${urgencyClass(p.createdAt)} flex-shrink-0 ml-2`;
+    }
+  });
+}
+
+async function carregar() {
+  try {
+    const res = await fetch(`/painel/pedidos?slug=${slug}&t=${token}&tipo=cozinha`);
+    if (res.status === 401) {
+      document.body.innerHTML = '<div class="flex items-center justify-center h-screen"><div class="text-center"><p class="text-xl font-bold text-slate-200 mb-2">Link expirado</p><p class="text-slate-400">Solicite um novo link ao administrador.</p></div></div>';
+      return;
+    }
+    if (!res.ok) return;
+
+    const { data, restaurante } = await res.json();
+    const total = data.length;
+    if (total > prevCount && prevCount >= 0) beep();
+    prevCount = total;
+    pedidos = data;
+
+    document.getElementById('nome-restaurante').textContent = restaurante?.nome || 'Cozinha';
+    document.getElementById('ultimo-update').textContent = `Atualizado ${new Date().toLocaleTimeString('pt-BR',{hour:'2-digit',minute:'2-digit',second:'2-digit'})}`;
+
+    const confirmados = data.filter(p => p.status === 'CONFIRMADO');
+    const preparando  = data.filter(p => p.status === 'PREPARANDO');
+
+    document.getElementById('count-confirmado').textContent = confirmados.length;
+    document.getElementById('count-preparando').textContent = preparando.length;
+
+    const colConf = document.getElementById('col-confirmado');
+    const colPrep = document.getElementById('col-preparando');
+    colConf.innerHTML = '';
+    colPrep.innerHTML = '';
+    confirmados.forEach(p => colConf.appendChild(criarCard(p)));
+    preparando.forEach(p  => colPrep.appendChild(criarCard(p)));
+
+    document.getElementById('empty-state').classList.toggle('hidden', total > 0);
+  } catch {}
+}
+
+// Update elapsed timers every 30s without re-fetching
+setInterval(updateTimers, 30000);
+
+// Auto-refresh every 20s
+setInterval(carregar, 20000);
+
+// Socket.IO
+const socket = io();
+socket.on('connect', () => {
+  document.getElementById('indicador-socket').className = 'w-2 h-2 rounded-full bg-emerald-400 transition-colors';
+  socket.emit('assinar', slug);
+});
+socket.on('disconnect', () => {
+  document.getElementById('indicador-socket').className = 'w-2 h-2 rounded-full bg-red-500 transition-colors';
+});
+socket.on('pedido:novo', () => { beep(); carregar(); });
+socket.on('pedido:status', carregar);
+
+// Initial load — silence beep on first load
+prevCount = -1;
+carregar().then(() => { prevCount = pedidos.length; });
+</script>
+</body>
+</html>

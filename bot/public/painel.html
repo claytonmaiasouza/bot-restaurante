@@ -680,6 +680,20 @@
 
           </div>
 
+          <!-- Links de acesso rápido -->
+          <div class="p-5">
+            <h3 class="font-semibold text-gray-700 text-sm mb-1">Links de acesso</h3>
+            <p class="text-xs text-gray-400 mb-3">Compartilhe via WhatsApp com a cozinha e os motoboys. Não exige login.</p>
+            <div class="flex flex-col gap-2" id="cfg-links-container">
+              <button onclick="gerarLinksAcesso()"
+                class="inline-flex items-center gap-2 bg-gray-100 hover:bg-gray-200 text-gray-700 text-sm font-medium px-4 py-2.5 rounded-lg transition w-fit">
+                🔗 Gerar links de acesso
+              </button>
+            </div>
+          </div>
+
+          </div>
+
           <p id="cfg-erro" class="text-red-500 text-sm mt-3 hidden"></p>
           <p id="cfg-sucesso" class="text-green-600 text-sm mt-3 hidden">✅ Configurações salvas com sucesso!</p>
 
@@ -3559,7 +3573,7 @@ function iniciarSocket() {
   socket.on('pedido:novo', ({ pedido }) => {
     if (!pedido) return;
     if (restauranteAtual && pedido.restauranteId !== restauranteAtual) return;
-    pedidos.unshift(pedido);
+    pedidos.push(pedido);
     tocarSom();
     mostrarToast(`🔔 Novo pedido ${numPedido(pedido)} de ${pedido.clienteNome || pedido.clienteNumero}`);
     renderizarPedidos();
@@ -5264,6 +5278,44 @@ async function carregarConfiguracoes() {
   document.getElementById('cfg-sucesso').classList.add('hidden');
   document.getElementById('cfg-vazio').classList.add('hidden');
   document.getElementById('cfg-form').classList.remove('hidden');
+}
+
+async function gerarLinksAcesso() {
+  const slug = document.getElementById('cfg-slug')?.value;
+  if (!slug) { mostrarToast('Salve as configurações antes de gerar os links.'); return; }
+  const btn = document.querySelector('#cfg-links-container button');
+  if (btn) { btn.disabled = true; btn.textContent = '⏳ Gerando...'; }
+  try {
+    const res = await fetch(`/painel/token/${slug}`, { headers: getHeaders() });
+    if (!res.ok) { mostrarToast('Erro ao gerar links.'); return; }
+    const { cozinha, motoboy } = await res.json();
+    const c = document.getElementById('cfg-links-container');
+    c.innerHTML = `
+      <div class="space-y-3">
+        <div class="bg-orange-50 border border-orange-200 rounded-xl p-3">
+          <p class="text-xs font-bold text-orange-700 mb-1">👨‍🍳 Painel da Cozinha</p>
+          <p class="text-xs text-gray-500 break-all mb-2">${cozinha}</p>
+          <div class="flex gap-2">
+            <button onclick="navigator.clipboard.writeText('${cozinha}').then(()=>mostrarToast('Link copiado!'))"
+              class="text-xs bg-orange-500 hover:bg-orange-600 text-white px-3 py-1.5 rounded-lg font-medium transition">📋 Copiar</button>
+            <a href="${cozinha}" target="_blank"
+              class="text-xs bg-white border border-orange-300 text-orange-600 px-3 py-1.5 rounded-lg font-medium hover:bg-orange-50 transition">↗ Abrir</a>
+          </div>
+        </div>
+        <div class="bg-blue-50 border border-blue-200 rounded-xl p-3">
+          <p class="text-xs font-bold text-blue-700 mb-1">🛵 Painel dos Motoboys</p>
+          <p class="text-xs text-gray-500 break-all mb-2">${motoboy}</p>
+          <div class="flex gap-2">
+            <button onclick="navigator.clipboard.writeText('${motoboy}').then(()=>mostrarToast('Link copiado!'))"
+              class="text-xs bg-blue-500 hover:bg-blue-600 text-white px-3 py-1.5 rounded-lg font-medium transition">📋 Copiar</button>
+            <a href="${motoboy}" target="_blank"
+              class="text-xs bg-white border border-blue-300 text-blue-600 px-3 py-1.5 rounded-lg font-medium hover:bg-blue-50 transition">↗ Abrir</a>
+          </div>
+        </div>
+        <button onclick="gerarLinksAcesso()"
+          class="text-xs text-gray-400 hover:text-gray-600 underline">🔄 Regenerar links</button>
+      </div>`;
+  } catch { mostrarToast('Erro ao gerar links.'); }
 }
 
 async function salvarConfiguracoes() {

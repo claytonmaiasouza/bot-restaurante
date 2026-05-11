@@ -9,7 +9,7 @@ const webhookController = require("./controllers/webhookController");
 const adminRoutes = require("./routes/admin");
 const authRoutes = require("./routes/auth");
 const onboardingRoutes = require("./routes/onboarding");
-const telegramRoutes = require("./routes/telegram");
+const painelRoutes = require("./routes/painel");
 const { tenantMiddleware } = require("./middleware/tenantMiddleware");
 const { iniciarJobs } = require("./jobs/limpeza");
 
@@ -60,8 +60,8 @@ app.use("/onboarding", onboardingRoutes);
 // Rotas administrativas internas
 app.use("/admin", adminRoutes);
 
-// Webhook do Telegram
-app.use("/telegram", telegramRoutes);
+// Painéis externos (cozinha + motoboy) — token-based, sem JWT
+app.use("/painel", painelRoutes);
 
 // ── Socket.IO — eventos em tempo real ─────────────────────────────────────────
 io.on("connection", (socket) => {
@@ -101,15 +101,6 @@ io.on("connection", (socket) => {
 
 // ── Jobs agendados ────────────────────────────────────────────────────────────
 iniciarJobs();
-
-// ── Telegram: configura webhook automaticamente na inicialização ──────────────
-if (process.env.TELEGRAM_BOT_TOKEN && process.env.BOT_PUBLIC_URL) {
-  const { configurarWebhook } = require("./services/telegramService");
-  const webhookUrl = `${process.env.BOT_PUBLIC_URL}/telegram/webhook`;
-  configurarWebhook(webhookUrl).catch((err) =>
-    console.error("[telegram] falha ao configurar webhook:", err.message)
-  );
-}
 
 // ── Start ─────────────────────────────────────────────────────────────────────
 const PORT = process.env.PORT || 3000;

@@ -1,0 +1,293 @@
+<!DOCTYPE html>
+<html lang="pt-BR">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0, user-scalable=no">
+  <title>Entregas</title>
+  <script src="https://cdn.tailwindcss.com"></script>
+  <script src="/socket.io/socket.io.js"></script>
+  <style>
+    body { background: #f1f5f9; }
+    .card-in { animation: slideUp 0.3s ease; }
+    @keyframes slideUp { from { opacity:0; transform:translateY(10px); } to { opacity:1; transform:translateY(0); } }
+    .btn-touch { -webkit-tap-highlight-color: transparent; }
+  </style>
+</head>
+<body class="min-h-screen text-gray-900">
+
+  <!-- Name modal -->
+  <div id="modal-nome" class="fixed inset-0 bg-black/60 z-50 flex items-center justify-center p-4">
+    <div class="bg-white rounded-2xl p-6 w-full max-w-sm shadow-2xl">
+      <div class="text-4xl text-center mb-3">🛵</div>
+      <h2 class="text-xl font-bold text-center mb-1">Bem-vindo!</h2>
+      <p class="text-gray-500 text-sm text-center mb-5">Como você se chama? Vamos usar seu nome para registrar as entregas.</p>
+      <input id="input-nome" type="text" placeholder="Seu nome"
+        class="w-full border-2 border-gray-200 focus:border-orange-400 rounded-xl px-4 py-3 text-base font-medium outline-none mb-4"
+        onkeydown="if(event.key==='Enter')confirmarNome()">
+      <button onclick="confirmarNome()"
+        class="btn-touch w-full bg-orange-500 hover:bg-orange-600 text-white font-bold py-3.5 rounded-xl text-base transition active:scale-95">
+        Entrar
+      </button>
+    </div>
+  </div>
+
+  <!-- Header -->
+  <header class="bg-white border-b border-gray-200 px-4 py-3 flex items-center justify-between sticky top-0 z-10 shadow-sm">
+    <div class="flex items-center gap-2.5">
+      <span class="text-xl">🛵</span>
+      <div>
+        <p class="font-bold text-sm leading-tight" id="nome-restaurante">Entregas</p>
+        <p class="text-xs text-gray-400" id="meu-nome-label">-</p>
+      </div>
+    </div>
+    <div class="flex items-center gap-2">
+      <span id="indicador-socket" class="w-2 h-2 rounded-full bg-red-400 transition-colors"></span>
+      <button onclick="trocarNome()" class="text-xs text-gray-400 hover:text-gray-600 underline">Trocar nome</button>
+    </div>
+  </header>
+
+  <!-- Main -->
+  <main class="max-w-lg mx-auto px-3 py-4 space-y-6">
+
+    <!-- Disponíveis -->
+    <section>
+      <div class="flex items-center gap-2 mb-3">
+        <div class="w-2.5 h-2.5 rounded-full bg-orange-400"></div>
+        <h2 class="font-bold text-sm uppercase tracking-wide text-orange-500">Disponíveis para entrega</h2>
+        <span id="count-disp" class="ml-auto bg-orange-100 text-orange-600 text-xs font-bold px-2 py-0.5 rounded-full">0</span>
+      </div>
+      <div id="col-disponiveis">
+        <div class="text-center py-8 text-gray-400 text-sm" id="empty-disp">Nenhuma entrega disponível no momento</div>
+      </div>
+    </section>
+
+    <!-- Meus pedidos -->
+    <section>
+      <div class="flex items-center gap-2 mb-3">
+        <div class="w-2.5 h-2.5 rounded-full bg-blue-500"></div>
+        <h2 class="font-bold text-sm uppercase tracking-wide text-blue-600">Minhas Entregas</h2>
+        <span id="count-meus" class="ml-auto bg-blue-100 text-blue-600 text-xs font-bold px-2 py-0.5 rounded-full">0</span>
+      </div>
+      <div id="col-meus">
+        <div class="text-center py-8 text-gray-400 text-sm" id="empty-meus">Você não tem entregas em andamento</div>
+      </div>
+    </section>
+
+  </main>
+
+<script>
+const params = new URLSearchParams(location.search);
+const slug = params.get('slug');
+const token = params.get('t');
+
+if (!slug || !token) {
+  document.body.innerHTML = '<div class="flex items-center justify-center h-screen"><div class="text-center p-8"><p class="text-xl font-bold mb-2">Link inválido</p><p class="text-gray-500">Solicite um novo link ao administrador.</p></div></div>';
+}
+
+let meuNome = localStorage.getItem('motoboy-nome') || '';
+let pedidos = [];
+
+function mostrarModal() {
+  document.getElementById('modal-nome').classList.remove('hidden');
+  setTimeout(() => document.getElementById('input-nome').focus(), 100);
+}
+
+function confirmarNome() {
+  const n = document.getElementById('input-nome').value.trim();
+  if (!n) { document.getElementById('input-nome').focus(); return; }
+  meuNome = n;
+  localStorage.setItem('motoboy-nome', n);
+  document.getElementById('modal-nome').classList.add('hidden');
+  document.getElementById('meu-nome-label').textContent = n;
+  carregar();
+}
+
+function trocarNome() {
+  document.getElementById('input-nome').value = meuNome;
+  mostrarModal();
+}
+
+function numPedido(p) {
+  if (!p.numeroDia) return p.id.substring(0,6).toUpperCase();
+  return `D${p.numeroDia}`;
+}
+
+function fmtValor(v, moeda) {
+  if (!v) return '';
+  const m = moeda || 'R$';
+  const temDecimal = ['R$','$','€'].includes(m);
+  return temDecimal ? `${m} ${Number(v).toFixed(2)}` : `${m} ${Math.round(v).toLocaleString()}`;
+}
+
+function mapsLink(loc) {
+  if (!loc || loc === 'Retirada no balcão') return null;
+  if (loc.includes('maps.google') || loc.includes('goo.gl') || loc.includes('maps.app')) return loc;
+  return `https://www.google.com/maps/search/${encodeURIComponent(loc)}`;
+}
+
+async function aceitar(id) {
+  const btn = document.querySelector(`[data-pedido="${id}"] .btn-aceitar`);
+  if (btn) { btn.disabled = true; btn.textContent = '...'; }
+  try {
+    const res = await fetch(`/painel/pedidos/${id}/aceitar?slug=${slug}&t=${token}`, {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ motoboyNome: meuNome }),
+    });
+    if (!res.ok) {
+      if (btn) { btn.disabled = false; btn.textContent = 'Aceitar'; }
+      alert('Erro ao aceitar. Tente novamente.');
+      return;
+    }
+    await carregar();
+  } catch {
+    if (btn) { btn.disabled = false; }
+  }
+}
+
+async function entregar(id) {
+  const btn = document.querySelector(`[data-pedido="${id}"] .btn-entregar`);
+  if (btn) { btn.disabled = true; btn.textContent = '...'; }
+  const ok = confirm('Confirmar entrega deste pedido?');
+  if (!ok) { if (btn) { btn.disabled = false; btn.textContent = '✓ Entregue'; } return; }
+  try {
+    await fetch(`/painel/pedidos/${id}/entregar?slug=${slug}&t=${token}`, { method: 'POST' });
+    await carregar();
+  } catch {
+    if (btn) { btn.disabled = false; }
+  }
+}
+
+function criarCardDisponivel(p, moeda) {
+  const itens = Array.isArray(p.itens) ? p.itens : [];
+  const loc = p.localizacao;
+  const link = mapsLink(loc);
+  const div = document.createElement('div');
+  div.className = 'bg-white rounded-2xl p-4 shadow-sm border border-gray-100 card-in';
+  div.setAttribute('data-pedido', p.id);
+  div.innerHTML = `
+    <div class="flex items-start justify-between mb-2">
+      <span class="text-xl font-black">#${numPedido(p)}</span>
+      <span class="text-sm font-bold text-orange-500">${fmtValor(p.total, moeda)}</span>
+    </div>
+    ${p.clienteNome ? `<p class="text-sm text-gray-600 mb-2">👤 ${p.clienteNome}</p>` : ''}
+    <div class="text-xs text-gray-500 space-y-0.5 mb-3">
+      ${itens.slice(0,4).map(i => `<div>${i.quantidade||1}× ${i.nome}</div>`).join('')}
+      ${itens.length > 4 ? `<div class="text-gray-400">+ ${itens.length-4} item(s)...</div>` : ''}
+    </div>
+    ${loc ? `
+      <div class="bg-gray-50 rounded-xl px-3 py-2 mb-3 flex items-start gap-2">
+        <span class="text-base flex-shrink-0">📍</span>
+        <div class="min-w-0">
+          <p class="text-xs text-gray-700 break-words leading-snug">${loc}</p>
+          ${link ? `<a href="${link}" target="_blank" class="text-xs text-blue-500 font-medium mt-0.5 inline-block">Abrir no Maps →</a>` : ''}
+        </div>
+      </div>` : ''}
+    ${p.metodoPagamento ? `<p class="text-xs text-gray-400 mb-3">💳 ${p.metodoPagamento}</p>` : ''}
+    <button class="btn-touch btn-aceitar w-full bg-orange-500 hover:bg-orange-600 text-white font-bold py-3.5 rounded-xl text-sm transition active:scale-95"
+      onclick="aceitar('${p.id}')">Aceitar Entrega</button>
+  `;
+  return div;
+}
+
+function criarCardMeu(p, moeda) {
+  const itens = Array.isArray(p.itens) ? p.itens : [];
+  const loc = p.localizacao;
+  const link = mapsLink(loc);
+  const div = document.createElement('div');
+  div.className = 'bg-white rounded-2xl p-4 shadow-sm border-2 border-blue-200 card-in';
+  div.setAttribute('data-pedido', p.id);
+  div.innerHTML = `
+    <div class="flex items-start justify-between mb-2">
+      <div class="flex items-center gap-2">
+        <span class="text-xl font-black">#${numPedido(p)}</span>
+        <span class="text-xs bg-blue-100 text-blue-600 px-2 py-0.5 rounded-full font-medium">Meu pedido</span>
+      </div>
+      <span class="text-sm font-bold text-blue-600">${fmtValor(p.total, moeda)}</span>
+    </div>
+    ${p.clienteNome ? `<p class="text-sm text-gray-600 mb-2">👤 ${p.clienteNome}</p>` : ''}
+    <div class="text-xs text-gray-500 space-y-0.5 mb-3">
+      ${itens.slice(0,4).map(i => `<div>${i.quantidade||1}× ${i.nome}</div>`).join('')}
+      ${itens.length > 4 ? `<div class="text-gray-400">+ ${itens.length-4} item(s)...</div>` : ''}
+    </div>
+    ${loc ? `
+      <div class="bg-blue-50 rounded-xl px-3 py-2 mb-3 flex items-start gap-2">
+        <span class="text-base flex-shrink-0">📍</span>
+        <div class="min-w-0">
+          <p class="text-xs text-gray-700 break-words leading-snug">${loc}</p>
+          ${link ? `<a href="${link}" target="_blank" class="text-xs text-blue-500 font-medium mt-0.5 inline-block">Abrir no Maps →</a>` : ''}
+        </div>
+      </div>` : ''}
+    ${p.metodoPagamento ? `<p class="text-xs text-gray-400 mb-3">💳 ${p.metodoPagamento}</p>` : ''}
+    <button class="btn-touch btn-entregar w-full bg-emerald-500 hover:bg-emerald-600 text-white font-bold py-3.5 rounded-xl text-sm transition active:scale-95"
+      onclick="entregar('${p.id}')">✓ Confirmar Entrega</button>
+  `;
+  return div;
+}
+
+async function carregar() {
+  try {
+    const res = await fetch(`/painel/pedidos?slug=${slug}&t=${token}&tipo=motoboy`);
+    if (res.status === 401) {
+      document.body.innerHTML = '<div class="flex items-center justify-center h-screen"><div class="text-center p-8"><p class="text-xl font-bold mb-2">Link expirado</p><p class="text-gray-500">Solicite um novo link ao administrador.</p></div></div>';
+      return;
+    }
+    if (!res.ok) return;
+    const { data, restaurante } = await res.json();
+    pedidos = data;
+
+    document.getElementById('nome-restaurante').textContent = restaurante?.nome || 'Entregas';
+    document.getElementById('meu-nome-label').textContent = meuNome ? `👤 ${meuNome}` : '';
+
+    const moeda = restaurante?.moeda || 'R$';
+    const disponiveis = data.filter(p => !p.motoboyNome);
+    const meus = data.filter(p => p.motoboyNome === meuNome);
+
+    document.getElementById('count-disp').textContent = disponiveis.length;
+    document.getElementById('count-meus').textContent = meus.length;
+
+    const colDisp = document.getElementById('col-disponiveis');
+    const colMeus = document.getElementById('col-meus');
+    colDisp.innerHTML = '';
+    colMeus.innerHTML = '';
+
+    if (disponiveis.length) {
+      disponiveis.forEach(p => colDisp.appendChild(criarCardDisponivel(p, moeda)));
+    } else {
+      colDisp.innerHTML = '<div class="text-center py-8 text-gray-400 text-sm">Nenhuma entrega disponível no momento</div>';
+    }
+
+    if (meus.length) {
+      meus.forEach(p => colMeus.appendChild(criarCardMeu(p, moeda)));
+    } else {
+      colMeus.innerHTML = '<div class="text-center py-8 text-gray-400 text-sm">Você não tem entregas em andamento</div>';
+    }
+  } catch {}
+}
+
+// Auto-refresh every 30s
+setInterval(carregar, 30000);
+
+// Socket.IO
+const socket = io();
+socket.on('connect', () => {
+  document.getElementById('indicador-socket').className = 'w-2 h-2 rounded-full bg-emerald-400 transition-colors';
+  socket.emit('assinar', slug);
+});
+socket.on('disconnect', () => {
+  document.getElementById('indicador-socket').className = 'w-2 h-2 rounded-full bg-red-400 transition-colors';
+});
+socket.on('pedido:status', carregar);
+socket.on('pedido:novo', carregar);
+
+// Init
+if (meuNome) {
+  document.getElementById('modal-nome').classList.add('hidden');
+  document.getElementById('meu-nome-label').textContent = `👤 ${meuNome}`;
+  carregar();
+} else {
+  mostrarModal();
+}
+</script>
+</body>
+</html>

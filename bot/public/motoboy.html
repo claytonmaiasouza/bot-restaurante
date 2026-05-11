@@ -240,8 +240,8 @@ async function carregar() {
     document.getElementById('meu-nome-label').textContent = meuNome ? `👤 ${meuNome}` : '';
 
     const moeda = restaurante?.moeda || 'R$';
-    const disponiveis = data.filter(p => !p.motoboyNome);
-    const meus = data.filter(p => p.motoboyNome === meuNome);
+    const disponiveis = data.filter(p => p.status === 'AGUARDANDO_DESPACHO' && !p.motoboyNome);
+    const meus = data.filter(p => p.status === 'EM_CAMINHO' && p.motoboyNome === meuNome);
 
     document.getElementById('count-disp').textContent = disponiveis.length;
     document.getElementById('count-meus').textContent = meus.length;
@@ -277,6 +277,7 @@ socket.on('connect', () => {
 socket.on('disconnect', () => {
   document.getElementById('indicador-socket').className = 'w-2 h-2 rounded-full bg-red-400 transition-colors';
 });
+socket.on('pedido:atualizado', carregar);
 socket.on('pedido:status', carregar);
 socket.on('pedido:novo', carregar);
 

@@ -72,6 +72,7 @@ function idCurto(uuid) {
 
 const STATUS_VALIDOS = [
   "NOVO", "CONFIRMADO", "PAGO", "PREPARANDO",
+  "AGUARDANDO_DESPACHO", "EM_CAMINHO",
   "SAIU_PARA_ENTREGA", "PRONTO_PARA_RETIRADA", "SERVIDO", "ENTREGUE", "CANCELADO",
 ];
 
@@ -170,7 +171,7 @@ router.get("/pedidos", async (req, res) => {
     const [pedidos, total] = await prisma.$transaction([
       prisma.pedido.findMany({
         where,
-        orderBy: { createdAt: "desc" },
+        orderBy: { createdAt: "asc" },
         skip: offset,
         take: limite,
         include: {

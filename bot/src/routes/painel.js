@@ -60,7 +60,9 @@ router.get("/pedidos", validarToken, async (req, res) => {
   if (!restaurante) return res.status(404).json({ error: "Restaurante não encontrado" });
 
   const statusFiltro =
-    tipo === "motoboy" ? ["SAIU_PARA_ENTREGA"] : ["CONFIRMADO", "PREPARANDO"];
+    tipo === "motoboy"
+      ? ["AGUARDANDO_DESPACHO", "EM_CAMINHO"]
+      : ["CONFIRMADO", "PREPARANDO"];
 
   const pedidos = await prisma.pedido.findMany({
     where: { restauranteId: restaurante.id, status: { in: statusFiltro } },
@@ -81,14 +83,15 @@ router.post("/pedidos/:id/iniciar", validarToken, async (req, res) => {
   const pedido = await prisma.pedido.update({
     where: { id: req.params.id },
     data: { status: "PREPARANDO" },
+    include: { restaurante: { select: { nome: true, slugWhatsapp: true, moeda: true, taxaEntrega: true } } },
   });
   const io = req.app.get("io");
-  io?.to("admin").emit("pedido:status", { pedidoId: pedido.id, status: "PREPARANDO" });
-  io?.to(`restaurante:${req.painelSlug}`).emit("pedido:status", { pedidoId: pedido.id, status: "PREPARANDO" });
+  io?.to("admin").emit("pedido:atualizado", pedido);
+  io?.to(`restaurante:${req.painelSlug}`).emit("pedido:atualizado", pedido);
   res.json({ ok: true });
 });
 
-// POST /painel/pedidos/:id/pronto — PREPARANDO → PRONTO_PARA_RETIRADA ou SAIU_PARA_ENTREGA
+// POST /painel/pedidos/:id/pronto — PREPARANDO → PRONTO_PARA_RETIRADA (retirada/mesa) ou AGUARDANDO_DESPACHO (delivery)
 router.post("/pedidos/:id/pronto", validarToken, async (req, res) => {
   const atual = await prisma.pedido.findUnique({
     where: { id: req.params.id },
@@ -98,27 +101,28 @@ router.post("/pedidos/:id/pronto", validarToken, async (req, res) => {
     !atual.localizacao ||
     atual.localizacao === "Retirada no balcão" ||
     atual.origem === "MESA";
-  const novoStatus = isRetirada ? "PRONTO_PARA_RETIRADA" : "SAIU_PARA_ENTREGA";
+  const novoStatus = isRetirada ? "PRONTO_PARA_RETIRADA" : "AGUARDANDO_DESPACHO";
   const pedido = await prisma.pedido.update({
     where: { id: req.params.id },
     data: { status: novoStatus },
   });
   const io = req.app.get("io");
-  io?.to("admin").emit("pedido:status", { pedidoId: pedido.id, status: novoStatus });
-  io?.to(`restaurante:${req.painelSlug}`).emit("pedido:status", { pedidoId: pedido.id, status: novoStatus });
+  io?.to("admin").emit("pedido:atualizado", pedido);
+  io?.to(`restaurante:${req.painelSlug}`).emit("pedido:atualizado", pedido);
   res.json({ ok: true, status: novoStatus });
 });
 
-// POST /painel/pedidos/:id/aceitar — motoboy aceita entrega
+// POST /painel/pedidos/:id/aceitar — motoboy aceita entrega → EM_CAMINHO
 router.post("/pedidos/:id/aceitar", validarToken, async (req, res) => {
   const { motoboyNome } = req.body;
   if (!motoboyNome?.trim()) return res.status(400).json({ error: "motoboyNome obrigatório" });
   const pedido = await prisma.pedido.update({
     where: { id: req.params.id },
-    data: { motoboyNome: motoboyNome.trim() },
+    data: { motoboyNome: motoboyNome.trim(), status: "EM_CAMINHO" },
   });
   const io = req.app.get("io");
-  io?.to("admin").emit("pedido:motoboy", { pedidoId: pedido.id, motoboyNome: pedido.motoboyNome });
+  io?.to("admin").emit("pedido:atualizado", pedido);
+  io?.to(`restaurante:${req.painelSlug}`).emit("pedido:atualizado", pedido);
   res.json({ ok: true });
 });
 
@@ -127,10 +131,11 @@ router.post("/pedidos/:id/entregar", validarToken, async (req, res) => {
   const pedido = await prisma.pedido.update({
     where: { id: req.params.id },
     data: { status: "ENTREGUE", pago: true },
+    include: { restaurante: { select: { nome: true, slugWhatsapp: true, moeda: true, taxaEntrega: true } } },
   });
   const io = req.app.get("io");
-  io?.to("admin").emit("pedido:status", { pedidoId: pedido.id, status: "ENTREGUE" });
-  io?.to(`restaurante:${req.painelSlug}`).emit("pedido:status", { pedidoId: pedido.id, status: "ENTREGUE" });
+  io?.to("admin").emit("pedido:atualizado", pedido);
+  io?.to(`restaurante:${req.painelSlug}`).emit("pedido:atualizado", pedido);
   res.json({ ok: true });
 });
 

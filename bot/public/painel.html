@@ -2002,7 +2002,8 @@ const TRADUCOES = {
     'stat.hoje':'Pedidos hoje','stat.faturamento':'Faturamento hoje',
     'stat.aberto':'Em aberto','stat.sessoes':'Sessões ativas',
     'status.NOVO':'Novos','status.CONFIRMADO':'Confirmados','status.PAGO':'Pagos',
-    'status.PREPARANDO':'Preparando','status.SAIU_PARA_ENTREGA':'Em entrega',
+    'status.PREPARANDO':'Preparando','status.AGUARDANDO_DESPACHO':'Aguard. despacho',
+    'status.SAIU_PARA_ENTREGA':'Em entrega','status.EM_CAMINHO':'Em caminho',
     'status.PRONTO_PARA_RETIRADA':'Pronto p/ retirada',
     'status.ENTREGUE':'Entregues','status.CANCELADO':'Cancelados',
     'acao.confirmar':'✓ Confirmar','acao.cancelar':'✗ Cancelar',
@@ -2126,7 +2127,8 @@ const TRADUCOES = {
     'stat.hoje':'Pedidos hoy','stat.faturamento':'Facturación hoy',
     'stat.aberto':'En proceso','stat.sessoes':'Sesiones activas',
     'status.NOVO':'Nuevos','status.CONFIRMADO':'Confirmados','status.PAGO':'Pagados',
-    'status.PREPARANDO':'Preparando','status.SAIU_PARA_ENTREGA':'En camino',
+    'status.PREPARANDO':'Preparando','status.AGUARDANDO_DESPACHO':'Esper. despacho',
+    'status.SAIU_PARA_ENTREGA':'En camino','status.EM_CAMINHO':'En camino',
     'status.PRONTO_PARA_RETIRADA':'Listo p/ retiro',
     'status.ENTREGUE':'Entregados','status.CANCELADO':'Cancelados',
     'acao.confirmar':'✓ Confirmar','acao.cancelar':'✗ Cancelar',
@@ -2271,21 +2273,25 @@ function alternarIdioma() {
 }
 
 const COLUNAS_KANBAN = [
-  { status:'NOVO',                 border:'border-t-orange-400', bg:'bg-orange-50',  text:'text-orange-700'  },
-  { status:'CONFIRMADO',           border:'border-t-blue-400',   bg:'bg-blue-50',    text:'text-blue-700'    },
-  { status:'PAGO',                 border:'border-t-cyan-400',   bg:'bg-cyan-50',    text:'text-cyan-700'    },
-  { status:'PREPARANDO',           border:'border-t-amber-400',  bg:'bg-amber-50',   text:'text-amber-700'   },
-  { status:'SAIU_PARA_ENTREGA',    border:'border-t-purple-400', bg:'bg-purple-50',  text:'text-purple-700'  },
-  { status:'PRONTO_PARA_RETIRADA', border:'border-t-indigo-400', bg:'bg-indigo-50',  text:'text-indigo-700'  },
-  { status:'ENTREGUE',             border:'border-t-green-400',  bg:'bg-green-50',   text:'text-green-700'   },
-  { status:'CANCELADO',            border:'border-t-red-400',    bg:'bg-red-50',     text:'text-red-700'     },
+  { status:'NOVO',                  border:'border-t-orange-400', bg:'bg-orange-50',  text:'text-orange-700'  },
+  { status:'CONFIRMADO',            border:'border-t-blue-400',   bg:'bg-blue-50',    text:'text-blue-700'    },
+  { status:'PAGO',                  border:'border-t-cyan-400',   bg:'bg-cyan-50',    text:'text-cyan-700'    },
+  { status:'PREPARANDO',            border:'border-t-amber-400',  bg:'bg-amber-50',   text:'text-amber-700'   },
+  { status:'AGUARDANDO_DESPACHO',   border:'border-t-yellow-500', bg:'bg-yellow-50',  text:'text-yellow-700'  },
+  { status:'PRONTO_PARA_RETIRADA',  border:'border-t-indigo-400', bg:'bg-indigo-50',  text:'text-indigo-700'  },
+  { status:'EM_CAMINHO',            border:'border-t-purple-400', bg:'bg-purple-50',  text:'text-purple-700'  },
+  { status:'SAIU_PARA_ENTREGA',     border:'border-t-purple-300', bg:'bg-purple-50',  text:'text-purple-600'  },
+  { status:'ENTREGUE',              border:'border-t-green-400',  bg:'bg-green-50',   text:'text-green-700'   },
+  { status:'CANCELADO',             border:'border-t-red-400',    bg:'bg-red-50',     text:'text-red-700'     },
 ];
-const CORES_BADGE = { NOVO:'bg-orange-100 text-orange-700', CONFIRMADO:'bg-blue-100 text-blue-700', PAGO:'bg-cyan-100 text-cyan-700', PREPARANDO:'bg-amber-100 text-amber-700', SAIU_PARA_ENTREGA:'bg-purple-100 text-purple-700', PRONTO_PARA_RETIRADA:'bg-indigo-100 text-indigo-700', SERVIDO:'bg-teal-100 text-teal-700', ENTREGUE:'bg-green-100 text-green-700', CANCELADO:'bg-red-100 text-red-700' };
+const CORES_BADGE = { NOVO:'bg-orange-100 text-orange-700', CONFIRMADO:'bg-blue-100 text-blue-700', PAGO:'bg-cyan-100 text-cyan-700', PREPARANDO:'bg-amber-100 text-amber-700', AGUARDANDO_DESPACHO:'bg-yellow-100 text-yellow-700', EM_CAMINHO:'bg-purple-100 text-purple-700', SAIU_PARA_ENTREGA:'bg-purple-100 text-purple-700', PRONTO_PARA_RETIRADA:'bg-indigo-100 text-indigo-700', SERVIDO:'bg-teal-100 text-teal-700', ENTREGUE:'bg-green-100 text-green-700', CANCELADO:'bg-red-100 text-red-700' };
 function getAcoes(status) {
   const acoes = {
     NOVO: [{ tkey:'acao.confirmar', status:'CONFIRMADO', cor:'bg-blue-500 hover:bg-blue-600' }, { tkey:'acao.cancelar', status:'CANCELADO', cor:'bg-red-100 hover:bg-red-200 text-red-700' }],
     CONFIRMADO: [{ tkey:'acao.preparar', status:'PREPARANDO', cor:'bg-amber-500 hover:bg-amber-600' }, { tkey:'acao.cancelar', status:'CANCELADO', cor:'bg-red-100 hover:bg-red-200 text-red-700' }],
     PAGO: [{ tkey:'acao.preparar', status:'PREPARANDO', cor:'bg-amber-500 hover:bg-amber-600' }, { tkey:'acao.cancelar', status:'CANCELADO', cor:'bg-red-100 hover:bg-red-200 text-red-700' }],
+    AGUARDANDO_DESPACHO: [{ tkey:'acao.despachar', status:'EM_CAMINHO', cor:'bg-purple-500 hover:bg-purple-600' }, { tkey:'acao.cancelar', status:'CANCELADO', cor:'bg-red-100 hover:bg-red-200 text-red-700' }],
+    EM_CAMINHO: [{ tkey:'acao.entregue', status:'ENTREGUE', cor:'bg-green-500 hover:bg-green-600' }],
     SAIU_PARA_ENTREGA: [{ tkey:'acao.entregue', status:'ENTREGUE', cor:'bg-green-500 hover:bg-green-600' }],
     PRONTO_PARA_RETIRADA: [{ tkey:'acao.ret-confirmada', status:'ENTREGUE', cor:'bg-green-500 hover:bg-green-600' }],
   };

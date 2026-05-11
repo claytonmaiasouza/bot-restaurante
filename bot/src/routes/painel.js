@@ -1,5 +1,6 @@
 const express = require("express");
 const crypto = require("crypto");
+const bcrypt = require("bcryptjs");
 const { PrismaClient } = require("@prisma/client");
 
 const router = express.Router();
@@ -50,6 +51,40 @@ router.get("/token/:slug", (req, res) => {
   });
 });
 
+// GET /painel/motoboy/lista — lista motoboys ativos para o modal de login
+router.get("/motoboy/lista", validarToken, async (req, res) => {
+  const restaurante = await prisma.restaurante.findFirst({
+    where: { slugWhatsapp: req.painelSlug, ativo: true },
+    select: { id: true },
+  });
+  if (!restaurante) return res.status(404).json({ error: "Restaurante não encontrado" });
+  const motoboys = await prisma.motoboy.findMany({
+    where: { restauranteId: restaurante.id, ativo: true },
+    select: { id: true, nome: true },
+    orderBy: { nome: "asc" },
+  });
+  res.json({ data: motoboys });
+});
+
+// POST /painel/motoboy/auth — autentica motoboy com senha
+router.post("/motoboy/auth", validarToken, async (req, res) => {
+  const { motoboyId, senha } = req.body;
+  if (!motoboyId || !senha) return res.status(400).json({ error: "motoboyId e senha obrigatórios" });
+  const restaurante = await prisma.restaurante.findFirst({
+    where: { slugWhatsapp: req.painelSlug, ativo: true },
+    select: { id: true },
+  });
+  if (!restaurante) return res.status(404).json({ error: "Restaurante não encontrado" });
+  const motoboy = await prisma.motoboy.findFirst({
+    where: { id: motoboyId, restauranteId: restaurante.id, ativo: true },
+  });
+  if (!motoboy) return res.status(401).json({ error: "Repartidor não encontrado" });
+  if (!motoboy.senhaHash) return res.status(401).json({ error: "Senha não configurada. Contate o administrador." });
+  const ok = await bcrypt.compare(senha, motoboy.senhaHash);
+  if (!ok) return res.status(401).json({ error: "Senha incorreta" });
+  res.json({ ok: true, id: motoboy.id, nome: motoboy.nome });
+});
+
 // GET /painel/pedidos — lista pedidos para cozinha ou motoboy
 router.get("/pedidos", validarToken, async (req, res) => {
   const { tipo } = req.query;
@@ -71,7 +106,7 @@ router.get("/pedidos", validarToken, async (req, res) => {
       id: true, numeroDia: true, origem: true, status: true,
       clienteNome: true, clienteNumero: true, localizacao: true,
       itens: true, total: true, metodoPagamento: true, mesa: true,
-      motoboyNome: true, createdAt: true,
+      motoboyNome: true, motoboyId: true, createdAt: true,
     },
   });
 
@@ -114,11 +149,25 @@ router.post("/pedidos/:id/pronto", validarToken, async (req, res) => {
 
 // POST /painel/pedidos/:id/aceitar — motoboy aceita entrega → EM_CAMINHO
 router.post("/pedidos/:id/aceitar", validarToken, async (req, res) => {
-  const { motoboyNome } = req.body;
-  if (!motoboyNome?.trim()) return res.status(400).json({ error: "motoboyNome obrigatório" });
+  const { motoboyId } = req.body;
+  if (!motoboyId) return res.status(400).json({ error: "motoboyId obrigatório" });
+
+  const restaurante = await prisma.restaurante.findFirst({
+    where: { slugWhatsapp: req.painelSlug, ativo: true },
+    select: { id: true },
+  });
+  const motoboy = await prisma.motoboy.findFirst({
+    where: { id: motoboyId, restauranteId: restaurante?.id },
+    select: { nome: true },
+  });
+
   const pedido = await prisma.pedido.update({
     where: { id: req.params.id },
-    data: { motoboyNome: motoboyNome.trim(), status: "EM_CAMINHO" },
+    data: {
+      motoboyId,
+      motoboyNome: motoboy?.nome || motoboyId,
+      status: "EM_CAMINHO",
+    },
   });
   const io = req.app.get("io");
   io?.to("admin").emit("pedido:atualizado", pedido);

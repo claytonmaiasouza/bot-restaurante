@@ -114,8 +114,9 @@ model Pedido {
   motoboyNome   String?     // nome denormalizado para exibição
   mesa          Int?        // número da mesa (null = pedido via WhatsApp)
   origem        String      @default("WHATSAPP") // WHATSAPP | MESA
-  numeroDia     Int?        // sequencial diário reiniciado a cada dia por restaurante
-  createdAt     DateTime    @default(now())
+  numeroDia      Int?        // sequencial diário reiniciado a cada dia por restaurante
+  comprovanteUrl String?    // URL da foto do comprovante de pagamento enviado pelo cliente
+  createdAt      DateTime   @default(now())
 }
 
 model ClienteFidelidade {
@@ -160,6 +161,9 @@ model Motoboy {
   id            String      @id @default(uuid())
   nome          String
   telefone      String      // número WhatsApp (só dígitos)
+  cedula        String?     // número de cédula de identidade
+  placa         String?     // placa da moto
+  senhaHash     String?     // senha para login no painel do motoboy (bcrypt)
   restauranteId String
   restaurante   Restaurante @relation(fields: [restauranteId], references: [id], onDelete: Cascade)
   ativo         Boolean     @default(true)

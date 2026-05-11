@@ -303,9 +303,13 @@ router.post("/motoboys", async (req, res) => {
   try {
     const restauranteId = resolverRestauranteId(req);
     if (!restauranteId) return res.status(400).json({ error: "restauranteId obrigatório" });
-    const { nome, telefone } = req.body;
+    const { nome, telefone, cedula, placa, senha } = req.body;
     if (!nome || !telefone) return res.status(400).json({ error: "nome e telefone são obrigatórios" });
-    const motoboy = await prisma.motoboy.create({ data: { nome, telefone: normalizarTelefone(telefone), restauranteId } });
+    const data = { nome, telefone: normalizarTelefone(telefone), restauranteId };
+    if (cedula) data.cedula = cedula.trim();
+    if (placa) data.placa = placa.trim().toUpperCase();
+    if (senha) data.senhaHash = await bcrypt.hash(senha, 10);
+    const motoboy = await prisma.motoboy.create({ data });
     res.json({ data: motoboy });
   } catch (err) {
     res.status(500).json({ error: err.message });
@@ -314,11 +318,14 @@ router.post("/motoboys", async (req, res) => {
 
 router.patch("/motoboys/:id", async (req, res) => {
   const { id } = req.params;
-  const { nome, telefone, ativo } = req.body;
+  const { nome, telefone, ativo, cedula, placa, senha } = req.body;
   const data = {};
   if (nome !== undefined) data.nome = nome;
   if (telefone !== undefined) data.telefone = normalizarTelefone(telefone);
   if (ativo !== undefined) data.ativo = ativo;
+  if (cedula !== undefined) data.cedula = cedula?.trim() || null;
+  if (placa !== undefined) data.placa = placa?.trim().toUpperCase() || null;
+  if (senha) data.senhaHash = await bcrypt.hash(senha, 10);
   try {
     const motoboy = await prisma.motoboy.update({ where: { id }, data });
     res.json({ data: motoboy });

@@ -15,16 +15,29 @@
 </head>
 <body class="min-h-screen text-gray-900">
 
-  <!-- Name modal -->
-  <div id="modal-nome" class="fixed inset-0 bg-black/60 z-50 flex items-center justify-center p-4">
+  <!-- Login modal -->
+  <div id="modal-login" class="fixed inset-0 bg-black/60 z-50 flex items-center justify-center p-4">
     <div class="bg-white rounded-2xl p-6 w-full max-w-sm shadow-2xl">
       <div class="text-4xl text-center mb-3">🛵</div>
       <h2 class="text-xl font-bold text-center mb-1">Bem-vindo!</h2>
-      <p class="text-gray-500 text-sm text-center mb-5">Como você se chama? Vamos usar seu nome para registrar as entregas.</p>
-      <input id="input-nome" type="text" placeholder="Seu nome"
-        class="w-full border-2 border-gray-200 focus:border-orange-400 rounded-xl px-4 py-3 text-base font-medium outline-none mb-4"
-        onkeydown="if(event.key==='Enter')confirmarNome()">
-      <button onclick="confirmarNome()"
+      <p class="text-gray-500 text-sm text-center mb-5">Selecione seu nome e insira sua senha para entrar.</p>
+      <div class="space-y-3 mb-4">
+        <div>
+          <label class="text-xs text-gray-500 mb-1 block">Repartidor</label>
+          <select id="login-select"
+            class="w-full border-2 border-gray-200 focus:border-orange-400 rounded-xl px-4 py-3 text-base font-medium outline-none bg-white">
+            <option value="">Carregando...</option>
+          </select>
+        </div>
+        <div>
+          <label class="text-xs text-gray-500 mb-1 block">Senha</label>
+          <input id="login-senha" type="password" placeholder="Sua senha"
+            class="w-full border-2 border-gray-200 focus:border-orange-400 rounded-xl px-4 py-3 text-base font-medium outline-none"
+            onkeydown="if(event.key==='Enter')fazerLogin()">
+        </div>
+        <p id="login-erro" class="text-red-500 text-sm hidden"></p>
+      </div>
+      <button onclick="fazerLogin()" id="btn-login"
         class="btn-touch w-full bg-orange-500 hover:bg-orange-600 text-white font-bold py-3.5 rounded-xl text-base transition active:scale-95">
         Entrar
       </button>
@@ -42,7 +55,7 @@
     </div>
     <div class="flex items-center gap-2">
       <span id="indicador-socket" class="w-2 h-2 rounded-full bg-red-400 transition-colors"></span>
-      <button onclick="trocarNome()" class="text-xs text-gray-400 hover:text-gray-600 underline">Trocar nome</button>
+      <button onclick="trocarConta()" class="text-xs text-gray-400 hover:text-gray-600 underline">Trocar conta</button>
     </div>
   </header>
 
@@ -84,27 +97,72 @@ if (!slug || !token) {
   document.body.innerHTML = '<div class="flex items-center justify-center h-screen"><div class="text-center p-8"><p class="text-xl font-bold mb-2">Link inválido</p><p class="text-gray-500">Solicite um novo link ao administrador.</p></div></div>';
 }
 
+let meuId = localStorage.getItem('motoboy-id') || '';
 let meuNome = localStorage.getItem('motoboy-nome') || '';
 let pedidos = [];
 
-function mostrarModal() {
-  document.getElementById('modal-nome').classList.remove('hidden');
-  setTimeout(() => document.getElementById('input-nome').focus(), 100);
+async function carregarListaMotoboys() {
+  try {
+    const res = await fetch(`/painel/motoboy/lista?slug=${slug}&t=${token}`);
+    if (!res.ok) return;
+    const { data } = await res.json();
+    const sel = document.getElementById('login-select');
+    if (!data.length) {
+      sel.innerHTML = '<option value="">Nenhum repartidor cadastrado</option>';
+      return;
+    }
+    sel.innerHTML = data.map(m => `<option value="${m.id}">${m.nome}</option>`).join('');
+  } catch {}
 }
 
-function confirmarNome() {
-  const n = document.getElementById('input-nome').value.trim();
-  if (!n) { document.getElementById('input-nome').focus(); return; }
-  meuNome = n;
-  localStorage.setItem('motoboy-nome', n);
-  document.getElementById('modal-nome').classList.add('hidden');
-  document.getElementById('meu-nome-label').textContent = n;
-  carregar();
+async function fazerLogin() {
+  const motoboyId = document.getElementById('login-select').value;
+  const senha = document.getElementById('login-senha').value;
+  const erroEl = document.getElementById('login-erro');
+  const btn = document.getElementById('btn-login');
+
+  erroEl.classList.add('hidden');
+  if (!motoboyId) { erroEl.textContent = 'Selecione seu nome.'; erroEl.classList.remove('hidden'); return; }
+  if (!senha) { erroEl.textContent = 'Insira sua senha.'; erroEl.classList.remove('hidden'); return; }
+
+  btn.disabled = true; btn.textContent = '...';
+  try {
+    const res = await fetch(`/painel/motoboy/auth?slug=${slug}&t=${token}`, {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ motoboyId, senha }),
+    });
+    const json = await res.json();
+    if (!res.ok) {
+      erroEl.textContent = json.error || 'Erro ao entrar.';
+      erroEl.classList.remove('hidden');
+      btn.disabled = false; btn.textContent = 'Entrar';
+      return;
+    }
+    meuId = json.id;
+    meuNome = json.nome;
+    localStorage.setItem('motoboy-id', meuId);
+    localStorage.setItem('motoboy-nome', meuNome);
+    document.getElementById('modal-login').classList.add('hidden');
+    document.getElementById('meu-nome-label').textContent = `👤 ${meuNome}`;
+    carregar();
+  } catch {
+    erroEl.textContent = 'Erro de conexão. Tente novamente.';
+    erroEl.classList.remove('hidden');
+    btn.disabled = false; btn.textContent = 'Entrar';
+  }
 }
 
-function trocarNome() {
-  document.getElementById('input-nome').value = meuNome;
-  mostrarModal();
+function trocarConta() {
+  localStorage.removeItem('motoboy-id');
+  localStorage.removeItem('motoboy-nome');
+  meuId = ''; meuNome = '';
+  document.getElementById('login-senha').value = '';
+  document.getElementById('login-erro').classList.add('hidden');
+  document.getElementById('btn-login').disabled = false;
+  document.getElementById('btn-login').textContent = 'Entrar';
+  document.getElementById('modal-login').classList.remove('hidden');
+  carregarListaMotoboys();
 }
 
 function numPedido(p) {
@@ -132,7 +190,7 @@ async function aceitar(id) {
     const res = await fetch(`/painel/pedidos/${id}/aceitar?slug=${slug}&t=${token}`, {
       method: 'POST',
       headers: { 'Content-Type': 'application/json' },
-      body: JSON.stringify({ motoboyNome: meuNome }),
+      body: JSON.stringify({ motoboyId: meuId }),
     });
     if (!res.ok) {
       if (btn) { btn.disabled = false; btn.textContent = 'Aceitar'; }
@@ -240,8 +298,8 @@ async function carregar() {
     document.getElementById('meu-nome-label').textContent = meuNome ? `👤 ${meuNome}` : '';
 
     const moeda = restaurante?.moeda || 'R$';
-    const disponiveis = data.filter(p => p.status === 'AGUARDANDO_DESPACHO' && !p.motoboyNome);
-    const meus = data.filter(p => p.status === 'EM_CAMINHO' && p.motoboyNome === meuNome);
+    const disponiveis = data.filter(p => p.status === 'AGUARDANDO_DESPACHO' && !p.motoboyId);
+    const meus = data.filter(p => p.status === 'EM_CAMINHO' && p.motoboyId === meuId);
 
     document.getElementById('count-disp').textContent = disponiveis.length;
     document.getElementById('count-meus').textContent = meus.length;
@@ -282,12 +340,12 @@ socket.on('pedido:status', carregar);
 socket.on('pedido:novo', carregar);
 
 // Init
-if (meuNome) {
-  document.getElementById('modal-nome').classList.add('hidden');
+if (meuId && meuNome) {
+  document.getElementById('modal-login').classList.add('hidden');
   document.getElementById('meu-nome-label').textContent = `👤 ${meuNome}`;
   carregar();
 } else {
-  mostrarModal();
+  carregarListaMotoboys();
 }
 </script>
 </body>

@@ -1459,17 +1459,30 @@
 
     <!-- Modal Motoboy -->
     <div id="modal-motoboy" class="hidden fixed inset-0 bg-black/50 z-50 flex items-center justify-center p-4">
-      <div class="bg-white rounded-2xl shadow-xl w-full max-w-sm p-6">
+      <div class="bg-white rounded-2xl shadow-xl w-full max-w-sm p-6 max-h-[90vh] overflow-y-auto">
         <h3 class="font-bold text-gray-800 mb-4" id="modal-motoboy-titulo">Novo Motoboy</h3>
         <input type="hidden" id="motoboy-edit-id">
         <div class="space-y-3">
           <div>
-            <label class="text-xs text-gray-500 mb-1 block">Nome</label>
-            <input id="motoboy-nome" type="text" placeholder="Nome do motoboy" class="w-full border border-gray-300 rounded-lg px-3 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-orange-400">
+            <label class="text-xs text-gray-500 mb-1 block">Nome *</label>
+            <input id="motoboy-nome" type="text" placeholder="Nome do repartidor" class="w-full border border-gray-300 rounded-lg px-3 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-orange-400">
           </div>
           <div>
-            <label class="text-xs text-gray-500 mb-1 block">WhatsApp (só dígitos, com DDI)</label>
+            <label class="text-xs text-gray-500 mb-1 block">WhatsApp (só dígitos, com DDI) *</label>
             <input id="motoboy-telefone" type="text" placeholder="595981234567" class="w-full border border-gray-300 rounded-lg px-3 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-orange-400">
+          </div>
+          <div>
+            <label class="text-xs text-gray-500 mb-1 block">Nº Cédula de Identidade</label>
+            <input id="motoboy-cedula" type="text" placeholder="Ex: 1234567" class="w-full border border-gray-300 rounded-lg px-3 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-orange-400">
+          </div>
+          <div>
+            <label class="text-xs text-gray-500 mb-1 block">Placa da Moto</label>
+            <input id="motoboy-placa" type="text" placeholder="Ex: ABC123" class="w-full border border-gray-300 rounded-lg px-3 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-orange-400">
+          </div>
+          <div>
+            <label class="text-xs text-gray-500 mb-1 block">Senha para o painel de entregas</label>
+            <input id="motoboy-senha" type="password" placeholder="Senha de acesso ao painel" class="w-full border border-gray-300 rounded-lg px-3 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-orange-400">
+            <p id="motoboy-senha-hint" class="text-xs text-gray-400 mt-1 hidden">Deixe em branco para manter a senha atual.</p>
           </div>
         </div>
         <div class="flex gap-2 mt-5">
@@ -5494,14 +5507,18 @@ async function carregarMotoboys() {
   data.forEach(m => {
     const div = document.createElement('div');
     div.className = 'bg-white rounded-xl shadow-sm p-4 flex items-center justify-between gap-3';
+    div.dataset.motoboyId = m.id;
     div.innerHTML = `
       <div>
         <p class="font-semibold text-gray-800 text-sm">${m.nome}</p>
         <p class="text-xs text-gray-400">📱 ${m.telefone}</p>
+        ${m.cedula ? `<p class="text-xs text-gray-400">🪪 ${m.cedula}</p>` : ''}
+        ${m.placa ? `<p class="text-xs text-gray-400">🏍️ ${m.placa}</p>` : ''}
         <span class="text-xs ${m.ativo ? 'text-green-600' : 'text-gray-400'}">${m.ativo ? t('moto.ativo') : t('moto.inativo')}</span>
+        ${m.senhaHash ? '<span class="text-xs text-blue-500 ml-2">🔑 Senha configurada</span>' : '<span class="text-xs text-amber-500 ml-2">⚠️ Sem senha</span>'}
       </div>
       <div class="flex gap-2">
-        <button onclick="abrirModalMotoboy('${m.id}', '${m.nome.replace(/'/g, '')}', '${m.telefone}', ${m.ativo})"
+        <button onclick="abrirModalMotoboyById('${m.id}')"
           class="text-xs bg-gray-100 hover:bg-gray-200 text-gray-700 px-3 py-1.5 rounded-lg">${t('moto.editar')}</button>
         <button onclick="deletarMotoboy('${m.id}')"
           class="text-xs bg-red-50 hover:bg-red-100 text-red-600 px-3 py-1.5 rounded-lg">${t('moto.remover')}</button>
@@ -5510,10 +5527,21 @@ async function carregarMotoboys() {
   });
 }
 
-function abrirModalMotoboy(id = null, nome = '', telefone = '', ativo = true) {
+function abrirModalMotoboyById(id) {
+  const m = motoboysCache.find(x => x.id === id);
+  if (!m) return;
+  abrirModalMotoboy(m.id, m.nome, m.telefone, m.ativo, m.cedula || '', m.placa || '');
+}
+
+function abrirModalMotoboy(id = null, nome = '', telefone = '', ativo = true, cedula = '', placa = '') {
   document.getElementById('motoboy-edit-id').value = id || '';
   document.getElementById('motoboy-nome').value = nome;
   document.getElementById('motoboy-telefone').value = telefone;
+  document.getElementById('motoboy-cedula').value = cedula;
+  document.getElementById('motoboy-placa').value = placa;
+  document.getElementById('motoboy-senha').value = '';
+  const hint = document.getElementById('motoboy-senha-hint');
+  if (id) hint.classList.remove('hidden'); else hint.classList.add('hidden');
   document.getElementById('modal-motoboy-titulo').textContent = id ? t('moto.editar-modal') : t('moto.novo-modal');
   document.getElementById('modal-motoboy').classList.remove('hidden');
 }
@@ -5526,12 +5554,17 @@ async function salvarMotoboy() {
   const id = document.getElementById('motoboy-edit-id').value;
   const nome = document.getElementById('motoboy-nome').value.trim();
   const telefone = document.getElementById('motoboy-telefone').value.trim();
+  const cedula = document.getElementById('motoboy-cedula').value.trim();
+  const placa = document.getElementById('motoboy-placa').value.trim();
+  const senha = document.getElementById('motoboy-senha').value;
   if (!nome || !telefone) { mostrarToast('Preencha nome e telefone'); return; }
 
   const url = id ? `/admin/motoboys/${id}` : '/admin/motoboys';
   const method = id ? 'PATCH' : 'POST';
   const rid = motoboyRestauranteId || restauranteAtual;
-  const body = id ? { nome, telefone } : { nome, telefone, restauranteId: rid };
+  const body = id
+    ? { nome, telefone, cedula, placa, ...(senha ? { senha } : {}) }
+    : { nome, telefone, cedula, placa, ...(senha ? { senha } : {}), restauranteId: rid };
 
   const res = await fetch(url, {
     method,

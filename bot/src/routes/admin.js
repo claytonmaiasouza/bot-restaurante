@@ -449,6 +449,44 @@ router.get("/motoboys/despachos", async (req, res) => {
   }
 });
 
+// GET /admin/motoboys/:id/historico?restauranteId=xxx&page=1&limit=20
+router.get("/motoboys/:id/historico", async (req, res) => {
+  const rid = resolverRestauranteId(req);
+  if (!rid) return res.status(400).json({ error: "restauranteId obrigatório" });
+
+  const page = Math.max(1, Number(req.query.page) || 1);
+  const limit = Math.min(50, Math.max(1, Number(req.query.limit) || 20));
+  const skip = (page - 1) * limit;
+
+  try {
+    const where = { restauranteId: rid, motoboyId: req.params.id };
+    const [total, pedidos] = await Promise.all([
+      prisma.pedido.count({ where }),
+      prisma.pedido.findMany({
+        where,
+        orderBy: { createdAt: "desc" },
+        skip,
+        take: limit,
+        select: {
+          id: true,
+          numeroDia: true,
+          clienteNome: true,
+          clienteNumero: true,
+          localizacao: true,
+          total: true,
+          status: true,
+          metodoPagamento: true,
+          createdAt: true,
+        },
+      }),
+    ]);
+
+    res.json({ data: pedidos, total, page, pages: Math.ceil(total / limit) });
+  } catch (err) {
+    res.status(500).json({ error: err.message });
+  }
+});
+
 // ── GET /admin/clientes/fidelidade?limite=10 ─────────────────────────────────
 router.get("/clientes/fidelidade", async (req, res) => {
   const limite = Math.min(Number(req.query.limite) || 10, 100);
@@ -506,10 +544,11 @@ router.get("/stats", async (req, res) => {
   }
 });
 
-// ── GET /admin/metricas?restauranteId=X&inicio=YYYY-MM-DD&fim=YYYY-MM-DD ──────
+// ── GET /admin/metricas?restauranteId=X&inicio=YYYY-MM-DD&fim=YYYY-MM-DD&utcOffset=N ──
 router.get("/metricas", async (req, res) => {
   const restauranteId = resolverRestauranteId(req);
   const { inicio, fim } = req.query;
+  const utcOffset = parseFloat(req.query.utcOffset) || 0; // hours, e.g. -3 for UTC-3
 
   const dataFim = fim ? new Date(fim + "T23:59:59.999Z") : new Date();
   const dataInicio = inicio
@@ -537,29 +576,41 @@ router.get("/metricas", async (req, res) => {
     const ticketMedio = totalPedidos ? totalFaturamento / totalPedidos : 0;
     const clientesUnicos = new Set(pedidos.map((p) => p.clienteNumero)).size;
 
-    // Pedidos + faturamento por dia (preenche todos os dias do intervalo)
+    // Pedidos + faturamento por dia (agrupa por data local do cliente)
     const porDiaMap = {};
     pedidos.forEach((p) => {
-      const dia = p.createdAt.toISOString().slice(0, 10);
+      const localMs = new Date(p.createdAt).getTime() + utcOffset * 3600000;
+      const dia = new Date(localMs).toISOString().slice(0, 10);
       if (!porDiaMap[dia]) porDiaMap[dia] = { count: 0, revenue: 0 };
       porDiaMap[dia].count++;
       porDiaMap[dia].revenue += p.total || 0;
     });
     const porDia = [];
-    const cur = new Date(dataInicio);
-    while (cur <= dataFim) {
-      const d = cur.toISOString().slice(0, 10);
+    // itera por datas locais dentro do intervalo
+    const curLocal = new Date(dataInicio.getTime() + utcOffset * 3600000);
+    curLocal.setUTCHours(0, 0, 0, 0);
+    const fimLocal = new Date(dataFim.getTime() + utcOffset * 3600000);
+    while (curLocal <= fimLocal) {
+      const d = curLocal.toISOString().slice(0, 10);
       porDia.push({ data: d, pedidos: porDiaMap[d]?.count || 0, faturamento: porDiaMap[d]?.revenue || 0 });
-      cur.setUTCDate(cur.getUTCDate() + 1);
+      curLocal.setUTCDate(curLocal.getUTCDate() + 1);
     }
 
-    // Por hora do dia
+    // Por hora do dia (ajustado ao timezone do cliente)
     const porHora = Array.from({ length: 24 }, (_, h) => ({ hora: h, count: 0 }));
-    pedidos.forEach((p) => { porHora[new Date(p.createdAt).getUTCHours()].count++; });
+    pedidos.forEach((p) => {
+      const localHour = (new Date(p.createdAt).getUTCHours() + utcOffset + 24) % 24;
+      porHora[Math.floor(localHour)].count++;
+    });
 
-    // Por dia da semana (0=Dom … 6=Sáb)
+    // Por dia da semana (0=Dom … 6=Sáb), ajustado ao timezone do cliente
     const porDiaSemana = Array.from({ length: 7 }, (_, d) => ({ dia: d, count: 0 }));
-    pedidos.forEach((p) => { porDiaSemana[new Date(p.createdAt).getUTCDay()].count++; });
+    pedidos.forEach((p) => {
+      const d = new Date(p.createdAt);
+      const localMs = d.getTime() + utcOffset * 3600000;
+      const localDay = new Date(localMs).getUTCDay();
+      porDiaSemana[localDay].count++;
+    });
 
     // Ranking de itens
     const itensMap = {};

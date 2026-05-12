@@ -1498,6 +1498,33 @@
       </div>
     </div>
 
+    <!-- Modal Histórico Motoboy -->
+    <div id="modal-historico-motoboy" class="hidden fixed inset-0 bg-black/50 z-50 flex items-center justify-center p-4">
+      <div class="bg-white rounded-2xl shadow-xl w-full max-w-lg flex flex-col" style="max-height:90vh">
+        <div class="flex items-center justify-between p-5 border-b border-gray-100 shrink-0">
+          <div>
+            <h3 class="font-bold text-gray-800" id="hist-motoboy-titulo">Histórico de Entregas</h3>
+            <div class="flex gap-4 mt-1" id="hist-motoboy-stats">
+              <span class="text-xs text-gray-400" id="hist-stat-total"></span>
+              <span class="text-xs text-gray-400" id="hist-stat-mes"></span>
+              <span class="text-xs text-gray-400" id="hist-stat-hoje"></span>
+            </div>
+          </div>
+          <button onclick="fecharHistoricoMotoboy()" class="text-gray-400 hover:text-gray-600 text-xl leading-none">&times;</button>
+        </div>
+        <div class="overflow-y-auto flex-1 p-4" id="hist-motoboy-lista">
+          <p class="text-center text-sm text-gray-400 py-8">Carregando...</p>
+        </div>
+        <div class="p-4 border-t border-gray-100 shrink-0 flex items-center justify-between" id="hist-motoboy-paginacao">
+          <button onclick="mudarPaginaHistorico(-1)" id="hist-btn-prev"
+            class="text-xs bg-gray-100 hover:bg-gray-200 text-gray-700 px-3 py-1.5 rounded-lg disabled:opacity-40 disabled:cursor-not-allowed">← Anterior</button>
+          <span class="text-xs text-gray-400" id="hist-pag-info"></span>
+          <button onclick="mudarPaginaHistorico(1)" id="hist-btn-next"
+            class="text-xs bg-gray-100 hover:bg-gray-200 text-gray-700 px-3 py-1.5 rounded-lg disabled:opacity-40 disabled:cursor-not-allowed">Próxima →</button>
+        </div>
+      </div>
+    </div>
+
     <!-- Modal Despachar para Motoboy -->
     <div id="modal-despachar" class="hidden fixed inset-0 bg-black/50 z-50 flex items-center justify-center p-4">
       <div class="bg-white rounded-2xl shadow-xl w-full max-w-sm p-6">
@@ -4899,11 +4926,11 @@ let metCharts = {}; // armazena instâncias Chart.js para destruir ao atualizar
 let metDias = 30;   // período padrão
 
 function iniciarMetricas() {
-  // Define datas padrão se estiverem vazias
   const hoje = new Date();
   const fim = document.getElementById('met-fim');
   const ini = document.getElementById('met-inicio');
-  if (!fim.value) fim.value = hoje.toISOString().slice(0, 10);
+  // sempre atualiza fim para hoje UTC — evita exibir data antiga do DOM
+  fim.value = hoje.toISOString().slice(0, 10);
   if (!ini.value) {
     const d = new Date(hoje); d.setDate(d.getDate() - 29);
     ini.value = d.toISOString().slice(0, 10);
@@ -4939,6 +4966,7 @@ async function carregarMetricas() {
   if (restauranteAtual) params.set('restauranteId', restauranteAtual);
   if (inicio) params.set('inicio', inicio);
   if (fim) params.set('fim', fim);
+  params.set('utcOffset', String(-new Date().getTimezoneOffset() / 60));
 
   const res = await fetch(`/admin/metricas?${params}`, { headers: getHeaders() });
   if (!res.ok) return;
@@ -5537,15 +5565,20 @@ async function carregarMotoboys() {
     div.className = 'bg-white rounded-xl shadow-sm p-4 flex items-center justify-between gap-3';
     div.dataset.motoboyId = m.id;
     div.innerHTML = `
-      <div>
-        <p class="font-semibold text-gray-800 text-sm">${m.nome}</p>
+      <div class="flex-1 min-w-0">
+        <button onclick="abrirHistoricoMotoboy('${m.id}', ${JSON.stringify(m.nome).replace(/"/g, '&quot;')})"
+          class="font-semibold text-gray-800 text-sm hover:text-orange-500 transition text-left">
+          ${m.nome}
+        </button>
         <p class="text-xs text-gray-400">📱 ${m.telefone}</p>
         ${m.cedula ? `<p class="text-xs text-gray-400">🪪 ${m.cedula}</p>` : ''}
         ${m.placa ? `<p class="text-xs text-gray-400">🏍️ ${m.placa}</p>` : ''}
-        <span class="text-xs ${m.ativo ? 'text-green-600' : 'text-gray-400'}">${m.ativo ? t('moto.ativo') : t('moto.inativo')}</span>
-        ${m.senhaHash ? '<span class="text-xs text-blue-500 ml-2">🔑 Senha configurada</span>' : '<span class="text-xs text-amber-500 ml-2">⚠️ Sem senha</span>'}
+        <div class="mt-1">
+          <span class="text-xs ${m.ativo ? 'text-green-600' : 'text-gray-400'}">${m.ativo ? t('moto.ativo') : t('moto.inativo')}</span>
+          ${m.senhaHash ? '<span class="text-xs text-blue-500 ml-2">🔑 Senha configurada</span>' : '<span class="text-xs text-amber-500 ml-2">⚠️ Sem senha</span>'}
+        </div>
       </div>
-      <div class="flex gap-2">
+      <div class="flex gap-2 shrink-0">
         <button onclick="abrirModalMotoboyById('${m.id}')"
           class="text-xs bg-gray-100 hover:bg-gray-200 text-gray-700 px-3 py-1.5 rounded-lg">${t('moto.editar')}</button>
         <button onclick="deletarMotoboy('${m.id}')"
@@ -5576,6 +5609,108 @@ function abrirModalMotoboy(id = null, nome = '', telefone = '', ativo = true, ce
 
 function fecharModalMotoboy() {
   document.getElementById('modal-motoboy').classList.add('hidden');
+}
+
+// ── Histórico de Entregas do Motoboy ──────────────────────────────────────────
+let _histMotoboyId = null;
+let _histMotoboyPage = 1;
+let _histMotoboyPages = 1;
+
+async function abrirHistoricoMotoboy(id, nome) {
+  _histMotoboyId = id;
+  _histMotoboyPage = 1;
+  document.getElementById('hist-motoboy-titulo').textContent = `Entregas — ${nome}`;
+  document.getElementById('hist-motoboy-stats').classList.add('hidden');
+  document.getElementById('hist-motoboy-lista').innerHTML = '<p class="text-center text-sm text-gray-400 py-8">Carregando...</p>';
+  document.getElementById('modal-historico-motoboy').classList.remove('hidden');
+  await _renderHistoricoMotoboy();
+
+  // busca stats de despachos para exibir totais
+  const rid = motoboyRestauranteId;
+  if (rid) {
+    const sr = await fetch(`/admin/motoboys/despachos?restauranteId=${rid}`, { headers: getHeaders() });
+    if (sr.ok) {
+      const { data } = await sr.json();
+      const item = data.find(d => d.motoboyId === id);
+      if (item) {
+        document.getElementById('hist-stat-total').textContent = `Total: ${item.total}`;
+        document.getElementById('hist-stat-mes').textContent = `Mês: ${item.mes}`;
+        document.getElementById('hist-stat-hoje').textContent = `Hoje: ${item.hoje}`;
+        document.getElementById('hist-motoboy-stats').classList.remove('hidden');
+      }
+    }
+  }
+}
+
+async function _renderHistoricoMotoboy() {
+  const rid = motoboyRestauranteId;
+  const lista = document.getElementById('hist-motoboy-lista');
+  lista.innerHTML = '<p class="text-center text-sm text-gray-400 py-8">Carregando...</p>';
+
+  const res = await fetch(`/admin/motoboys/${_histMotoboyId}/historico?restauranteId=${rid}&page=${_histMotoboyPage}&limit=15`, { headers: getHeaders() });
+  if (!res.ok) { lista.innerHTML = '<p class="text-center text-sm text-red-400 py-8">Erro ao carregar.</p>'; return; }
+
+  const { data, total, page, pages } = await res.json();
+  _histMotoboyPages = pages;
+
+  document.getElementById('hist-pag-info').textContent = total > 0 ? `Página ${page} de ${pages} · ${total} entrega${total !== 1 ? 's' : ''}` : '';
+  document.getElementById('hist-btn-prev').disabled = page <= 1;
+  document.getElementById('hist-btn-next').disabled = page >= pages;
+  document.getElementById('hist-motoboy-paginacao').classList.toggle('hidden', total === 0);
+
+  if (!data.length) { lista.innerHTML = '<p class="text-center text-sm text-gray-400 py-8">Nenhuma entrega encontrada.</p>'; return; }
+
+  const STATUS_COR = {
+    ENTREGUE: 'bg-green-100 text-green-700',
+    EM_CAMINHO: 'bg-blue-100 text-blue-700',
+    AGUARDANDO_DESPACHO: 'bg-yellow-100 text-yellow-700',
+    CANCELADO: 'bg-red-100 text-red-600',
+  };
+  const STATUS_LABEL = {
+    ENTREGUE: '✅ Entregue',
+    EM_CAMINHO: '🛵 A caminho',
+    AGUARDANDO_DESPACHO: '⏳ Aguardando',
+    CANCELADO: '❌ Cancelado',
+  };
+  const moeda = restauranteInfo?.moeda || 'R$';
+  const fmt = (v) => {
+    const temDec = ['R$','$','€'].includes(moeda);
+    return temDec ? `${moeda} ${v.toFixed(2)}` : `${moeda} ${Math.round(v).toLocaleString()}`;
+  };
+
+  lista.innerHTML = data.map(p => {
+    const num = p.numeroDia ? `#${p.numeroDia}` : `#${p.id.substring(0,6).toUpperCase()}`;
+    const data_ = new Date(p.createdAt).toLocaleString('pt-BR', { day:'2-digit', month:'2-digit', year:'numeric', hour:'2-digit', minute:'2-digit' });
+    const cor = STATUS_COR[p.status] || 'bg-gray-100 text-gray-600';
+    const label = STATUS_LABEL[p.status] || p.status;
+    const cliente = p.clienteNome || p.clienteNumero || 'Desconhecido';
+    const end = p.localizacao ? `<p class="text-xs text-gray-400 mt-0.5 truncate" title="${p.localizacao}">${p.localizacao}</p>` : '';
+    return `
+      <div class="flex items-start gap-3 py-3 border-b border-gray-50 last:border-0">
+        <div class="flex-1 min-w-0">
+          <div class="flex items-center gap-2 mb-0.5">
+            <span class="font-semibold text-sm text-gray-800">${num}</span>
+            <span class="text-xs px-2 py-0.5 rounded-full font-medium ${cor}">${label}</span>
+          </div>
+          <p class="text-sm text-gray-700 truncate">${cliente}</p>
+          ${end}
+          <p class="text-xs text-gray-400 mt-0.5">${data_}${p.metodoPagamento ? ' · ' + p.metodoPagamento : ''}</p>
+        </div>
+        <span class="text-sm font-semibold text-gray-800 shrink-0">${fmt(p.total || 0)}</span>
+      </div>`;
+  }).join('');
+}
+
+function mudarPaginaHistorico(delta) {
+  const nova = _histMotoboyPage + delta;
+  if (nova < 1 || nova > _histMotoboyPages) return;
+  _histMotoboyPage = nova;
+  _renderHistoricoMotoboy();
+}
+
+function fecharHistoricoMotoboy() {
+  document.getElementById('modal-historico-motoboy').classList.add('hidden');
+  _histMotoboyId = null;
 }
 
 async function salvarMotoboy() {

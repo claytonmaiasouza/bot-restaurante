@@ -291,10 +291,17 @@ async function receberMensagem(req, res) {
     }
 
     // ── f) Localização → guardar e perguntar pagamento (se não informado antes) ─
+    // Aceita localização em qualquer estado ativo (não só AGUARDANDO_LOCALIZACAO),
+    // pois o Claude pode ter avançado o estado incorretamente.
+    const ESTADOS_ACEITA_LOCALIZACAO = [
+      "AGUARDANDO_LOCALIZACAO", "CONFIRMANDO_PEDIDO", "ADICIONANDO_ITEM",
+      "VENDO_CARDAPIO", "AGUARDANDO_PAGAMENTO",
+    ];
     if (
-      sessao.estado === "AGUARDANDO_LOCALIZACAO" &&
-      eMensagemDeLocalizacao(mensagem)
+      eMensagemDeLocalizacao(mensagem) &&
+      ESTADOS_ACEITA_LOCALIZACAO.includes(sessao.estado)
     ) {
+      console.log(`[webhook] localização recebida (estado: ${sessao.estado}) de ${clienteNumero}`);
       const localizacao = extrairLocalizacao(mensagem);
       await salvarMensagem(sessao.id, "cliente", `[localização] ${localizacao}`);
 

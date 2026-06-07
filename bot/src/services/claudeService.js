@@ -61,7 +61,17 @@ Histórico do cliente neste restaurante: ${totalPedidos} pedido(s) totais, total
 }
 
 // ── Monta system prompt dinâmico ─────────────────────────────────────────────
-function montarSystemPrompt(restaurante, cardapio, fidelidade = null) {
+function montarSecaoPromocoes(promocoes) {
+  if (!promocoes || !promocoes.length) return "";
+  const lista = promocoes.map(p => {
+    const preco = p.precoPromocional != null ? ` — Preço promocional: ${p.precoPromocional}` : "";
+    const desc = p.descricao ? `: ${p.descricao}` : "";
+    return `  • *${p.nome}*${desc}${preco}`;
+  }).join("\n");
+  return `\n## Promoções ativas\nEste restaurante possui promoções especiais. Mencione-as de forma natural quando o cliente estiver vendo o cardápio ou confirmando o pedido, mas sem forçar — ofereça uma vez se parecer relevante.\n\n${lista}\n`;
+}
+
+function montarSystemPrompt(restaurante, cardapio, fidelidade = null, promocoes = []) {
   const moeda = restaurante.moeda || "R$";
   const temDecimal = ["R$", "$", "€"].includes(moeda);
   // Para moedas inteiras (G$, etc.) NÃO usar separador de milhar no system prompt,
@@ -114,7 +124,7 @@ function montarSystemPrompt(restaurante, cardapio, fidelidade = null) {
       if (/\.(jpg|jpeg|png|webp)$/i.test(restaurante.cardapioPdfUrl)) temFotos = true;
     }
     if (temFotos) {
-      oferecerFotosFluxo = ` Ao terminar de listar os sabores de pizzas salgadas, **OBRIGATÓRIO**: finalize SEMPRE com a pergunta "\\n\\n📸 Deseja ver o cardápio completo?" — sem exceção. Somente quando o cliente responder afirmativamente a ESSA pergunta específica sobre as fotos (ex: "sim", "quero", "pode mandar", "claro", "manda"), defina "mostrarFotos": true. NUNCA defina "mostrarFotos": true em outras situações, como confirmação de pedido ou qualquer outra etapa do atendimento.`;
+      oferecerFotosFluxo = ` Ao terminar de listar os sabores de pizzas salgadas, **OBRIGATÓRIO**: finalize SEMPRE com a pergunta "\\n\\n📸 Deseja ver o cardápio completo?" (em português) ou "\\n\\n📸 ¿Desea ver el menú completo?" (em espanhol) — sem exceção, independente do idioma do cliente. Somente quando o cliente responder afirmativamente a ESSA pergunta específica sobre as fotos (ex: "sim", "quero", "pode mandar", "claro", "manda", "sí", "claro", "manda"), defina "mostrarFotos": true. NUNCA defina "mostrarFotos": true em outras situações, como confirmação de pedido ou qualquer outra etapa do atendimento.`;
     } else {
       fotosInfo = `\n- Temos cardápio disponível em PDF. NÃO mencione nem ofereça proativamente.`;
     }
@@ -157,7 +167,7 @@ Seu trabalho é receber pedidos de forma simpática, informal e eficiente, como 
 ## Cardápio atual
 ${cardapioFormatado}
 ${restaurante.instrucoes ? `\n## Informações adicionais do restaurante\nAs regras abaixo são específicas deste restaurante e complementam o cardápio. Siga-as com prioridade:\n\n${restaurante.instrucoes}\n` : ""}
-${montarSecaoFidelidade(fidelidade, restaurante)}
+${montarSecaoPromocoes(promocoes)}${montarSecaoFidelidade(fidelidade, restaurante)}
 ## Instrução de resposta estruturada
 Ao final de CADA resposta, inclua obrigatoriamente um bloco JSON no seguinte formato (sem markdown, apenas o JSON puro após o texto):
 
@@ -175,7 +185,7 @@ Ao final de CADA resposta, inclua obrigatoriamente um bloco JSON no seguinte for
 - "carrinho" reflete o estado atual do carrinho após a interação
 - "tipoEntrega" deve ser "delivery" ou "retirada"
 - "pedidoPronto" deve ser true SOMENTE quando: (a) tipoEntrega="delivery" e o cliente escrever explicitamente um endereço/rua/número na mensagem, OU (b) tipoEntrega="retirada" e cliente confirmar o pedido. NUNCA defina pedidoPronto:true para delivery em resposta à confirmação do pedido — apenas quando o texto da mensagem for um endereço concreto.
-- "mostrarFotos": true SOMENTE quando o cliente responder afirmativamente à pergunta "Deseja ver o cardápio completo?" — NUNCA em confirmações de pedido ou outras etapas
+- "mostrarFotos": true SOMENTE quando o cliente responder afirmativamente à pergunta "Deseja ver o cardápio completo?" (pt) ou "¿Desea ver el menú completo?" (es) — NUNCA em confirmações de pedido ou outras etapas
 - IMPORTANTE: o campo "preco" no carrinho deve ser SEMPRE o valor numérico inteiro completo, SEM pontos ou vírgulas. Os preços no cardápio já estão no formato inteiro sem separadores (ex: "G$ 90000" significa noventa mil — use 90000, NUNCA 90; "G$ 10000" = dez mil = use 10000)`;
 }
 
@@ -205,8 +215,8 @@ function montarHistorico(mensagens) {
 }
 
 // ── Função principal ─────────────────────────────────────────────────────────
-async function processarMensagem(sessao, mensagemCliente, restaurante, cardapio, fidelidade = null) {
-  const systemPrompt = montarSystemPrompt(restaurante, cardapio, fidelidade);
+async function processarMensagem(sessao, mensagemCliente, restaurante, cardapio, fidelidade = null, promocoes = []) {
+  const systemPrompt = montarSystemPrompt(restaurante, cardapio, fidelidade, promocoes);
   const historico = montarHistorico(sessao.mensagens || []);
 
   let mensagemEnriquecida = mensagemCliente;

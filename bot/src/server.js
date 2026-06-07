@@ -94,6 +94,10 @@ io.on("connection", (socket) => {
     }
   });
 
+  socket.on("assinar:rastrear", (pedidoId) => {
+    socket.join(`rastrear:${pedidoId}`);
+  });
+
   socket.on("disconnect", () => {
     console.log(`[socket] desconectado: ${socket.id}`);
   });

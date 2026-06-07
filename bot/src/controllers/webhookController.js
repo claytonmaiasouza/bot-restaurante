@@ -1,11 +1,13 @@
 const fs = require("fs");
 const path = require("path");
 const { processarMensagem } = require("../services/claudeService");
-const { criarOuBuscarSessao, atualizarSessao, salvarMensagem, buscarSessaoFinalizada } = require("../services/sessaoService");
+const { criarOuBuscarSessao, atualizarSessao, salvarMensagem, buscarSessaoFinalizada, buscarTelefoneDoLID, buscarJidCompleto, buscarNomeContato } = require("../services/sessaoService");
 const { enviarMensagem, enviarImagem, enviarDocumento, baixarMidiaBase64 } = require("../services/evolutionService");
-const { finalizarPedido, salvarComprovante, buscarPedidoAtivoDaSessao, formatNumPedido } = require("../services/pedidoService");
+const { finalizarPedido, salvarComprovante, buscarPedidoAtivoDaSessao, buscarPedidoEntregueNaoPago, formatNumPedido } = require("../services/pedidoService");
 const { transcreverAudio } = require("../services/transcricaoService");
 const { buscarContextoFidelidade } = require("../services/cardapioService");
+const { PrismaClient } = require("@prisma/client");
+const _prisma = new PrismaClient();
 
 // ── Detecção de idioma ────────────────────────────────────────────────────────
 
@@ -56,6 +58,29 @@ function detectarMetodoPagamento(mensagens) {
     if (/transf|trasf|tranf|\btrans\b|\bpix\b|\bbanco\b/i.test(texto)) return "Transferência";
   }
   return null;
+}
+
+// Extrai o valor numérico de uma resposta informal de troco
+// Ex: "200 mil guarani" → 200000, "200.000" → 200000, "250000" → 250000
+function parsearValorTroco(texto) {
+  // "X mil" → multiplica por 1000 (ex: "200 mil", "100 mil guaranies")
+  const milMatch = texto.match(/(\d[\d.]*)\s*mil/i);
+  if (milMatch) {
+    const base = parseInt(milMatch[1].replace(/\./g, ""), 10);
+    if (!isNaN(base) && base > 0) return base * 1000;
+  }
+  // Remove tudo que não é dígito e parseia como inteiro
+  const apenasDigitos = texto.replace(/[^\d]/g, "");
+  if (!apenasDigitos) return null;
+  const valor = parseInt(apenasDigitos, 10);
+  return !isNaN(valor) && valor > 0 ? valor : null;
+}
+
+function formatarTroco(valorNumerico, moeda) {
+  const temDecimal = ["R$", "$", "€"].includes(moeda);
+  return temDecimal
+    ? `${moeda} ${valorNumerico.toFixed(2)}`
+    : `${moeda} ${Math.round(valorNumerico).toLocaleString("pt-BR")}`;
 }
 
 // ── Verificação de horário de atendimento ─────────────────────────────────────
@@ -125,7 +150,24 @@ function extrairTexto(mensagem) {
 function extrairNumeroCliente(mensagem) {
   return (mensagem.key?.remoteJid || "")
     .replace("@s.whatsapp.net", "")
-    .replace("@g.us", "");
+    .replace("@g.us", "")
+    .replace("@lid", "");
+}
+
+// Retorna o JID completo para envio (nunca remover o sufixo aqui)
+function extrairJidEnvio(mensagem) {
+  return mensagem.key?.remoteJid || "";
+}
+
+// ── Deduplicação de mensagens (Evolution API pode enviar o mesmo evento 2x) ──
+const mensagensProcessadas = new Map(); // messageId → timestamp
+
+function deduplicar(messageId) {
+  if (!messageId) return false;
+  if (mensagensProcessadas.has(messageId)) return true;
+  mensagensProcessadas.set(messageId, Date.now());
+  setTimeout(() => mensagensProcessadas.delete(messageId), 5 * 60 * 1000);
+  return false;
 }
 
 // ── Controller principal ──────────────────────────────────────────────────────
@@ -154,10 +196,36 @@ async function receberMensagem(req, res) {
   const mensagem = evento.data?.messages?.[0] || evento.data;
   if (!mensagem || mensagem.key?.fromMe) return;
 
-  const clienteNumero = extrairNumeroCliente(mensagem);
-  if (!clienteNumero) return;
+  // Deduplicação: ignora se o mesmo messageId já foi processado recentemente
+  if (deduplicar(mensagem.key?.id)) {
+    console.log(`[webhook] mensagem duplicada ignorada: ${mensagem.key?.id}`);
+    return;
+  }
+
+  // remoteJid completo para envio (mantém @s.whatsapp.net / @lid / @g.us)
+  let remoteJid = extrairJidEnvio(mensagem);
+  if (!remoteJid) return;
 
   const instanceName = evento.instance || restaurante.slugWhatsapp;
+
+  // Alguns eventos do Evolution API omitem o sufixo @lid para contatos iOS —
+  // nesse caso buscamos o JID completo na tabela Contact para poder enviar corretamente.
+  if (!remoteJid.includes("@")) {
+    const jidCompleto = await buscarJidCompleto(remoteJid, instanceName);
+    if (jidCompleto) {
+      console.log(`[webhook] JID sem sufixo "${remoteJid}" → resolvido para "${jidCompleto}"`);
+      remoteJid = jidCompleto;
+    } else {
+      remoteJid = remoteJid + "@s.whatsapp.net";
+    }
+  }
+
+  // Número para o CRM: tenta resolver LID → telefone real
+  let clienteNumero = extrairNumeroCliente(mensagem);
+  if (remoteJid.includes("@lid")) {
+    const telefoneReal = await buscarTelefoneDoLID(mensagem.pushName || "", instanceName);
+    if (telefoneReal) clienteNumero = telefoneReal;
+  }
 
   try {
     // ── Comprovante: imagem/PDF enviado após pedido finalizado ────────────────
@@ -166,7 +234,12 @@ async function receberMensagem(req, res) {
     if (tiposMidia.includes(mensagem.messageType)) {
       const sessaoFinalizada = await buscarSessaoFinalizada(clienteNumero, restaurante.id);
       if (sessaoFinalizada) {
-        const { base64, mimeType } = await baixarMidiaBase64(instanceName, mensagem);
+        let { base64, mimeType } = await baixarMidiaBase64(instanceName, mensagem);
+        // Evolution API pode ainda não ter a mídia disponível — aguarda e tenta uma vez mais
+        if (!base64) {
+          await new Promise(r => setTimeout(r, 3000));
+          ({ base64, mimeType } = await baixarMidiaBase64(instanceName, mensagem));
+        }
         if (base64) {
           const isPdf = mimeType?.includes("pdf");
           const ext = isPdf ? "pdf" : mimeType?.includes("png") ? "png" : mimeType?.includes("webp") ? "webp" : "jpg";
@@ -190,23 +263,89 @@ async function receberMensagem(req, res) {
             mensagem: { role: "cliente", conteudo: `[comprovante] ${comprovanteUrl}`, createdAt: new Date() },
           });
           const idiomaComp = detectarIdioma(sessaoFinalizada.mensagens || []);
-          await enviarMensagem(clienteNumero, T[idiomaComp].comprovanteRecebido, instanceName);
+          await enviarMensagem(remoteJid, T[idiomaComp].comprovanteRecebido, instanceName);
           console.log(`[webhook] comprovante salvo: ${comprovanteUrl}`);
+        } else {
+          console.warn(`[webhook] falha ao baixar mídia do comprovante após retry — sessão ${sessaoFinalizada.id}`);
+          const idiomaComp = detectarIdioma(sessaoFinalizada.mensagens || []);
+          const msgErro = idiomaComp === "es"
+            ? "No pudimos recibir tu imagen. Por favor, intenta enviarla nuevamente. 📷"
+            : "Não conseguimos receber sua imagem. Por favor, tente enviar novamente. 📷";
+          await enviarMensagem(remoteJid, msgErro, instanceName);
         }
         return;
       }
     }
 
-    // ── a) Buscar/criar sessão + contexto de fidelidade ──────────────────────
-    const [sessao, fidelidade] = await Promise.all([
+    // ── Se há pedido entregue aguardando comprovante, informa o status ───────
+    if (!remoteJid.includes("@g.us")) {
+      const pedidoNaoPago = await buscarPedidoEntregueNaoPago(clienteNumero, restaurante.id);
+      if (pedidoNaoPago) {
+        const sessaoFinaliz = await buscarSessaoFinalizada(clienteNumero, restaurante.id);
+        const numFmt = formatNumPedido(pedidoNaoPago);
+        const textoEntrada = extrairTexto(mensagem) || "";
+        const idiomaMsg = detectarIdioma(sessaoFinaliz?.mensagens || []) ||
+          (/\b(hola|quiero|buenos|gracias|también|necesito|cuanto|cuánto|tengo|puedo|soy|hoy|voy|dónde|cómo)\b/i.test(textoEntrada) ? "es" : "pt");
+        const msg = idiomaMsg === "es"
+          ? `⏳ Tu pedido *#${numFmt}* está pendiente de confirmación de pago.\n\nEnvíanos el comprobante de transferencia para confirmar tu pedido. 📲`
+          : `⏳ Seu pedido *#${numFmt}* aguarda confirmação de pagamento.\n\nEnvie o comprovante de transferência aqui para finalizarmos. 📲`;
+        if (sessaoFinaliz) {
+          if (textoEntrada) {
+            await salvarMensagem(sessaoFinaliz.id, "cliente", textoEntrada);
+            io?.to("admin").emit("conversa:mensagem", { sessaoId: sessaoFinaliz.id, mensagem: { role: "cliente", conteudo: textoEntrada, createdAt: new Date() } });
+            io?.to(`restaurante:${restaurante.slugWhatsapp}`).emit("conversa:mensagem", { sessaoId: sessaoFinaliz.id, mensagem: { role: "cliente", conteudo: textoEntrada, createdAt: new Date() } });
+          }
+          await salvarMensagem(sessaoFinaliz.id, "bot", msg);
+          io?.to("admin").emit("conversa:mensagem", { sessaoId: sessaoFinaliz.id, mensagem: { role: "bot", conteudo: msg, createdAt: new Date() } });
+          io?.to(`restaurante:${restaurante.slugWhatsapp}`).emit("conversa:mensagem", { sessaoId: sessaoFinaliz.id, mensagem: { role: "bot", conteudo: msg, createdAt: new Date() } });
+        }
+        await enviarMensagem(remoteJid, msg, instanceName);
+        return;
+      }
+    }
+
+    // ── a) Buscar/criar sessão + contexto de fidelidade + promoções ─────────
+    const [sessao, fidelidade, promocoes] = await Promise.all([
       criarOuBuscarSessao(clienteNumero, restaurante.id),
       buscarContextoFidelidade(restaurante.id, clienteNumero).catch(() => null),
+      _prisma.promocao.findMany({ where: { restauranteId: restaurante.id, ativa: true }, orderBy: { createdAt: "asc" } }).catch(() => []),
     ]);
 
-    const clienteNome = mensagem.pushName || sessao.clienteNome || null;
+    let clienteNome = mensagem.pushName || sessao.clienteNome || null;
+    // Fallback: busca pushName na tabela Contact quando a mensagem (ex: áudio de iOS) não traz o nome
+    if (!clienteNome) {
+      clienteNome = await buscarNomeContato(clienteNumero, instanceName);
+    }
     if (clienteNome && clienteNome !== sessao.clienteNome) {
       await atualizarSessao(sessao.id, { clienteNome });
       sessao.clienteNome = clienteNome;
+    }
+
+    // Safety net incondicional: qualquer mensagem com pedido ENTREGUE aguardando
+    // comprovante bloqueia o fluxo normal (cobre sessões abandonadas em qualquer estado)
+    if (!remoteJid.includes("@g.us")) {
+      const pedidoNaoPago = await buscarPedidoEntregueNaoPago(clienteNumero, restaurante.id);
+      if (pedidoNaoPago) {
+        const sessaoFinaliz2 = await buscarSessaoFinalizada(clienteNumero, restaurante.id);
+        const numFmt = formatNumPedido(pedidoNaoPago);
+        const textoEntrada = extrairTexto(mensagem) || "";
+        const idiomaMsg2 = detectarIdioma(sessaoFinaliz2?.mensagens || []) ||
+          (/\b(hola|quiero|buenos|gracias|también|necesito|cuanto|cuánto|tengo|puedo|soy|hoy|voy|dónde|cómo)\b/i.test(textoEntrada) ? "es" : "pt");
+        const msgNaoPago = idiomaMsg2 === "es"
+          ? `⏳ Tu pedido *#${numFmt}* está pendiente de confirmación de pago.\n\nEnvíanos el comprobante de transferencia para confirmar tu pedido. 📲`
+          : `⏳ Seu pedido *#${numFmt}* aguarda confirmação de pagamento.\n\nEnvie o comprovante de transferência aqui para finalizarmos. 📲`;
+        const sessaoAlvo = sessaoFinaliz2 || sessao;
+        if (textoEntrada) {
+          await salvarMensagem(sessaoAlvo.id, "cliente", textoEntrada);
+          io?.to("admin").emit("conversa:mensagem", { sessaoId: sessaoAlvo.id, mensagem: { role: "cliente", conteudo: textoEntrada, createdAt: new Date() } });
+          io?.to(`restaurante:${restaurante.slugWhatsapp}`).emit("conversa:mensagem", { sessaoId: sessaoAlvo.id, mensagem: { role: "cliente", conteudo: textoEntrada, createdAt: new Date() } });
+        }
+        await salvarMensagem(sessaoAlvo.id, "bot", msgNaoPago);
+        io?.to("admin").emit("conversa:mensagem", { sessaoId: sessaoAlvo.id, mensagem: { role: "bot", conteudo: msgNaoPago, createdAt: new Date() } });
+        io?.to(`restaurante:${restaurante.slugWhatsapp}`).emit("conversa:mensagem", { sessaoId: sessaoAlvo.id, mensagem: { role: "bot", conteudo: msgNaoPago, createdAt: new Date() } });
+        await enviarMensagem(remoteJid, msgNaoPago, instanceName);
+        return;
+      }
     }
 
     const idioma = detectarIdioma(sessao.mensagens || []);
@@ -227,7 +366,7 @@ async function receberMensagem(req, res) {
     const horario = verificarHorario(restaurante.horarioAtendimento);
     if (!horario.aberto) {
       const descricao = horario.descricao || (idioma === "es" ? "Consulte nuestros horarios de atención." : "Consulte nossos horários de funcionamento.");
-      await enviarMensagem(clienteNumero, T[idioma].fechado(sessao.clienteNome, descricao), instanceName);
+      await enviarMensagem(remoteJid, T[idioma].fechado(sessao.clienteNome, descricao), instanceName);
       return;
     }
 
@@ -280,7 +419,7 @@ async function receberMensagem(req, res) {
         const statusMsg = mapa[pedidoAtivo.status] || mapa.padrao;
         const resposta = `📦 *Pedido #${numFmt}*\n\n${statusMsg}`;
 
-        await enviarMensagem(clienteNumero, resposta, instanceName);
+        await enviarMensagem(remoteJid, resposta, instanceName);
         await salvarMensagem(sessao.id, "bot", resposta);
         io?.to("admin").emit("conversa:mensagem", {
           sessaoId: sessao.id,
@@ -311,16 +450,14 @@ async function receberMensagem(req, res) {
         const msgTroco = T[idioma].troco;
         await salvarMensagem(sessao.id, "bot", msgTroco);
         io?.to("admin").emit("conversa:mensagem", { sessaoId: sessao.id, mensagem: { role: "bot", conteudo: msgTroco, createdAt: new Date() } });
-        await enviarMensagem(clienteNumero, msgTroco, instanceName);
+        await enviarMensagem(remoteJid, msgTroco, instanceName);
       } else if (metodoPago === "Cartão") {
         const pedido = await finalizarPedido(sessao.id, localizacao, "delivery", "Cartão", T[idioma].maquininha, idioma);
-        io?.to("admin").emit("conversa:encerrada", { sessaoId: sessao.id });
         io?.to(`restaurante:${restaurante.slugWhatsapp}`).emit("pedido:novo", { restauranteId: restaurante.id, pedido });
       } else if (metodoPago === "Transferência") {
         const dadosTrans = restaurante.dadosTransferencia
           ? `\n\n🏦 *Dados para transferência:*\n${restaurante.dadosTransferencia}` : "";
         const pedido = await finalizarPedido(sessao.id, localizacao, "delivery", "Transferência", dadosTrans, idioma);
-        io?.to("admin").emit("conversa:encerrada", { sessaoId: sessao.id });
         io?.to(`restaurante:${restaurante.slugWhatsapp}`).emit("pedido:novo", { restauranteId: restaurante.id, pedido });
       } else {
         await atualizarSessao(sessao.id, {
@@ -333,7 +470,7 @@ async function receberMensagem(req, res) {
           sessaoId: sessao.id,
           mensagem: { role: "bot", conteudo: msgPagamento, createdAt: new Date() },
         });
-        await enviarMensagem(clienteNumero, msgPagamento, instanceName);
+        await enviarMensagem(remoteJid, msgPagamento, instanceName);
       }
       return;
     }
@@ -353,7 +490,7 @@ async function receberMensagem(req, res) {
         await salvarMensagem(sessao.id, "bot", msg);
         io?.to("admin").emit("conversa:mensagem", { sessaoId: sessao.id, mensagem: { role: "cliente", conteudo: textoCliente, createdAt: new Date() } });
         io?.to("admin").emit("conversa:mensagem", { sessaoId: sessao.id, mensagem: { role: "bot", conteudo: msg, createdAt: new Date() } });
-        await enviarMensagem(clienteNumero, msg, instanceName);
+        await enviarMensagem(remoteJid, msg, instanceName);
         return;
       }
 
@@ -366,7 +503,7 @@ async function receberMensagem(req, res) {
         const msgTroco = T[idioma].troco;
         await salvarMensagem(sessao.id, "bot", msgTroco);
         io?.to("admin").emit("conversa:mensagem", { sessaoId: sessao.id, mensagem: { role: "bot", conteudo: msgTroco, createdAt: new Date() } });
-        await enviarMensagem(clienteNumero, msgTroco, instanceName);
+        await enviarMensagem(remoteJid, msgTroco, instanceName);
         return;
       }
 
@@ -377,7 +514,7 @@ async function receberMensagem(req, res) {
         const localizacao = tipoEntrega === "retirada" ? "Retirada no balcão" : locPendente;
         const pedido = await finalizarPedido(sessao.id, localizacao, tipoEntrega, metodoPagamento,
           tipoEntrega === "delivery" ? T[idioma].maquininha : "", idioma);
-        io?.to("admin").emit("conversa:encerrada", { sessaoId: sessao.id });
+        if (tipoEntrega !== "delivery") io?.to("admin").emit("conversa:encerrada", { sessaoId: sessao.id });
         io?.to(`restaurante:${restaurante.slugWhatsapp}`).emit("pedido:novo", { restauranteId: restaurante.id, pedido });
         return;
       }
@@ -391,7 +528,7 @@ async function receberMensagem(req, res) {
           ? `\n\n🏦 *Dados para transferência:*\n${restaurante.dadosTransferencia}`
           : "";
         const pedido = await finalizarPedido(sessao.id, localizacao, tipoEntrega, metodoPagamento, dadosTrans, idioma);
-        io?.to("admin").emit("conversa:encerrada", { sessaoId: sessao.id });
+        if (tipoEntrega !== "delivery") io?.to("admin").emit("conversa:encerrada", { sessaoId: sessao.id });
         io?.to(`restaurante:${restaurante.slugWhatsapp}`).emit("pedido:novo", { restauranteId: restaurante.id, pedido });
         return;
       }
@@ -400,8 +537,31 @@ async function receberMensagem(req, res) {
     // ── e.2) Troco → finalizar pedido com dinheiro ────────────────────────────
     if (sessao.estado === "AGUARDANDO_TROCO" && textoCliente) {
       const semTroco = /sem troco|sin cambio|não precisa|no necesito|exato|exacto/i.test(textoCliente);
-      const trocoInfo = semTroco ? "sem troco" : textoCliente.trim();
-      const metodoPagamento = semTroco ? "Dinheiro (sem troco)" : `Dinheiro - Troco para ${trocoInfo}`;
+
+      let trocoFormatado = null;
+      let trocoDevolver = null;
+      if (!semTroco) {
+        const valorTroco = parsearValorTroco(textoCliente);
+        const moeda = restaurante.moeda || "R$";
+        trocoFormatado = valorTroco !== null
+          ? formatarTroco(valorTroco, moeda)
+          : textoCliente.trim(); // fallback: texto original se não conseguir parsear
+
+        if (valorTroco !== null) {
+          const tipoEntregaTemp = (sessao.localizacaoPendente || "retirada") === "retirada" ? "retirada" : "delivery";
+          const subtotal = (sessao.carrinho || []).reduce((acc, item) => acc + item.preco * (item.quantidade || 1), 0);
+          const taxaEntregaVal = tipoEntregaTemp === "retirada" ? 0 : (restaurante.taxaEntrega || 0);
+          const totalPedido = subtotal + taxaEntregaVal;
+          const troco = valorTroco - totalPedido;
+          if (troco > 0) trocoDevolver = formatarTroco(troco, moeda);
+        }
+      }
+
+      const metodoPagamento = semTroco
+        ? "Dinheiro (sem troco)"
+        : trocoDevolver
+          ? `Dinheiro - Troco para ${trocoFormatado} (levar troco: ${trocoDevolver})`
+          : `Dinheiro - Troco para ${trocoFormatado}`;
 
       await salvarMensagem(sessao.id, "cliente", textoCliente);
       io?.to("admin").emit("conversa:mensagem", { sessaoId: sessao.id, mensagem: { role: "cliente", conteudo: textoCliente, createdAt: new Date() } });
@@ -410,9 +570,9 @@ async function receberMensagem(req, res) {
       const tipoEntrega = locPendente === "retirada" ? "retirada" : "delivery";
       const localizacao = tipoEntrega === "retirada" ? "Retirada no balcão" : locPendente;
       const pedido = await finalizarPedido(sessao.id, localizacao, tipoEntrega, metodoPagamento,
-        semTroco ? "" : T[idioma].trocoInfo(trocoInfo), idioma);
+        semTroco ? "" : T[idioma].trocoInfo(trocoFormatado), idioma);
 
-      io?.to("admin").emit("conversa:encerrada", { sessaoId: sessao.id });
+      if (tipoEntrega !== "delivery") io?.to("admin").emit("conversa:encerrada", { sessaoId: sessao.id });
       io?.to(`restaurante:${restaurante.slugWhatsapp}`).emit("pedido:novo", { restauranteId: restaurante.id, pedido });
       return;
     }
@@ -440,18 +600,18 @@ async function receberMensagem(req, res) {
 
       if (fotos) {
         for (const url of fotos) {
-          await enviarImagem(clienteNumero, url, "", instanceName);
+          await enviarImagem(remoteJid, url, "", instanceName);
         }
       } else if (/\.(jpg|jpeg|png|webp)$/i.test(restaurante.cardapioPdfUrl)) {
-        await enviarImagem(clienteNumero, restaurante.cardapioPdfUrl, "", instanceName);
+        await enviarImagem(remoteJid, restaurante.cardapioPdfUrl, "", instanceName);
       } else {
-        await enviarDocumento(clienteNumero, restaurante.cardapioPdfUrl, "cardapio.pdf", instanceName);
+        await enviarDocumento(remoteJid, restaurante.cardapioPdfUrl, "cardapio.pdf", instanceName);
       }
       return;
     }
 
     const { resposta, novoEstado, carrinhoAtualizado, pedidoPronto, tipoEntrega, mostrarFotos } =
-      await processarMensagem(sessao, textoCliente, restaurante, cardapio, fidelidade);
+      await processarMensagem(sessao, textoCliente, restaurante, cardapio, fidelidade, promocoes);
 
     // ── e) Persistir ──────────────────────────────────────────────────────────
     await Promise.all([
@@ -475,7 +635,7 @@ async function receberMensagem(req, res) {
     });
 
     // ── f) Responder ao cliente ───────────────────────────────────────────────
-    await enviarMensagem(clienteNumero, resposta, instanceName);
+    await enviarMensagem(remoteJid, resposta, instanceName);
 
     // ── g) Enviar fotos do cardápio quando Claude sinalizar ───────────────────
     if (mostrarFotos && restaurante.cardapioPdfUrl) {
@@ -487,10 +647,10 @@ async function receberMensagem(req, res) {
 
       if (fotos) {
         for (const url of fotos) {
-          await enviarImagem(clienteNumero, url, "", instanceName);
+          await enviarImagem(remoteJid, url, "", instanceName);
         }
       } else if (/\.(jpg|jpeg|png|webp)$/i.test(restaurante.cardapioPdfUrl)) {
-        await enviarImagem(clienteNumero, restaurante.cardapioPdfUrl, "", instanceName);
+        await enviarImagem(remoteJid, restaurante.cardapioPdfUrl, "", instanceName);
       }
     }
 
@@ -505,17 +665,17 @@ async function receberMensagem(req, res) {
         const msgTroco = T[idioma].troco;
         await salvarMensagem(sessao.id, "bot", msgTroco);
         io?.to("admin").emit("conversa:mensagem", { sessaoId: sessao.id, mensagem: { role: "bot", conteudo: msgTroco, createdAt: new Date() } });
-        await enviarMensagem(clienteNumero, msgTroco, instanceName);
+        await enviarMensagem(remoteJid, msgTroco, instanceName);
       } else if (metodoPago === "Cartão") {
         const pedido = await finalizarPedido(sessao.id, localizacao, tipoEntrega, "Cartão",
           tipoEntrega === "delivery" ? T[idioma].maquininha : "", idioma);
-        io?.to("admin").emit("conversa:encerrada", { sessaoId: sessao.id });
+        if (tipoEntrega !== "delivery") io?.to("admin").emit("conversa:encerrada", { sessaoId: sessao.id });
         io?.to(`restaurante:${restaurante.slugWhatsapp}`).emit("pedido:novo", { restauranteId: restaurante.id, pedido });
       } else if (metodoPago === "Transferência") {
         const dadosTrans = restaurante.dadosTransferencia
           ? `\n\n🏦 *Dados para transferência:*\n${restaurante.dadosTransferencia}` : "";
         const pedido = await finalizarPedido(sessao.id, localizacao, tipoEntrega, "Transferência", dadosTrans, idioma);
-        io?.to("admin").emit("conversa:encerrada", { sessaoId: sessao.id });
+        if (tipoEntrega !== "delivery") io?.to("admin").emit("conversa:encerrada", { sessaoId: sessao.id });
         io?.to(`restaurante:${restaurante.slugWhatsapp}`).emit("pedido:novo", { restauranteId: restaurante.id, pedido });
       } else {
         await atualizarSessao(sessao.id, {
@@ -528,14 +688,14 @@ async function receberMensagem(req, res) {
           sessaoId: sessao.id,
           mensagem: { role: "bot", conteudo: msgPagamento, createdAt: new Date() },
         });
-        await enviarMensagem(clienteNumero, msgPagamento, instanceName);
+        await enviarMensagem(remoteJid, msgPagamento, instanceName);
       }
     }
   } catch (err) {
     console.error(`[webhook] erro (${restaurante.slugWhatsapp}):`, err.message);
     try {
       await enviarMensagem(
-        clienteNumero,
+        remoteJid,
         "Desculpe, tive um probleminha aqui. Pode repetir sua mensagem? 😅",
         instanceName
       );

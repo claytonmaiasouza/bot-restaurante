@@ -4,6 +4,7 @@ const path = require("path");
 const { PrismaClient } = require("@prisma/client");
 const { encerrarSessoesInativas } = require("../services/sessaoService");
 const { enviarMensagem } = require("../services/evolutionService");
+const { formatNumPedido } = require("../services/pedidoService");
 
 const prisma = new PrismaClient();
 
@@ -174,12 +175,78 @@ function iniciarJobLembrete() {
   log("job de lembrete de inatividade agendado (* * * * *)");
 }
 
+// ── Job 4: Lembrete de comprovante pendente (a cada 5 min) ───────────────────
+
+// Rastreia último envio por pedidoId para evitar duplicatas em execuções rápidas
+const ultimosLembretesComprovante = new Map();
+
+function detectarIdiomaTexto(textos) {
+  const texto = (textos || []).join(" ").toLowerCase();
+  return /\b(hola|quiero|buenos|gracias|también|necesito|cuanto|cuánto|tengo|puedo|soy|hoy|voy|dónde|cómo)\b/.test(texto) ? "es" : "pt";
+}
+
+function iniciarJobLembreteComprovante() {
+  cron.schedule("*/5 * * * *", async () => {
+    try {
+      const pedidos = await prisma.pedido.findMany({
+        where: {
+          status: "ENTREGUE",
+          pago: false,
+          comprovanteUrl: null,
+          metodoPagamento: { contains: "Transf", mode: "insensitive" },
+        },
+        include: {
+          restaurante: { select: { slugWhatsapp: true } },
+          sessao: {
+            include: {
+              mensagens: {
+                where: { role: "cliente" },
+                orderBy: { createdAt: "asc" },
+                take: 5,
+                select: { conteudo: true },
+              },
+            },
+          },
+        },
+      });
+
+      for (const pedido of pedidos) {
+        // Evita envio se já foi enviado há menos de 4 minutos
+        const ultimo = ultimosLembretesComprovante.get(pedido.id);
+        if (ultimo && Date.now() - ultimo < 4 * 60 * 1000) continue;
+
+        const textos = (pedido.sessao?.mensagens || []).map(m => m.conteudo);
+        const idioma = detectarIdiomaTexto(textos);
+        const numFmt = formatNumPedido(pedido);
+
+        const msg = idioma === "es"
+          ? `⏰ *Recordatorio:* Tu pedido *#${numFmt}* está pendiente de pago.\n\nEnvíanos el comprobante de transferencia aquí para confirmar tu pedido. 📲`
+          : `⏰ *Lembrete:* Seu pedido *#${numFmt}* aguarda confirmação de pagamento.\n\nEnvie o comprovante de transferência aqui para finalizarmos. 📲`;
+
+        await enviarMensagem(
+          pedido.clienteNumero,
+          msg,
+          pedido.restaurante.slugWhatsapp
+        ).catch(() => {});
+
+        ultimosLembretesComprovante.set(pedido.id, Date.now());
+        log(`lembrete de comprovante: ${pedido.clienteNumero} (pedido ${pedido.id.split("-")[0]})`);
+      }
+    } catch (err) {
+      log(`ERRO no job de comprovante: ${err.message}`);
+    }
+  });
+
+  log("job de lembrete de comprovante agendado (*/5 * * * *)");
+}
+
 // ── Exporta e inicializa ──────────────────────────────────────────────────────
 
 function iniciarJobs() {
   iniciarJobSessoes();
   iniciarJobRelatorio();
   iniciarJobLembrete();
+  iniciarJobLembreteComprovante();
 }
 
 module.exports = { iniciarJobs, gerarRelatorio };

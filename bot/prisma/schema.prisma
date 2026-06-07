@@ -35,6 +35,7 @@ model Restaurante {
   campanhas            CampanhaMarketing[]
   itensEstoque         ItemEstoque[]
   custosMensais        CustoMensal[]
+  promocoes            Promocao[]
   createdAt            DateTime    @default(now())
 }
 
@@ -117,6 +118,7 @@ model Pedido {
   numeroDia      Int?        // sequencial diário reiniciado a cada dia por restaurante
   comprovanteUrl String?    // URL da foto do comprovante de pagamento enviado pelo cliente
   createdAt      DateTime   @default(now())
+  updatedAt      DateTime   @updatedAt
 }
 
 model ClienteFidelidade {
@@ -247,4 +249,16 @@ model TurnoCaixa {
   abertoEm        DateTime    @default(now())
   fechadoEm       DateTime?
   createdAt       DateTime    @default(now())
+}
+
+model Promocao {
+  id               String      @id @default(uuid())
+  restauranteId    String
+  restaurante      Restaurante @relation(fields: [restauranteId], references: [id], onDelete: Cascade)
+  nome             String
+  descricao        String?
+  precoPromocional Float?
+  ativa            Boolean     @default(true)
+  createdAt        DateTime    @default(now())
+  updatedAt        DateTime    @updatedAt
 }

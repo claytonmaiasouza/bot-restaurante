@@ -1,4 +1,7 @@
 const axios = require("axios");
+const { PrismaClient } = require("@prisma/client");
+
+const prisma = new PrismaClient();
 
 const evolutionClient = axios.create({
   baseURL: process.env.EVOLUTION_API_URL,
@@ -8,21 +11,67 @@ const evolutionClient = axios.create({
   },
 });
 
+// ── Resolução de JID para contatos iOS (@lid) ─────────────────────────────────
+// Contatos do iPhone com privacidade ativada têm JID @lid em vez de @s.whatsapp.net.
+// Quando o número vem sem sufixo (ex: vindo do banco), buscamos o JID completo.
+// Quando vem com @s.whatsapp.net mas o contato é @lid, retentamos com @lid.
+
+async function resolverJid(numero, instanceName) {
+  if (!numero) return numero;
+  if (numero.includes("@")) return numero; // já tem sufixo, usa direto
+  try {
+    const rows = await prisma.$queryRaw`
+      SELECT c."remoteJid"
+      FROM "Contact" c
+      JOIN "Instance" i ON c."instanceId" = i.id
+      WHERE i.name = ${instanceName}
+        AND (c."remoteJid" = ${numero + "@lid"} OR c."remoteJid" = ${numero + "@s.whatsapp.net"})
+      ORDER BY CASE WHEN c."remoteJid" LIKE '%@s.whatsapp.net' THEN 0 ELSE 1 END
+      LIMIT 1
+    `;
+    if (rows.length > 0) return rows[0].remoteJid;
+  } catch { /* fallback */ }
+  return numero + "@s.whatsapp.net";
+}
+
+async function _enviarComRetryLid(path, payload, instanceName) {
+  try {
+    const { data } = await evolutionClient.post(path, payload);
+    return data;
+  } catch (err) {
+    // Se a primeira tentativa falhou com 400 e o JID tem @s.whatsapp.net,
+    // é possível que o contato seja @lid (iOS) — retenta com sufixo @lid.
+    if (err.response?.status === 400 && payload.number?.includes("@s.whatsapp.net")) {
+      const lidNumber = payload.number.replace("@s.whatsapp.net", "@lid");
+      try {
+        const { data } = await evolutionClient.post(path, { ...payload, number: lidNumber });
+        console.log(`[evolution] reenviado via @lid: ${lidNumber}`);
+        return data;
+      } catch (err2) {
+        throw err2;
+      }
+    }
+    throw err;
+  }
+}
+
 // ── Mensagens ─────────────────────────────────────────────────────────────────
 
 /**
  * Envia uma mensagem de texto simples via Evolution API.
  */
 async function enviarMensagem(numero, texto, instanceName) {
+  const jid = await resolverJid(numero, instanceName);
   try {
-    const { data } = await evolutionClient.post(
+    const data = await _enviarComRetryLid(
       `/message/sendText/${instanceName}`,
-      { number: numero, text: texto }
+      { number: jid, text: texto },
+      instanceName
     );
     return data;
   } catch (err) {
     console.error(
-      `[evolution] erro ao enviar mensagem para ${numero}:`,
+      `[evolution] erro ao enviar mensagem para ${jid}:`,
       err.response?.data || err.message
     );
     throw err;
@@ -33,22 +82,17 @@ async function enviarMensagem(numero, texto, instanceName) {
  * Envia um documento (PDF, etc.) via Evolution API.
  */
 async function enviarDocumento(numero, mediaUrl, fileName, instanceName) {
+  const jid = await resolverJid(numero, instanceName);
   try {
-    const { data } = await evolutionClient.post(
+    const data = await _enviarComRetryLid(
       `/message/sendMedia/${instanceName}`,
-      {
-        number: numero,
-        mediatype: "document",
-        mimetype: "application/pdf",
-        caption: fileName,
-        fileName,
-        media: mediaUrl,
-      }
+      { number: jid, mediatype: "document", mimetype: "application/pdf", caption: fileName, fileName, media: mediaUrl },
+      instanceName
     );
     return data;
   } catch (err) {
     console.error(
-      `[evolution] erro ao enviar documento para ${numero}:`,
+      `[evolution] erro ao enviar documento para ${jid}:`,
       err.response?.data || err.message
     );
     throw err;
@@ -59,15 +103,17 @@ async function enviarDocumento(numero, mediaUrl, fileName, instanceName) {
  * Envia uma imagem via Evolution API.
  */
 async function enviarImagem(numero, mediaUrl, caption, instanceName) {
+  const jid = await resolverJid(numero, instanceName);
   try {
-    const { data } = await evolutionClient.post(
+    const data = await _enviarComRetryLid(
       `/message/sendMedia/${instanceName}`,
-      { number: numero, mediatype: "image", caption: caption || "", media: mediaUrl }
+      { number: jid, mediatype: "image", caption: caption || "", media: mediaUrl },
+      instanceName
     );
     return data;
   } catch (err) {
     console.error(
-      `[evolution] erro ao enviar imagem para ${numero}:`,
+      `[evolution] erro ao enviar imagem para ${jid}:`,
       err.response?.data || err.message
     );
     throw err;

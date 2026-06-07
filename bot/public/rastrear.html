@@ -1,0 +1,157 @@
+<!DOCTYPE html>
+<html lang="pt-BR">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>Rastrear Entrega</title>
+  <link rel="stylesheet" href="https://unpkg.com/leaflet@1.9.4/dist/leaflet.css">
+  <script src="https://cdn.tailwindcss.com"></script>
+  <script src="https://unpkg.com/leaflet@1.9.4/dist/leaflet.js"></script>
+  <script src="/socket.io/socket.io.js"></script>
+  <style>
+    #mapa { height: calc(100dvh - 64px); }
+    .leaflet-container { font-family: inherit; }
+  </style>
+</head>
+<body class="bg-gray-100 text-gray-900 overflow-hidden">
+
+  <!-- Header -->
+  <header class="bg-white border-b border-gray-200 px-4 py-3 h-16 flex items-center shadow-sm">
+    <div class="flex items-center gap-2.5 min-w-0 flex-1">
+      <span class="text-xl flex-shrink-0">🛵</span>
+      <div class="min-w-0">
+        <p class="font-bold text-sm leading-tight truncate" id="nome-restaurante">Carregando…</p>
+        <p class="text-xs text-gray-400 truncate" id="info-pedido"></p>
+      </div>
+    </div>
+    <span id="status-badge" class="ml-3 flex-shrink-0 text-xs px-2.5 py-1 rounded-full font-semibold bg-blue-100 text-blue-600"></span>
+  </header>
+
+  <!-- Mapa -->
+  <div id="mapa"></div>
+
+  <!-- Overlay: sem GPS ainda / entregue / erro -->
+  <div id="overlay" class="fixed inset-0 top-16 flex items-center justify-center p-6 bg-white/95 backdrop-blur-sm z-[1000]">
+    <div class="text-center max-w-xs">
+      <div class="text-5xl mb-4" id="overlay-icon">🛵</div>
+      <h2 class="text-lg font-bold mb-2" id="overlay-titulo">Aguardando localização</h2>
+      <p class="text-gray-500 text-sm leading-relaxed" id="overlay-texto">
+        O motoboy está a caminho! Assim que ele compartilhar a localização, você verá aqui no mapa.
+      </p>
+      <div id="overlay-loader" class="mt-4 flex justify-center gap-1.5">
+        <span class="w-2 h-2 bg-orange-400 rounded-full animate-bounce" style="animation-delay:0ms"></span>
+        <span class="w-2 h-2 bg-orange-400 rounded-full animate-bounce" style="animation-delay:150ms"></span>
+        <span class="w-2 h-2 bg-orange-400 rounded-full animate-bounce" style="animation-delay:300ms"></span>
+      </div>
+    </div>
+  </div>
+
+<script>
+const params = new URLSearchParams(location.search);
+const pedidoId = params.get('pedido');
+
+if (!pedidoId) {
+  document.body.innerHTML = '<div class="flex items-center justify-center h-screen"><div class="text-center p-8"><p class="text-xl font-bold mb-2">Link inválido</p><p class="text-gray-500 text-sm">Solicite o link de rastreamento ao restaurante.</p></div></div>';
+}
+
+const STATUS_LABELS = {
+  EM_CAMINHO: '🛵 A caminho',
+  ENTREGUE: '✅ Entregue',
+  AGUARDANDO_DESPACHO: '⏳ Aguardando motoboy',
+  PREPARANDO: '👨‍🍳 Preparando',
+};
+
+let mapa = null;
+let marcador = null;
+
+function mostrarOverlay(icon, titulo, texto, loader = false) {
+  document.getElementById('overlay').classList.remove('hidden');
+  document.getElementById('overlay-icon').textContent = icon;
+  document.getElementById('overlay-titulo').textContent = titulo;
+  document.getElementById('overlay-texto').textContent = texto;
+  document.getElementById('overlay-loader').classList.toggle('hidden', !loader);
+}
+
+function ocultarOverlay() {
+  document.getElementById('overlay').classList.add('hidden');
+}
+
+function iniciarMapa(lat, lng) {
+  if (mapa) return;
+  ocultarOverlay();
+  mapa = L.map('mapa', { zoomControl: true }).setView([lat, lng], 16);
+  L.tileLayer('https://{s}.tile.openstreetmap.org/{z}/{x}/{y}.png', {
+    attribution: '© <a href="https://openstreetmap.org/copyright">OpenStreetMap</a>',
+    maxZoom: 19,
+  }).addTo(mapa);
+  const icone = L.divIcon({
+    html: '<div style="font-size:2rem;filter:drop-shadow(0 2px 4px rgba(0,0,0,.4));line-height:1">🛵</div>',
+    className: '',
+    iconSize: [32, 32],
+    iconAnchor: [16, 16],
+  });
+  marcador = L.marker([lat, lng], { icon: icone }).addTo(mapa);
+}
+
+function atualizarPosicao(lat, lng) {
+  if (!mapa) {
+    iniciarMapa(lat, lng);
+    return;
+  }
+  ocultarOverlay();
+  marcador.setLatLng([lat, lng]);
+  mapa.panTo([lat, lng], { animate: true, duration: 0.8 });
+}
+
+function atualizarStatus(status) {
+  const badge = document.getElementById('status-badge');
+  badge.textContent = STATUS_LABELS[status] || status;
+  if (status === 'ENTREGUE') {
+    mostrarOverlay('✅', 'Pedido entregue!', 'Seu pedido chegou. Bom apetite! 🍽️', false);
+  }
+}
+
+async function carregar() {
+  try {
+    const res = await fetch(`/painel/rastrear/${pedidoId}`);
+    if (!res.ok) {
+      mostrarOverlay('❌', 'Pedido não encontrado', 'Este link de rastreamento não é válido.', false);
+      return;
+    }
+    const { pedido, localizacao } = await res.json();
+
+    document.getElementById('nome-restaurante').textContent = pedido.restaurante?.nome || 'Restaurante';
+    const numLabel = pedido.numeroDia ? `D${pedido.numeroDia}` : pedido.id.substring(0, 6).toUpperCase();
+    document.getElementById('info-pedido').textContent = `Pedido #${numLabel}${pedido.motoboyNome ? ' · ' + pedido.motoboyNome : ''}`;
+    atualizarStatus(pedido.status);
+
+    if (pedido.status === 'ENTREGUE') {
+      mostrarOverlay('✅', 'Pedido entregue!', 'Seu pedido chegou. Bom apetite! 🍽️', false);
+      return;
+    }
+
+    if (localizacao) {
+      atualizarPosicao(localizacao.lat, localizacao.lng);
+    } else {
+      mostrarOverlay('🛵', 'Aguardando localização', 'O motoboy está a caminho! Assim que ele compartilhar a localização, você verá aqui no mapa.', true);
+    }
+  } catch {
+    mostrarOverlay('⚠️', 'Erro de conexão', 'Não foi possível carregar o rastreamento. Verifique sua conexão.', false);
+  }
+}
+
+const socket = io();
+socket.on('connect', () => {
+  socket.emit('assinar:rastrear', pedidoId);
+});
+socket.on('motoboy:localizacao', ({ lat, lng }) => {
+  atualizarPosicao(lat, lng);
+});
+socket.on('pedido:atualizado', ({ status }) => {
+  if (status) atualizarStatus(status);
+});
+
+carregar();
+</script>
+</body>
+</html>

@@ -92,6 +92,9 @@
   </div>
 </div>
 
+<!-- Notificações de troco (fora do #app para não ser cortado pelo overflow:hidden) -->
+<div id="troco-notificacoes" class="fixed top-14 left-0 right-0 z-[9999] px-4 pt-2 space-y-2 pointer-events-none"></div>
+
 <!-- DASHBOARD -->
 <div id="app" class="hidden fixed inset-0 bg-[#f4f6f8] flex overflow-hidden">
 
@@ -158,6 +161,7 @@
         <li><button id="nav-financeiro" onclick="mostrarSecao('financeiro')" class="sidebar-nav-item w-full text-left" data-i18n="nav.financeiro">💰 Financeiro</button></li>
         <li><button id="nav-caixa" onclick="mostrarSecao('caixa')" class="sidebar-nav-item w-full text-left">💵 Caixa</button></li>
         <li><button id="nav-comprovantes" onclick="mostrarSecao('comprovantes')" class="sidebar-nav-item w-full text-left">📋 Comprovantes</button></li>
+        <li><button id="nav-cozinha-painel" onclick="mostrarSecao('cozinha-painel')" class="sidebar-nav-item w-full text-left">👨‍🍳 Cozinha</button></li>
         <li><button id="nav-configuracoes" onclick="mostrarSecao('configuracoes')" class="sidebar-nav-item w-full text-left" data-i18n="nav.configuracoes">⚙️ Configurações</button></li>
       </ul>
     </nav>
@@ -315,10 +319,21 @@
         <div class="flex flex-1 overflow-hidden min-h-0">
           <!-- Esquerda: pedido atual -->
           <div class="flex flex-col border-r border-gray-100 overflow-hidden" style="width:48%">
-            <div class="px-4 py-2 border-b border-gray-50 shrink-0">
+            <div class="px-4 py-2 border-b border-gray-50 shrink-0 flex items-center justify-between">
               <p class="text-xs font-semibold text-gray-400 uppercase tracking-wide">Pedido atual</p>
+              <button onclick="toggleHistoricoMesa()" id="btn-historico-mesa"
+                class="text-xs text-[#2B7DD4] hover:text-[#2570c0] font-medium flex items-center gap-1 transition">
+                📋 Ver histórico
+              </button>
             </div>
             <div id="mesa-itens-lista" class="flex-1 overflow-y-auto p-4 space-y-2" style="min-height:0"></div>
+            <!-- Painel de histórico (toggle pelo botão 📋 Ver histórico) -->
+            <div id="mesa-historico-panel" class="hidden px-4 py-3 border-t border-blue-50 bg-blue-50/30 shrink-0">
+              <p class="text-xs font-semibold text-gray-400 uppercase tracking-wide mb-2">Últimas 5 movimentações</p>
+              <div id="mesa-historico" class="space-y-1.5 overflow-y-auto" style="max-height:160px">
+                <p class="text-xs text-gray-400 italic">Carregando...</p>
+              </div>
+            </div>
             <div class="p-4 border-t border-gray-100 shrink-0 space-y-2">
               <div class="flex justify-between items-center">
                 <span class="text-sm text-gray-500">Total</span>
@@ -331,7 +346,7 @@
                 <option value="Cartão">💳 Cartão</option>
                 <option value="Transferência">📲 Transferência</option>
               </select>
-              <div class="flex gap-2">
+              <div id="mesa-btns-normais" class="flex gap-2">
                 <button onclick="salvarPedidoMesa()"
                   class="flex-1 bg-[#2B7DD4] hover:bg-[#2570c0] text-white text-sm font-semibold py-2.5 rounded-xl transition">
                   💾 Salvar
@@ -341,12 +356,14 @@
                   🖨️ Fechar conta
                 </button>
               </div>
-            </div>
-            <!-- Histórico recente da mesa -->
-            <div class="px-4 pb-4 border-t border-gray-100 shrink-0">
-              <p class="text-xs font-semibold text-gray-400 uppercase tracking-wide mt-3 mb-2">Histórico recente</p>
-              <div id="mesa-historico" class="space-y-1.5 overflow-y-auto" style="max-height:110px">
-                <p class="text-xs text-gray-400 italic">Carregando...</p>
+              <div id="mesa-pos-fechamento" class="hidden space-y-2">
+                <div class="flex items-center gap-2 text-sm text-green-700 bg-green-50 rounded-xl px-3 py-2">
+                  <span>✅</span><span>Conta fechada e impressa!</span>
+                </div>
+                <button onclick="liberarMesa()"
+                  class="w-full bg-orange-500 hover:bg-orange-600 text-white text-sm font-semibold py-2.5 rounded-xl transition">
+                  🧹 Limpar comanda e liberar mesa
+                </button>
               </div>
             </div>
           </div>
@@ -533,6 +550,42 @@
                     class="w-full border border-gray-200 bg-gray-50 rounded-lg px-3 py-2 text-sm text-gray-400 cursor-not-allowed"
                     title="Número do WhatsApp conectado ao bot — não editável">
                   <p class="text-xs text-gray-400 mt-0.5" data-i18n="cfg.slug-hint">Número conectado ao bot (não editável)</p>
+                  <button onclick="cfgAbrirTrocarWhatsapp()" id="cfg-wa-btn"
+                    class="mt-2 text-xs bg-green-500 hover:bg-green-600 text-white px-3 py-1.5 rounded-lg font-medium transition flex items-center gap-1.5">
+                    <svg class="w-3.5 h-3.5" viewBox="0 0 24 24" fill="currentColor"><path d="M17.472 14.382c-.297-.149-1.758-.867-2.03-.967-.273-.099-.471-.148-.67.15-.197.297-.767.966-.94 1.164-.173.199-.347.223-.644.075-.297-.15-1.255-.463-2.39-1.475-.883-.788-1.48-1.761-1.653-2.059-.173-.297-.018-.458.13-.606.134-.133.298-.347.446-.52.149-.174.198-.298.298-.497.099-.198.05-.371-.025-.52-.075-.149-.669-1.612-.916-2.207-.242-.579-.487-.5-.669-.51-.173-.008-.371-.01-.57-.01-.198 0-.52.074-.792.372-.272.297-1.04 1.016-1.04 2.479 0 1.462 1.065 2.875 1.213 3.074.149.198 2.096 3.2 5.077 4.487.709.306 1.262.489 1.694.625.712.227 1.36.195 1.871.118.571-.085 1.758-.719 2.006-1.413.248-.694.248-1.289.173-1.413-.074-.124-.272-.198-.57-.347z"/><path d="M12 0C5.373 0 0 5.373 0 12c0 2.025.507 3.934 1.399 5.61L0 24l6.545-1.378A11.947 11.947 0 0012 24c6.627 0 12-5.373 12-12S18.627 0 12 0zm0 21.818a9.818 9.818 0 01-5.003-1.366l-.358-.214-3.723.784.827-3.63-.235-.372A9.818 9.818 0 1112 21.818z"/></svg>
+                    Trocar WhatsApp do Bot
+                  </button>
+                </div>
+                <!-- QR code inline para trocar WhatsApp -->
+                <div id="cfg-wa-qr-section" class="sm:col-span-2 hidden">
+                  <div class="bg-gray-50 border border-gray-200 rounded-xl p-4">
+                    <div class="flex items-center justify-between mb-3">
+                      <div>
+                        <p class="text-sm font-semibold text-gray-700">Reconectar WhatsApp</p>
+                        <p class="text-xs text-gray-400">Escaneie o QR code com o WhatsApp Business</p>
+                      </div>
+                      <button onclick="cfgFecharTrocarWhatsapp()" class="text-gray-400 hover:text-gray-600 text-lg leading-none">✕</button>
+                    </div>
+                    <div class="mb-3">
+                      <label class="text-xs text-gray-500 mb-1 block">Novo número <span class="text-gray-300">(deixe vazio para reconectar o mesmo)</span></label>
+                      <input id="cfg-wa-novo-numero" type="text" placeholder="5511999999999"
+                        class="w-full border border-gray-300 rounded-lg px-3 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-green-400">
+                    </div>
+                    <div id="cfg-wa-qr-imagem" class="flex items-center justify-center w-48 h-48 bg-white rounded-xl border border-gray-200 mb-2">
+                      <p class="text-sm text-gray-400 text-center px-3">Clique em "Trocar WhatsApp" para gerar QR</p>
+                    </div>
+                    <p id="cfg-wa-qr-countdown" class="text-xs text-gray-500 mb-2"></p>
+                    <div class="flex gap-2">
+                      <button onclick="cfgReconectarWhatsapp()" id="cfg-wa-reconectar-btn"
+                        class="text-xs bg-green-500 hover:bg-green-600 text-white px-3 py-1.5 rounded-lg font-medium transition">
+                        🔄 Gerar novo QR
+                      </button>
+                      <button onclick="cfgRenovarQrWhatsapp()" id="cfg-wa-renovar-btn"
+                        class="text-xs bg-white border border-gray-300 text-gray-600 hover:bg-gray-50 px-3 py-1.5 rounded-lg font-medium transition">
+                        Renovar QR
+                      </button>
+                    </div>
+                  </div>
                 </div>
                 <div>
                   <label class="text-xs text-gray-500 mb-1 block" data-i18n="cfg.dono">WhatsApp do dono (recebe pedidos)</label>
@@ -1264,6 +1317,16 @@
           </div>
         </div>
 
+        <!-- Pedidos pagos no turno -->
+        <div class="bg-white rounded-2xl shadow-sm overflow-hidden mb-4">
+          <div class="p-4 border-b border-gray-100">
+            <span class="font-semibold text-gray-700">🧾 Pedidos pagos no turno</span>
+          </div>
+          <div id="caixa-pedidos-lista">
+            <p class="py-4 text-center text-xs text-gray-400">Nenhum pedido pago neste turno</p>
+          </div>
+        </div>
+
         <!-- Sangrias -->
         <div class="bg-white rounded-2xl shadow-sm overflow-hidden mb-4">
           <div class="p-4 border-b border-gray-100 flex items-center justify-between">
@@ -1305,7 +1368,17 @@
     <div id="secao-motoboys" class="hidden px-6 pt-6 pb-8">
       <div class="flex items-center justify-between mb-4">
         <h2 class="font-bold text-gray-800" data-i18n="moto.titulo">Motoboys</h2>
-        <button onclick="abrirModalMotoboy()" class="bg-orange-500 hover:bg-orange-600 text-white text-sm font-semibold px-4 py-2 rounded-lg transition" data-i18n="moto.novo">+ Novo Motoboy</button>
+        <div class="flex items-center gap-2">
+          <button onclick="copiarLinkIframe('motoboy')"
+            class="flex items-center gap-1.5 text-xs font-medium bg-gray-100 hover:bg-gray-200 text-gray-700 px-3 py-2 rounded-lg transition">
+            📋 Copiar link
+          </button>
+          <button onclick="abrirLinkIframe('motoboy')"
+            class="flex items-center gap-1.5 text-xs font-medium bg-blue-500 hover:bg-blue-600 text-white px-3 py-2 rounded-lg transition">
+            ↗ Abrir painel
+          </button>
+          <button onclick="abrirModalMotoboy()" class="bg-orange-500 hover:bg-orange-600 text-white text-sm font-semibold px-4 py-2 rounded-lg transition" data-i18n="moto.novo">+ Novo Motoboy</button>
+        </div>
       </div>
       <div id="cfg-motoboy-restaurante" class="mb-4 hidden">
         <label class="text-xs text-gray-500">Restaurante</label>
@@ -1404,6 +1477,56 @@
         <div class="flex gap-2 mt-5">
           <button onclick="confirmarFecharCaixa()" class="flex-1 bg-red-500 hover:bg-red-600 text-white font-semibold py-2.5 rounded-lg text-sm transition">Fechar Caixa</button>
           <button onclick="fecharModalFecharCaixa()" class="flex-1 bg-gray-100 hover:bg-gray-200 text-gray-700 font-semibold py-2.5 rounded-lg text-sm transition">Cancelar</button>
+        </div>
+      </div>
+    </div>
+
+    <!-- Modal Promoção -->
+    <div id="modal-promocao" class="hidden fixed inset-0 bg-black/50 z-50 flex items-center justify-center p-4">
+      <div class="bg-white rounded-2xl shadow-xl w-full max-w-sm p-6">
+        <div class="flex items-center justify-between mb-4">
+          <h3 id="modal-promocao-titulo" class="font-bold text-gray-800">Nova Promoção</h3>
+          <button onclick="fecharModalPromocao()" class="text-gray-400 hover:text-gray-600 text-xl">✕</button>
+        </div>
+        <input type="hidden" id="promo-id">
+        <div class="space-y-3">
+          <div>
+            <label class="text-xs text-gray-500 mb-1 block">Nome da promoção *</label>
+            <input id="promo-nome" type="text" placeholder="Ex: Pizza G + Refri grátis"
+              class="w-full border border-gray-300 rounded-lg px-3 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-pink-400">
+          </div>
+          <div>
+            <label class="text-xs text-gray-500 mb-1 block">Descrição (opcional)</label>
+            <textarea id="promo-descricao" rows="2" placeholder="Ex: Leve uma pizza G e ganhe um refrigerante 600ml"
+              class="w-full border border-gray-300 rounded-lg px-3 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-pink-400 resize-none"></textarea>
+          </div>
+          <div>
+            <label class="text-xs text-gray-500 mb-1 block">Preço promocional (opcional)</label>
+            <input id="promo-preco" type="number" min="0" step="any" placeholder="Deixe vazio se não tiver preço fixo"
+              class="w-full border border-gray-300 rounded-lg px-3 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-pink-400">
+          </div>
+          <div class="flex items-center gap-2 pt-1">
+            <input id="promo-ativa" type="checkbox" checked class="w-4 h-4 accent-pink-500">
+            <label for="promo-ativa" class="text-sm text-gray-700">Promoção ativa</label>
+          </div>
+        </div>
+        <p id="promo-erro" class="text-red-500 text-sm mt-3 hidden"></p>
+        <div class="flex gap-2 mt-5">
+          <button onclick="salvarPromocao()" class="flex-1 bg-pink-500 hover:bg-pink-600 text-white font-semibold py-2.5 rounded-lg text-sm transition">Salvar</button>
+          <button onclick="fecharModalPromocao()" class="flex-1 bg-gray-100 hover:bg-gray-200 text-gray-700 font-semibold py-2.5 rounded-lg text-sm transition">Cancelar</button>
+        </div>
+      </div>
+    </div>
+
+    <!-- Modal Caixa Fechado -->
+    <div id="modal-caixa-fechado" class="hidden fixed inset-0 bg-black/50 z-50 flex items-center justify-center p-4">
+      <div class="bg-white rounded-2xl shadow-xl w-full max-w-sm p-6 text-center">
+        <div class="text-5xl mb-3">🔒</div>
+        <h3 class="font-bold text-gray-800 text-lg mb-2">Caixa Fechado</h3>
+        <p class="text-gray-500 text-sm mb-5">É necessário ter um caixa aberto para confirmar ou alterar o status de pedidos.</p>
+        <div class="flex gap-2">
+          <button onclick="document.getElementById('modal-caixa-fechado').classList.add('hidden'); mostrarSecao('caixa');" class="flex-1 bg-green-500 hover:bg-green-600 text-white font-semibold py-2.5 rounded-lg text-sm transition">💵 Ir para o Caixa</button>
+          <button onclick="document.getElementById('modal-caixa-fechado').classList.add('hidden');" class="flex-1 bg-gray-100 hover:bg-gray-200 text-gray-700 font-semibold py-2.5 rounded-lg text-sm transition">Fechar</button>
         </div>
       </div>
     </div>
@@ -1606,8 +1729,62 @@
       <p id="comprovantes-total-linha" class="text-xs text-gray-400 mt-2 text-right"></p>
     </div>
 
+    <!-- Links -->
+    <div id="secao-links" class="hidden px-6 pt-6 pb-8">
+      <h2 class="font-bold text-gray-800 mb-6">🔗 Links de Acesso</h2>
+      <div id="links-cards" class="flex flex-col gap-4 max-w-lg">
+        <p id="links-loading" class="text-sm text-gray-400">Carregando...</p>
+      </div>
+    </div>
+
+    <!-- Painel Cozinha (embutido) -->
+    <div id="secao-cozinha-painel" class="hidden flex flex-col" style="height:calc(100vh - 64px)">
+      <div class="flex items-center gap-2 px-4 py-2 bg-white border-b border-gray-100 shrink-0">
+        <span class="text-sm font-semibold text-gray-700 flex-1">👨‍🍳 Painel da Cozinha</span>
+        <button onclick="copiarLinkIframe('cozinha')"
+          class="flex items-center gap-1.5 text-xs font-medium bg-gray-100 hover:bg-gray-200 text-gray-700 px-3 py-1.5 rounded-lg transition">
+          📋 Copiar link
+        </button>
+        <a id="link-nova-aba-cozinha" href="" target="_blank" rel="noopener"
+          class="flex items-center gap-1.5 text-xs font-medium bg-orange-500 hover:bg-orange-600 text-white px-3 py-1.5 rounded-lg transition">
+          ↗ Nova aba
+        </a>
+      </div>
+      <iframe id="iframe-cozinha" src="" class="w-full flex-1 border-0"></iframe>
+    </div>
+
+    <!-- Painel Motoboy (embutido) -->
+    <div id="secao-motoboy-painel" class="hidden flex flex-col" style="height:calc(100vh - 64px)">
+      <div class="flex items-center gap-2 px-4 py-2 bg-white border-b border-gray-100 shrink-0">
+        <span class="text-sm font-semibold text-gray-700 flex-1">🛵 Painel dos Motoboys</span>
+        <button onclick="copiarLinkIframe('motoboy')"
+          class="flex items-center gap-1.5 text-xs font-medium bg-gray-100 hover:bg-gray-200 text-gray-700 px-3 py-1.5 rounded-lg transition">
+          📋 Copiar link
+        </button>
+        <a id="link-nova-aba-motoboy" href="" target="_blank" rel="noopener"
+          class="flex items-center gap-1.5 text-xs font-medium bg-blue-500 hover:bg-blue-600 text-white px-3 py-1.5 rounded-lg transition">
+          ↗ Nova aba
+        </a>
+      </div>
+      <iframe id="iframe-motoboy" src="" class="w-full flex-1 border-0"></iframe>
+    </div>
+
     <!-- Cardápio -->
     <div id="secao-cardapio" class="hidden px-6 pt-6 pb-8">
+
+      <!-- Promoções -->
+      <div class="mb-6">
+        <div class="flex items-center justify-between mb-3">
+          <h3 class="font-bold text-gray-800 text-base">🏷️ Promoções</h3>
+          <button onclick="abrirModalPromocao()"
+            class="bg-pink-500 hover:bg-pink-600 text-white text-sm font-semibold px-4 py-2 rounded-lg transition">
+            + Nova Promoção
+          </button>
+        </div>
+        <p class="text-xs text-gray-400 mb-3">Promoções ativas são oferecidas pelo bot durante o atendimento.</p>
+        <div id="promocoes-lista" class="flex flex-col gap-2"></div>
+      </div>
+
       <div class="flex items-center justify-between mb-4">
         <h2 class="font-bold text-gray-800" data-i18n="card.titulo">Cardápio</h2>
         <div class="flex gap-2">
@@ -2052,7 +2229,7 @@ const TRADUCOES = {
     'status.PREPARANDO':'Preparando','status.AGUARDANDO_DESPACHO':'Aguard. despacho',
     'status.SAIU_PARA_ENTREGA':'Em entrega','status.EM_CAMINHO':'Em caminho',
     'status.PRONTO_PARA_RETIRADA':'Pronto p/ retirada',
-    'status.ENTREGUE':'Entregues','status.CANCELADO':'Cancelados',
+    'status.ENTREGUE':'Entregues','status.AGUARDANDO_PAGAMENTO_TRANSF':'Aguard. pagamento','status.CANCELADO':'Cancelados',
     'acao.confirmar':'✓ Confirmar','acao.cancelar':'✗ Cancelar',
     'acao.preparar':'👨‍🍳 Iniciar preparo','acao.entregue':'✅ Entregue',
     'acao.ret-confirmada':'✅ Confirmado retirada','acao.marcar-pago':'💳 Pago',
@@ -2177,7 +2354,7 @@ const TRADUCOES = {
     'status.PREPARANDO':'Preparando','status.AGUARDANDO_DESPACHO':'Esper. despacho',
     'status.SAIU_PARA_ENTREGA':'En camino','status.EM_CAMINHO':'En camino',
     'status.PRONTO_PARA_RETIRADA':'Listo p/ retiro',
-    'status.ENTREGUE':'Entregados','status.CANCELADO':'Cancelados',
+    'status.ENTREGUE':'Entregados','status.AGUARDANDO_PAGAMENTO_TRANSF':'Esper. pago','status.CANCELADO':'Cancelados',
     'acao.confirmar':'✓ Confirmar','acao.cancelar':'✗ Cancelar',
     'acao.preparar':'👨‍🍳 Iniciar preparo','acao.entregue':'✅ Entregado',
     'acao.ret-confirmada':'✅ Retiro confirmado','acao.marcar-pago':'💳 Pagado',
@@ -2328,16 +2505,17 @@ const COLUNAS_KANBAN = [
   { status:'PRONTO_PARA_RETIRADA',  border:'border-t-indigo-400', bg:'bg-indigo-50',  text:'text-indigo-700'  },
   { status:'EM_CAMINHO',            border:'border-t-purple-400', bg:'bg-purple-50',  text:'text-purple-700'  },
   { status:'SAIU_PARA_ENTREGA',     border:'border-t-purple-300', bg:'bg-purple-50',  text:'text-purple-600'  },
-  { status:'ENTREGUE',              border:'border-t-green-400',  bg:'bg-green-50',   text:'text-green-700'   },
+  { status:'ENTREGUE',              border:'border-t-green-400',  bg:'bg-green-50',   text:'text-green-700',  filter: p => p.status === 'ENTREGUE' && (p.pago || !/transf/i.test(p.metodoPagamento || '')) },
+  { status:'AGUARDANDO_PAGAMENTO_TRANSF', border:'border-t-yellow-500', bg:'bg-yellow-50', text:'text-yellow-700', filter: p => p.status === 'ENTREGUE' && !p.pago && /transf/i.test(p.metodoPagamento || '') },
   { status:'CANCELADO',             border:'border-t-red-400',    bg:'bg-red-50',     text:'text-red-700'     },
 ];
-const CORES_BADGE = { NOVO:'bg-orange-100 text-orange-700', CONFIRMADO:'bg-blue-100 text-blue-700', PAGO:'bg-cyan-100 text-cyan-700', PREPARANDO:'bg-amber-100 text-amber-700', AGUARDANDO_DESPACHO:'bg-yellow-100 text-yellow-700', EM_CAMINHO:'bg-purple-100 text-purple-700', SAIU_PARA_ENTREGA:'bg-purple-100 text-purple-700', PRONTO_PARA_RETIRADA:'bg-indigo-100 text-indigo-700', SERVIDO:'bg-teal-100 text-teal-700', ENTREGUE:'bg-green-100 text-green-700', CANCELADO:'bg-red-100 text-red-700' };
+const CORES_BADGE = { NOVO:'bg-orange-100 text-orange-700', CONFIRMADO:'bg-blue-100 text-blue-700', PAGO:'bg-cyan-100 text-cyan-700', PREPARANDO:'bg-amber-100 text-amber-700', AGUARDANDO_DESPACHO:'bg-yellow-100 text-yellow-700', EM_CAMINHO:'bg-purple-100 text-purple-700', SAIU_PARA_ENTREGA:'bg-purple-100 text-purple-700', PRONTO_PARA_RETIRADA:'bg-indigo-100 text-indigo-700', SERVIDO:'bg-teal-100 text-teal-700', ENTREGUE:'bg-green-100 text-green-700', AGUARDANDO_PAGAMENTO_TRANSF:'bg-yellow-100 text-yellow-700', CANCELADO:'bg-red-100 text-red-700' };
 function getAcoes(status) {
   const acoes = {
     NOVO: [{ tkey:'acao.confirmar', status:'CONFIRMADO', cor:'bg-blue-500 hover:bg-blue-600' }, { tkey:'acao.cancelar', status:'CANCELADO', cor:'bg-red-100 hover:bg-red-200 text-red-700' }],
     CONFIRMADO: [{ tkey:'acao.preparar', status:'PREPARANDO', cor:'bg-amber-500 hover:bg-amber-600' }, { tkey:'acao.cancelar', status:'CANCELADO', cor:'bg-red-100 hover:bg-red-200 text-red-700' }],
     PAGO: [{ tkey:'acao.preparar', status:'PREPARANDO', cor:'bg-amber-500 hover:bg-amber-600' }, { tkey:'acao.cancelar', status:'CANCELADO', cor:'bg-red-100 hover:bg-red-200 text-red-700' }],
-    AGUARDANDO_DESPACHO: [{ tkey:'acao.despachar', status:'EM_CAMINHO', cor:'bg-purple-500 hover:bg-purple-600' }, { tkey:'acao.cancelar', status:'CANCELADO', cor:'bg-red-100 hover:bg-red-200 text-red-700' }],
+    AGUARDANDO_DESPACHO: [{ tkey:'acao.cancelar', status:'CANCELADO', cor:'bg-red-100 hover:bg-red-200 text-red-700' }],
     EM_CAMINHO: [{ tkey:'acao.entregue', status:'ENTREGUE', cor:'bg-green-500 hover:bg-green-600' }],
     SAIU_PARA_ENTREGA: [{ tkey:'acao.entregue', status:'ENTREGUE', cor:'bg-green-500 hover:bg-green-600' }],
     PRONTO_PARA_RETIRADA: [{ tkey:'acao.ret-confirmada', status:'ENTREGUE', cor:'bg-green-500 hover:bg-green-600' }],
@@ -2871,6 +3049,11 @@ async function abrirMesa(num) {
   mesaCarrinhoOriginal = JSON.parse(JSON.stringify(mesaCarrinho));
   renderizarMesaCarrinho();
   renderizarMesaHistorico([]);
+  document.getElementById('mesa-btns-normais')?.classList.remove('hidden');
+  document.getElementById('mesa-pos-fechamento')?.classList.add('hidden');
+  document.getElementById('mesa-historico-panel')?.classList.add('hidden');
+  const pagEl = document.getElementById('mesa-pagamento');
+  if (pagEl) pagEl.disabled = false;
   if (!mesaCardapio.length) await carregarMesaCardapio();
   else { mesaCatAtiva = null; mesaTamanhoAtivo = null; mesaSaboresSelecionados = []; mesaBordaRecheada = false; mesaBordaSaborAtivo = null; mesaTamAtivoObj = null; renderizarMesaCatTabs(); }
   document.getElementById('modal-mesa').classList.remove('hidden');
@@ -2889,6 +3072,11 @@ async function abrirMesa(num) {
 function fecharModalMesa() {
   document.getElementById('modal-mesa').classList.add('hidden');
   mesaCarrinho = [];
+  document.getElementById('mesa-btns-normais')?.classList.remove('hidden');
+  document.getElementById('mesa-pos-fechamento')?.classList.add('hidden');
+  document.getElementById('mesa-historico-panel')?.classList.add('hidden');
+  const pag = document.getElementById('mesa-pagamento');
+  if (pag) pag.disabled = false;
 }
 
 async function carregarMesaCardapio() {
@@ -3342,9 +3530,20 @@ async function fecharContaMesa() {
   const { total, itens } = await res.json();
   if (btn) { btn.disabled = false; btn.innerHTML = textoOriginal; }
   imprimirContaMesa(mesaNum, itens.length ? itens : mesaCarrinho, total, metodoPagamento);
+  document.getElementById('mesa-btns-normais').classList.add('hidden');
+  document.getElementById('mesa-pos-fechamento').classList.remove('hidden');
+  document.getElementById('mesa-pagamento').disabled = true;
+  carregarMesas();
+}
+
+function liberarMesa() {
   fecharModalMesa();
   carregarMesas();
   carregarPedidos();
+}
+
+function toggleHistoricoMesa() {
+  document.getElementById('mesa-historico-panel').classList.toggle('hidden');
 }
 
 function renderizarPedidos() {
@@ -3363,7 +3562,7 @@ function renderizarPedidos() {
 
   const colHeight = 'calc(100vh - 230px)';
   COLUNAS_KANBAN.forEach(col => {
-    const colPedidos = pedidos.filter(p => p.status === col.status);
+    const colPedidos = pedidos.filter(col.filter || (p => p.status === col.status));
     const autoVazia = colPedidos.length === 0;
     const collapsed = colapsadasKanban.has(col.status) || autoVazia;
     const div = document.createElement('div');
@@ -3472,14 +3671,17 @@ function criarCard(pedido) {
         if (pedido.comprovanteUrl && !pedido.pago) {
           return `<button onclick="marcarPago('${pedido.id}')" class="bg-amber-500 hover:bg-amber-600 text-white text-xs font-medium px-3 py-1.5 rounded-lg transition">📋 Mostrar Comprovante</button>`;
         }
+        // Dinheiro delivery: aguarda retorno físico do motoboy ao caixa
+        const isDinheiroDelivery = /dinheiro/i.test(pedido.metodoPagamento || '') && !isRetirada;
+        if (isDinheiroDelivery && pedido.status === 'ENTREGUE' && !pedido.pago) {
+          const motoboyInfo = pedido.motoboyNome ? ` (${pedido.motoboyNome})` : '';
+          return `<button onclick="marcarPago('${pedido.id}')" class="bg-orange-500 hover:bg-orange-600 text-white text-xs font-medium px-3 py-1.5 rounded-lg transition">💵 Motoboy retornou${motoboyInfo}</button>`;
+        }
         if (!pedido.pago && pedido.status !== 'CANCELADO') {
           return `<button onclick="marcarPago('${pedido.id}')" class="bg-green-500 hover:bg-green-600 text-white text-xs font-medium px-3 py-1.5 rounded-lg transition">💳 Pago</button>`;
         }
         return '';
       })()}
-      ${pedido.status === 'PREPARANDO' && !isRetirada && !isMesa
-        ? `<button onclick="abrirModalDespachar('${pedido.id}', '${(pedido.clienteNome || pedido.clienteNumero).replace(/'/g, '')}')" class="bg-blue-500 hover:bg-blue-600 text-white text-xs font-medium px-3 py-1.5 rounded-lg transition">🛵 Despachar</button>`
-        : ''}
       ${acoes.map(a => `<button onclick="atualizarStatus('${pedido.id}', '${a.status}')"
         class="${a.cor} text-white text-xs font-medium px-3 py-1.5 rounded-lg transition">${a.label}</button>`).join('')}
     </div>
@@ -3556,7 +3758,16 @@ async function atualizarStatus(id, status) {
     headers: getHeaders({ 'Content-Type': 'application/json' }),
     body: JSON.stringify({ status }),
   });
-  if (!res.ok) { mostrarToast(t('toast.err-status')); return; }
+  if (!res.ok) {
+    const body = await res.json().catch(() => ({}));
+    if (card) card.querySelectorAll('button').forEach(b => { b.disabled = false; b.style.opacity = ''; });
+    if (body.error && body.error.toLowerCase().includes('caixa')) {
+      document.getElementById('modal-caixa-fechado').classList.remove('hidden');
+    } else {
+      mostrarToast(body.error || t('toast.err-status'));
+    }
+    return;
+  }
   const { data } = await res.json();
 
   if (status === 'PREPARANDO') imprimirTicketCozinha(data);
@@ -3567,6 +3778,18 @@ async function atualizarStatus(id, status) {
 
   await carregarPedidos();
   carregarStats();
+}
+
+async function liberarTroco(pedidoId, motoboyId, motoboyNome) {
+  const res = await fetch(`/admin/pedidos/${pedidoId}/liberar-troco`, {
+    method: 'POST',
+    headers: getHeaders({ 'Content-Type': 'application/json' }),
+    body: JSON.stringify({ motoboyId, motoboyNome }),
+  });
+  const json = await res.json();
+  if (!res.ok) { mostrarToast('Erro: ' + (json.error || 'falha')); return; }
+  document.getElementById(`troco-notif-${pedidoId}`)?.remove();
+  mostrarToast('✅ Troco liberado! Sangria registrada no caixa.');
 }
 
 function marcarPago(id) {
@@ -3608,8 +3831,21 @@ async function executarMarcarPago(id) {
   });
   if (!res.ok) { mostrarToast(t('toast.err-pago')); return; }
   const { data } = await res.json();
+  document.getElementById(`devolucao-notif-${id}`)?.remove();
   atualizarCardNaTela(data);
   mostrarToast(t('toast.pago'));
+}
+
+async function confirmarDevolucao(id) {
+  document.getElementById(`devolucao-notif-${id}`)?.remove();
+  const res = await fetch(`/admin/pedidos/${id}/pago`, {
+    method: 'PATCH',
+    headers: getHeaders(),
+  });
+  if (!res.ok) { mostrarToast(t('toast.err-pago')); return; }
+  const { data } = await res.json();
+  atualizarCardNaTela(data);
+  mostrarToast('✅ Devolução confirmada! Caixa atualizado.');
 }
 
 function atualizarCardNaTela(pedido) {
@@ -3707,6 +3943,68 @@ function iniciarSocket() {
     }
   });
 
+  socket.on('caixa:troco-solicitado', ({ pedidoId, numeroDia, motoboyId, motoboyNome, metodoPagamento }) => {
+    const container = document.getElementById('troco-notificacoes');
+    if (!container) return;
+    document.getElementById(`troco-notif-${pedidoId}`)?.remove();
+    const numFmt = numeroDia ? `D${numeroDia}` : pedidoId.substring(0, 6).toUpperCase();
+    const div = document.createElement('div');
+    div.id = `troco-notif-${pedidoId}`;
+    div.className = 'pointer-events-auto bg-amber-50 border-2 border-amber-400 rounded-2xl shadow-xl p-4 flex items-center justify-between gap-3 animate-pulse';
+    div.innerHTML = `
+      <div class="flex items-center gap-3">
+        <span class="text-3xl">💵</span>
+        <div>
+          <p class="font-bold text-amber-900 text-sm">Troco solicitado — Pedido #${numFmt}</p>
+          <p class="text-amber-700 text-xs font-medium">${motoboyNome || 'Motoboy'} precisa de troco</p>
+          <p class="text-amber-800 text-sm">${(metodoPagamento || '').replace(/dinheiro\s*[-–]\s*troco\s+para\s+/i, 'Troco para: ')}</p>
+        </div>
+      </div>
+      <button onclick="liberarTroco('${pedidoId}','${motoboyId || ''}','${(motoboyNome || '').replace(/'/g, '')}')"
+        class="pointer-events-auto bg-amber-500 hover:bg-amber-600 text-white font-bold px-4 py-2.5 rounded-xl text-sm whitespace-nowrap transition active:scale-95">
+        💵 Liberar Troco
+      </button>`;
+    container.appendChild(div);
+    tocarSom();
+    mostrarToast(`💵 ${motoboyNome} precisa de troco!`);
+  });
+
+  socket.on('caixa:troco-retirado', ({ pedidoId }) => {
+    document.getElementById(`troco-notif-${pedidoId}`)?.remove();
+    mostrarToast('✅ Motoboy confirmou retirada do troco.');
+  });
+
+  socket.on('caixa:devolucao-solicitada', ({ pedidoId, numeroDia, motoboyId, motoboyNome, total, metodoPagamento }) => {
+    const container = document.getElementById('troco-notificacoes');
+    if (!container) return;
+    document.getElementById(`devolucao-notif-${pedidoId}`)?.remove();
+    const numFmt = numeroDia ? `D${numeroDia}` : pedidoId.substring(0, 6).toUpperCase();
+    const mp = (metodoPagamento || '').replace(/\s*\(levar troco:[^)]+\)/gi, '').trim();
+    const div = document.createElement('div');
+    div.id = `devolucao-notif-${pedidoId}`;
+    div.className = 'pointer-events-auto bg-green-50 border-2 border-green-500 rounded-2xl shadow-xl p-4 flex items-center justify-between gap-3';
+    div.innerHTML = `
+      <div class="flex items-center gap-3">
+        <span class="text-3xl">💰</span>
+        <div>
+          <p class="font-bold text-green-900 text-sm">Motoboy retornou — Pedido #${numFmt}</p>
+          <p class="text-green-700 text-xs font-medium">${motoboyNome || 'Motoboy'} quer devolver o dinheiro</p>
+          <p class="text-green-800 text-sm">${mp}</p>
+        </div>
+      </div>
+      <button onclick="confirmarDevolucao('${pedidoId}')"
+        class="pointer-events-auto bg-green-600 hover:bg-green-700 text-white font-bold px-4 py-2.5 rounded-xl text-sm whitespace-nowrap transition active:scale-95">
+        ✅ Confirmar Recebimento
+      </button>`;
+    container.appendChild(div);
+    tocarSom();
+    mostrarToast(`💰 ${motoboyNome || 'Motoboy'} retornou com dinheiro!`);
+  });
+
+  socket.on('caixa:devolucao-confirmada', ({ pedidoId }) => {
+    document.getElementById(`devolucao-notif-${pedidoId}`)?.remove();
+  });
+
   socket.on('conversa:atualizada', ({ id, botPausado }) => {
     const idx = conversas.findIndex(s => s.id === id);
     if (idx >= 0) conversas[idx].botPausado = botPausado;
@@ -3767,7 +4065,7 @@ function mostrarSecao(secao) {
   secaoAtual = secao;
   const mainScroll = document.getElementById('main-scroll');
   if (mainScroll) mainScroll.scrollTop = 0;
-  ['pedidos', 'conversas', 'clientes', 'cardapio', 'configuracoes', 'motoboys', 'crm', 'metricas', 'estoque', 'financeiro', 'caixa', 'comprovantes'].forEach(s => {
+  ['pedidos', 'conversas', 'clientes', 'cardapio', 'configuracoes', 'motoboys', 'crm', 'metricas', 'estoque', 'financeiro', 'caixa', 'comprovantes', 'links', 'cozinha-painel', 'motoboy-painel'].forEach(s => {
     document.getElementById(`secao-${s}`).classList.toggle('hidden', secao !== s);
   });
   // mesas está dentro do contexto pedidos — garante estado correto ao navegar
@@ -3781,7 +4079,7 @@ function mostrarSecao(secao) {
   if (statsBar) statsBar.classList.toggle('hidden', secao !== 'pedidos');
 
   // Sidebar active state
-  ['pedidos', 'conversas', 'clientes', 'cardapio', 'configuracoes', 'motoboys', 'crm', 'metricas', 'estoque', 'financeiro', 'caixa', 'comprovantes'].forEach(s => {
+  ['pedidos', 'conversas', 'clientes', 'cardapio', 'configuracoes', 'motoboys', 'crm', 'metricas', 'estoque', 'financeiro', 'caixa', 'comprovantes', 'links', 'cozinha-painel', 'motoboy-painel'].forEach(s => {
     const el = document.getElementById(`nav-${s}`);
     if (!el) return;
     el.classList.remove('sidebar-nav-active');
@@ -3803,6 +4101,9 @@ function mostrarSecao(secao) {
   if (secao === 'financeiro') iniciarFinanceiro();
   if (secao === 'caixa') carregarCaixa();
   if (secao === 'comprovantes') carregarComprovantes();
+  if (secao === 'links') carregarLinks();
+  if (secao === 'cozinha-painel') carregarIframePainel('cozinha');
+  if (secao === 'motoboy-painel') carregarIframePainel('motoboy');
   if (secao === 'restaurantes-admin') carregarListaRestaurantes();
 }
 
@@ -4361,11 +4662,123 @@ async function carregarCardapio() {
     return;
   }
   cardapioRestauranteId = rid;
-  const res = await fetch(`/admin/cardapio/${rid}`, { headers: getHeaders() });
-  if (!res.ok) return;
-  const { data } = await res.json();
+  const [resCard, resPromo] = await Promise.all([
+    fetch(`/admin/cardapio/${rid}`, { headers: getHeaders() }),
+    fetch(`/admin/promocoes?restauranteId=${rid}`, { headers: getHeaders() }),
+  ]);
+  if (!resCard.ok) return;
+  const { data } = await resCard.json();
   cardapioData = data;
   renderizarCardapio(data);
+  if (resPromo.ok) {
+    const { data: promos } = await resPromo.json();
+    renderizarPromocoes(promos);
+  }
+}
+
+// ── Promoções ─────────────────────────────────────────────────────────────────
+
+function renderizarPromocoes(promos) {
+  const lista = document.getElementById('promocoes-lista');
+  if (!lista) return;
+  if (!promos.length) {
+    lista.innerHTML = '<p class="text-sm text-gray-400">Nenhuma promoção cadastrada.</p>';
+    return;
+  }
+  lista.innerHTML = promos.map(p => `
+    <div class="bg-white rounded-xl shadow-sm border border-gray-100 px-4 py-3 flex items-start gap-3">
+      <div class="flex-1 min-w-0">
+        <div class="flex items-center gap-2 flex-wrap">
+          <span class="font-semibold text-gray-800 text-sm">${p.nome}</span>
+          ${p.precoPromocional != null ? `<span class="text-xs bg-pink-50 text-pink-700 border border-pink-200 rounded-full px-2 py-0.5 font-semibold">${p.precoPromocional.toLocaleString('pt-BR', {minimumFractionDigits: 0})}</span>` : ''}
+          <span class="text-xs rounded-full px-2 py-0.5 font-semibold ${p.ativa ? 'bg-green-100 text-green-700' : 'bg-gray-100 text-gray-500'}">${p.ativa ? 'Ativa' : 'Inativa'}</span>
+        </div>
+        ${p.descricao ? `<p class="text-xs text-gray-500 mt-0.5">${p.descricao}</p>` : ''}
+      </div>
+      <div class="flex gap-1.5 shrink-0">
+        <button onclick="togglePromocao('${p.id}', ${p.ativa})"
+          class="${p.ativa ? 'bg-yellow-100 hover:bg-yellow-200 text-yellow-700' : 'bg-green-100 hover:bg-green-200 text-green-700'} text-xs font-semibold px-2.5 py-1.5 rounded-lg transition" title="${p.ativa ? 'Desativar' : 'Ativar'}">
+          ${p.ativa ? '⏸' : '▶'}
+        </button>
+        <button onclick="abrirModalPromocao('${p.id}')"
+          class="bg-gray-100 hover:bg-gray-200 text-gray-600 text-xs font-semibold px-2.5 py-1.5 rounded-lg transition" title="Editar">✏️</button>
+        <button onclick="excluirPromocao('${p.id}')"
+          class="bg-red-50 hover:bg-red-100 text-red-600 text-xs font-semibold px-2.5 py-1.5 rounded-lg transition" title="Excluir">🗑</button>
+      </div>
+    </div>
+  `).join('');
+}
+
+let _promocoesCache = [];
+
+async function abrirModalPromocao(id = null) {
+  document.getElementById('promo-id').value = id || '';
+  document.getElementById('promo-nome').value = '';
+  document.getElementById('promo-descricao').value = '';
+  document.getElementById('promo-preco').value = '';
+  document.getElementById('promo-ativa').checked = true;
+  document.getElementById('promo-erro').classList.add('hidden');
+  document.getElementById('modal-promocao-titulo').textContent = id ? 'Editar Promoção' : 'Nova Promoção';
+
+  if (id) {
+    const rid = restauranteAtual || (restaurantes[0]?.id || '');
+    const res = await fetch(`/admin/promocoes?restauranteId=${rid}`, { headers: getHeaders() });
+    if (res.ok) {
+      const { data } = await res.json();
+      const p = data.find(x => x.id === id);
+      if (p) {
+        document.getElementById('promo-nome').value = p.nome;
+        document.getElementById('promo-descricao').value = p.descricao || '';
+        document.getElementById('promo-preco').value = p.precoPromocional != null ? p.precoPromocional : '';
+        document.getElementById('promo-ativa').checked = p.ativa;
+      }
+    }
+  }
+  document.getElementById('modal-promocao').classList.remove('hidden');
+}
+
+function fecharModalPromocao() {
+  document.getElementById('modal-promocao').classList.add('hidden');
+}
+
+async function salvarPromocao() {
+  const id = document.getElementById('promo-id').value;
+  const nome = document.getElementById('promo-nome').value.trim();
+  const descricao = document.getElementById('promo-descricao').value.trim();
+  const precoRaw = document.getElementById('promo-preco').value;
+  const ativa = document.getElementById('promo-ativa').checked;
+  const erroEl = document.getElementById('promo-erro');
+
+  if (!nome) { erroEl.textContent = 'Nome obrigatório.'; erroEl.classList.remove('hidden'); return; }
+  erroEl.classList.add('hidden');
+
+  const body = { nome, descricao: descricao || null, precoPromocional: precoRaw !== '' ? parseFloat(precoRaw) : null, ativa };
+  if (!id) body.restauranteId = restauranteAtual || (restaurantes[0]?.id || '');
+
+  const url = id ? `/admin/promocoes/${id}` : '/admin/promocoes';
+  const method = id ? 'PUT' : 'POST';
+  const res = await fetch(url, { method, headers: getHeaders({ 'Content-Type': 'application/json' }), body: JSON.stringify(body) });
+  if (!res.ok) {
+    const e = await res.json().catch(() => ({}));
+    erroEl.textContent = e.error || 'Erro ao salvar.'; erroEl.classList.remove('hidden'); return;
+  }
+  fecharModalPromocao();
+  carregarCardapio();
+}
+
+async function togglePromocao(id, ativaAtual) {
+  await fetch(`/admin/promocoes/${id}`, {
+    method: 'PUT',
+    headers: getHeaders({ 'Content-Type': 'application/json' }),
+    body: JSON.stringify({ ativa: !ativaAtual }),
+  });
+  carregarCardapio();
+}
+
+async function excluirPromocao(id) {
+  if (!confirm('Excluir esta promoção?')) return;
+  await fetch(`/admin/promocoes/${id}`, { method: 'DELETE', headers: getHeaders() });
+  carregarCardapio();
 }
 
 function renderizarCardapio(categorias) {
@@ -5306,6 +5719,13 @@ async function carregarConfiguracoes() {
   if (!r) return;
 
   cfgRestauranteId = r.id;
+  // Reset WhatsApp QR section on restaurant change
+  document.getElementById('cfg-wa-qr-section').classList.add('hidden');
+  document.getElementById('cfg-wa-btn').classList.remove('hidden');
+  clearInterval(cfgWaCountdownTimer);
+  document.getElementById('cfg-wa-qr-countdown').textContent = '';
+  document.getElementById('cfg-wa-qr-imagem').innerHTML = '<p class="text-sm text-gray-400 text-center px-3">Clique em "Trocar WhatsApp" para gerar QR</p>';
+
   document.getElementById('cfg-nome').value  = r.nome || '';
   document.getElementById('cfg-slug').value  = r.slugWhatsapp || '';
   document.getElementById('cfg-dono').value  = r.donoWhatsapp || '';
@@ -5498,7 +5918,12 @@ function cfgRenderFotos(fotos) {
     const filename = url.split('/uploads/')[1] || '';
     return `
       <div class="relative group w-24 h-24">
-        <img src="${url}" class="w-24 h-24 object-cover rounded-xl border border-gray-200" onerror="this.src=''">
+        <img src="${url}" class="w-24 h-24 object-cover rounded-xl border border-gray-200"
+          onerror="this.style.display='none';this.nextElementSibling.style.display='flex'">
+        <div style="display:none" class="w-24 h-24 rounded-xl border border-red-200 bg-red-50 flex-col items-center justify-center text-center gap-1">
+          <span class="text-lg">🖼️</span>
+          <span class="text-xs text-red-400">Arquivo<br>não encontrado</span>
+        </div>
         <button onclick="removerFotoCardapio('${filename}')"
           class="absolute top-1 right-1 bg-red-500 text-white rounded-full w-5 h-5 text-xs flex items-center justify-center opacity-0 group-hover:opacity-100 transition leading-none">✕</button>
       </div>`;
@@ -5530,6 +5955,114 @@ async function uploadCardapioFotos(input) {
   cfgRenderFotos(json.data.fotos);
   input.value = '';
   mostrarToast(`✅ ${json.data.fotos.length} foto(s) salva(s)!`);
+}
+
+// ── WhatsApp Bot — Trocar conexão ────────────────────────────────────────────
+let cfgWaCountdownTimer = null;
+
+function cfgAbrirTrocarWhatsapp() {
+  document.getElementById('cfg-wa-qr-section').classList.remove('hidden');
+  document.getElementById('cfg-wa-btn').classList.add('hidden');
+  cfgReconectarWhatsapp();
+}
+
+function cfgFecharTrocarWhatsapp() {
+  document.getElementById('cfg-wa-qr-section').classList.add('hidden');
+  document.getElementById('cfg-wa-btn').classList.remove('hidden');
+  clearInterval(cfgWaCountdownTimer);
+  document.getElementById('cfg-wa-qr-countdown').textContent = '';
+  document.getElementById('cfg-wa-novo-numero').value = '';
+}
+
+function cfgIniciarCountdownWa() {
+  clearInterval(cfgWaCountdownTimer);
+  let seg = 55;
+  const el = document.getElementById('cfg-wa-qr-countdown');
+  el.textContent = `⏱ Expira em ${seg}s`;
+  cfgWaCountdownTimer = setInterval(() => {
+    seg--;
+    if (seg <= 0) {
+      clearInterval(cfgWaCountdownTimer);
+      el.textContent = '⚠️ QR expirado — clique em Renovar QR';
+      document.getElementById('cfg-wa-qr-imagem').innerHTML =
+        '<p class="text-sm text-gray-400 text-center px-3">QR expirado. Clique em Renovar QR.</p>';
+    } else {
+      el.textContent = `⏱ Expira em ${seg}s`;
+    }
+  }, 1000);
+}
+
+function cfgExibirQrWa(qrcode) {
+  const container = document.getElementById('cfg-wa-qr-imagem');
+  const base64 = qrcode?.base64;
+  const code = qrcode?.qrcode;
+  const imgSrc = base64
+    ? (base64.startsWith('data:') ? base64 : `data:image/png;base64,${base64}`)
+    : (code?.startsWith('data:') ? code : null);
+  if (imgSrc) {
+    container.innerHTML = `<img src="${imgSrc}" class="w-48 h-48 rounded-lg">`;
+    cfgIniciarCountdownWa();
+  } else {
+    container.innerHTML = '<p class="text-sm text-gray-400 text-center px-3">QR code não disponível. Clique em Renovar QR.</p>';
+  }
+}
+
+async function cfgReconectarWhatsapp() {
+  if (!cfgRestauranteId) return;
+  const container = document.getElementById('cfg-wa-qr-imagem');
+  const btn = document.getElementById('cfg-wa-reconectar-btn');
+  const novoNumero = document.getElementById('cfg-wa-novo-numero').value.trim();
+  clearInterval(cfgWaCountdownTimer);
+  document.getElementById('cfg-wa-qr-countdown').textContent = '';
+  container.innerHTML = '<p class="text-sm text-gray-400 animate-pulse text-center px-3">Gerando QR code... aguarde ~10s</p>';
+  btn.disabled = true;
+  try {
+    const body = novoNumero ? { novoSlug: novoNumero } : {};
+    const res = await fetch(`/admin/restaurantes/${cfgRestauranteId}/reconectar-whatsapp`, {
+      method: 'POST', headers: getHeaders({ 'Content-Type': 'application/json' }), body: JSON.stringify(body),
+    });
+    const json = await res.json();
+    if (json.slugUsado) document.getElementById('cfg-slug').value = json.slugUsado;
+    if (json.connected) {
+      container.innerHTML = '<p class="text-green-600 font-semibold text-sm text-center">✅ WhatsApp já conectado!</p>';
+      document.getElementById('cfg-wa-qr-countdown').textContent = '';
+      return;
+    }
+    if (json.qrcode) {
+      cfgExibirQrWa(json.qrcode);
+    } else {
+      container.innerHTML = '<p class="text-sm text-gray-400 text-center px-3">QR ainda não disponível. Clique em Renovar QR.</p>';
+    }
+  } catch {
+    container.innerHTML = '<p class="text-sm text-red-400 text-center px-3">Erro ao gerar QR code.</p>';
+  } finally {
+    btn.disabled = false;
+  }
+}
+
+async function cfgRenovarQrWhatsapp() {
+  if (!cfgRestauranteId) return;
+  const container = document.getElementById('cfg-wa-qr-imagem');
+  clearInterval(cfgWaCountdownTimer);
+  document.getElementById('cfg-wa-qr-countdown').textContent = '';
+  container.innerHTML = '<p class="text-sm text-gray-400 animate-pulse text-center px-3">Renovando QR...</p>';
+  try {
+    const res = await fetch(`/admin/restaurantes/${cfgRestauranteId}/qrcode-whatsapp`, { headers: getHeaders() });
+    const json = await res.json();
+    if (json.connected) {
+      container.innerHTML = '<p class="text-green-600 font-semibold text-sm text-center">✅ WhatsApp conectado com sucesso!</p>';
+      document.getElementById('cfg-wa-qr-countdown').textContent = '';
+      setTimeout(cfgFecharTrocarWhatsapp, 2000);
+      return;
+    }
+    if (json.qrcode) {
+      cfgExibirQrWa(json.qrcode);
+    } else {
+      container.innerHTML = '<p class="text-sm text-gray-400 text-center px-3">QR não disponível. Clique em "Gerar novo QR".</p>';
+    }
+  } catch {
+    container.innerHTML = '<p class="text-sm text-red-400 text-center px-3">Erro ao renovar QR code.</p>';
+  }
 }
 
 // ── Motoboys ─────────────────────────────────────────────────────────────────
@@ -6260,6 +6793,133 @@ function fecharModalHistorico() {
 }
 
 // ── Caixa ─────────────────────────────────────────────────────────────────────
+// ── Links ─────────────────────────────────────────────────────────────────────
+async function carregarIframePainel(tipo) {
+  const slug = restauranteInfo?.slug || restaurantes.find(r => r.id === restauranteAtual)?.slugWhatsapp;
+  if (!slug) { mostrarToast('Selecione um restaurante primeiro.'); return; }
+  const iframe = document.getElementById(`iframe-${tipo}`);
+  const linkNovaAba = document.getElementById(`link-nova-aba-${tipo}`);
+  if (!iframe) return;
+  // Só recarrega se estiver vazio ou for outro restaurante
+  if (iframe.src && iframe.src.includes(`slug=${slug}`)) return;
+  iframe.src = '';
+  try {
+    const res = await fetch(`/painel/token/${slug}`, { headers: getHeaders() });
+    if (!res.ok) { mostrarToast('Erro ao gerar link.'); return; }
+    const data = await res.json();
+    iframe.src = data[tipo];
+    if (linkNovaAba) linkNovaAba.href = data[tipo];
+  } catch { mostrarToast('Erro ao carregar painel.'); }
+}
+
+async function copiarLinkIframe(tipo) {
+  const iframe = document.getElementById(`iframe-${tipo}`);
+  let url = iframe?.src && iframe.src !== window.location.href ? iframe.src : null;
+  if (!url) {
+    // iframe ainda não foi carregado — busca o token agora
+    const slug = restauranteInfo?.slug || restaurantes.find(r => r.id === restauranteAtual)?.slugWhatsapp;
+    if (!slug) { mostrarToast('Selecione um restaurante primeiro.'); return; }
+    try {
+      const res = await fetch(`/painel/token/${slug}`, { headers: getHeaders() });
+      if (!res.ok) { mostrarToast('Erro ao gerar link.'); return; }
+      const data = await res.json();
+      url = data[tipo];
+      if (iframe) { iframe.src = url; }
+      const linkNovaAba = document.getElementById(`link-nova-aba-${tipo}`);
+      if (linkNovaAba) linkNovaAba.href = url;
+    } catch { mostrarToast('Erro ao gerar link.'); return; }
+  }
+  navigator.clipboard.writeText(url).then(() => mostrarToast('Link copiado! Cole no WhatsApp. 📋'));
+}
+
+async function abrirLinkIframe(tipo) {
+  const iframe = document.getElementById(`iframe-${tipo}`);
+  let url = iframe?.src && iframe.src !== window.location.href ? iframe.src : null;
+  if (!url) {
+    const slug = restauranteInfo?.slug || restaurantes.find(r => r.id === restauranteAtual)?.slugWhatsapp;
+    if (!slug) { mostrarToast('Selecione um restaurante primeiro.'); return; }
+    try {
+      const res = await fetch(`/painel/token/${slug}`, { headers: getHeaders() });
+      if (!res.ok) { mostrarToast('Erro ao gerar link.'); return; }
+      const data = await res.json();
+      url = data[tipo];
+      if (iframe) { iframe.src = url; }
+      const linkNovaAba = document.getElementById(`link-nova-aba-${tipo}`);
+      if (linkNovaAba) linkNovaAba.href = url;
+    } catch { mostrarToast('Erro ao gerar link.'); return; }
+  }
+  window.open(url, '_blank', 'noopener');
+}
+
+async function carregarLinks() {
+  const container = document.getElementById('links-cards');
+  const loading = document.getElementById('links-loading');
+  if (loading) loading.classList.remove('hidden');
+  container.innerHTML = '<p id="links-loading" class="text-sm text-gray-400">Carregando...</p>';
+
+  const slug = restauranteInfo?.slug
+    || restaurantes.find(r => r.id === restauranteAtual)?.slugWhatsapp;
+
+  if (!slug) {
+    container.innerHTML = '<p class="text-sm text-red-500">Selecione um restaurante primeiro.</p>';
+    return;
+  }
+
+  try {
+    const res = await fetch(`/painel/token/${slug}`, { headers: getHeaders() });
+    if (!res.ok) throw new Error('Falha ao obter links');
+    const { cozinha, motoboy } = await res.json();
+
+    const card = (emoji, titulo, descricao, url) => `
+      <div class="bg-white border border-gray-200 rounded-2xl p-5 shadow-sm">
+        <div class="flex items-center gap-3 mb-3">
+          <span class="text-2xl">${emoji}</span>
+          <div>
+            <p class="font-semibold text-gray-800 text-sm">${titulo}</p>
+            <p class="text-xs text-gray-400">${descricao}</p>
+          </div>
+        </div>
+        <div class="flex items-center gap-2 bg-gray-50 border border-gray-200 rounded-xl px-3 py-2 mb-3">
+          <span class="text-xs text-gray-500 truncate flex-1 font-mono">${url}</span>
+        </div>
+        <div class="flex gap-2">
+          <button onclick="copiarLink('${url}', this)"
+            class="flex-1 bg-orange-500 hover:bg-orange-600 text-white text-xs font-semibold px-3 py-2 rounded-xl transition flex items-center justify-center gap-1.5">
+            📋 Copiar link
+          </button>
+          <a href="${url}" target="_blank" rel="noopener"
+            class="flex-1 bg-blue-500 hover:bg-blue-600 text-white text-xs font-semibold px-3 py-2 rounded-xl transition flex items-center justify-center gap-1.5">
+            ↗ Abrir
+          </a>
+          <a href="https://wa.me/?text=${encodeURIComponent(url)}" target="_blank"
+            class="flex-1 bg-green-500 hover:bg-green-600 text-white text-xs font-semibold px-3 py-2 rounded-xl transition flex items-center justify-center gap-1.5">
+            📲 WhatsApp
+          </a>
+        </div>
+      </div>`;
+
+    container.innerHTML =
+      card('👨‍🍳', 'Painel da Cozinha', 'Link fixo — compartilhe com a equipe da cozinha', cozinha) +
+      card('🛵', 'Painel dos Motoboys', 'Link fixo — compartilhe com os entregadores', motoboy);
+  } catch (e) {
+    container.innerHTML = `<p class="text-sm text-red-500">Erro ao carregar links: ${e.message}</p>`;
+  }
+}
+
+function copiarLink(url, btn) {
+  navigator.clipboard.writeText(url).then(() => {
+    const orig = btn.innerHTML;
+    btn.innerHTML = '✅ Copiado!';
+    btn.classList.replace('bg-orange-500', 'bg-green-500');
+    btn.classList.replace('hover:bg-orange-600', 'hover:bg-green-600');
+    setTimeout(() => {
+      btn.innerHTML = orig;
+      btn.classList.replace('bg-green-500', 'bg-orange-500');
+      btn.classList.replace('hover:bg-green-600', 'hover:bg-orange-600');
+    }, 2000);
+  });
+}
+
 // ── Comprovantes ──────────────────────────────────────────────────────────────
 let comprovantesOrdem = 'desc';
 
@@ -6444,6 +7104,32 @@ async function carregarKpisTurno(turno) {
   const saldoEsperado = turno.valorAbertura + totalDinheiro - totalSangrias;
   document.getElementById('caixa-saldo-esperado').textContent = fmt(saldoEsperado);
 
+  // Lista de pedidos pagos no turno
+  const listaPedidos = document.getElementById('caixa-pedidos-lista');
+  if (!pedidosTurno.length) {
+    listaPedidos.innerHTML = '<p class="py-4 text-center text-xs text-gray-400">Nenhum pedido pago neste turno</p>';
+  } else {
+    const iconeMetodo = met => {
+      const m = (met || '').toLowerCase();
+      if (m.includes('dinheiro')) return '💵';
+      if (m.includes('cart')) return '💳';
+      if (m.includes('pix') || m.includes('transfer')) return '📲';
+      return '💰';
+    };
+    listaPedidos.innerHTML = pedidosTurno
+      .slice()
+      .sort((a, b) => new Date(b.createdAt) - new Date(a.createdAt))
+      .map(p => `
+        <div class="px-4 py-3 flex items-center justify-between border-b border-gray-50 last:border-0">
+          <div>
+            <p class="text-sm font-medium text-gray-800">${p.numeroDia ? `#${p.numeroDia} · ` : ''}${p.clienteNome || p.clienteNumero || '—'}</p>
+            <p class="text-xs text-gray-400">${fmtData(p.createdAt)} · ${iconeMetodo(p.metodoPagamento)} ${p.metodoPagamento || '—'}</p>
+          </div>
+          <span class="text-sm font-bold text-green-600 shrink-0">${fmt(p.total)}</span>
+        </div>
+      `).join('');
+  }
+
   return { totalDinheiro, totalSangrias, saldoEsperado };
 }
 
@@ -6463,15 +7149,19 @@ function renderizarSangriasCaixa(sangrias) {
   const total = sangrias.reduce((acc, s) => acc + s.valor, 0);
   document.getElementById('caixa-sangrias-total').textContent = fmt(total);
 
-  lista.innerHTML = sangrias.map(s => `
+  lista.innerHTML = sangrias.map(s => {
+    const isEntrada = s.valor < 0;
+    const cor = isEntrada ? 'text-green-600' : 'text-amber-600';
+    const sinal = isEntrada ? `+ ${fmt(Math.abs(s.valor))}` : `- ${fmt(s.valor)}`;
+    return `
     <div class="px-4 py-3 flex items-center justify-between border-b border-gray-50 last:border-0">
       <div>
         <p class="text-sm text-gray-800">${s.motivo}</p>
         <p class="text-xs text-gray-400">${fmtData(s.criadoEm)}${s.registradoPor ? ` · ${s.registradoPor}` : ''}</p>
       </div>
-      <span class="text-sm font-semibold text-amber-600 shrink-0">- ${fmt(s.valor)}</span>
-    </div>
-  `).join('');
+      <span class="text-sm font-semibold ${cor} shrink-0">${sinal}</span>
+    </div>`;
+  }).join('');
 }
 
 function renderizarCaixaHistorico(turnos) {

@@ -4,6 +4,13 @@
   <meta charset="UTF-8">
   <meta name="viewport" content="width=device-width, initial-scale=1.0, user-scalable=no">
   <title>Entregas</title>
+  <link id="pwa-manifest" rel="manifest">
+  <meta name="theme-color" content="#f97316">
+  <meta name="mobile-web-app-capable" content="yes">
+  <meta name="apple-mobile-web-app-capable" content="yes">
+  <meta name="apple-mobile-web-app-status-bar-style" content="default">
+  <meta name="apple-mobile-web-app-title" content="Entregas">
+  <link rel="apple-touch-icon" href="/icons/motoboy-icon.svg">
   <script src="https://cdn.tailwindcss.com"></script>
   <script src="/socket.io/socket.io.js"></script>
   <style>
@@ -17,31 +24,79 @@
 
   <!-- Login modal -->
   <div id="modal-login" class="fixed inset-0 bg-black/60 z-50 flex items-center justify-center p-4">
-    <div class="bg-white rounded-2xl p-6 w-full max-w-sm shadow-2xl">
+    <div class="bg-white rounded-2xl p-6 w-full max-w-sm shadow-2xl max-h-screen overflow-y-auto">
       <div class="text-4xl text-center mb-3">🛵</div>
-      <h2 class="text-xl font-bold text-center mb-1">Bem-vindo!</h2>
-      <p class="text-gray-500 text-sm text-center mb-5">Selecione seu nome e insira sua senha para entrar.</p>
-      <div class="space-y-3 mb-4">
-        <div>
-          <label class="text-xs text-gray-500 mb-1 block">Repartidor</label>
-          <select id="login-select"
-            class="w-full border-2 border-gray-200 focus:border-orange-400 rounded-xl px-4 py-3 text-base font-medium outline-none bg-white">
-            <option value="">Carregando...</option>
-          </select>
+      <h2 class="text-xl font-bold text-center mb-1" id="modal-titulo">Bem-vindo!</h2>
+      <p class="text-gray-500 text-sm text-center mb-5" id="modal-subtitulo">Selecione seu nome e insira sua senha para entrar.</p>
+
+      <!-- Formulário de login -->
+      <div id="form-login">
+        <div class="space-y-3 mb-4">
+          <div>
+            <label class="text-xs text-gray-500 mb-1 block">Repartidor</label>
+            <select id="login-select"
+              class="w-full border-2 border-gray-200 focus:border-orange-400 rounded-xl px-4 py-3 text-base font-medium outline-none bg-white">
+              <option value="">Carregando...</option>
+            </select>
+          </div>
+          <div>
+            <label class="text-xs text-gray-500 mb-1 block">Senha</label>
+            <input id="login-senha" type="password" placeholder="Sua senha"
+              class="w-full border-2 border-gray-200 focus:border-orange-400 rounded-xl px-4 py-3 text-base font-medium outline-none"
+              onkeydown="if(event.key==='Enter')fazerLogin()">
+          </div>
+          <p id="login-erro" class="text-red-500 text-sm hidden"></p>
         </div>
-        <div>
-          <label class="text-xs text-gray-500 mb-1 block">Senha</label>
-          <input id="login-senha" type="password" placeholder="Sua senha"
-            class="w-full border-2 border-gray-200 focus:border-orange-400 rounded-xl px-4 py-3 text-base font-medium outline-none"
-            onkeydown="if(event.key==='Enter')fazerLogin()">
-        </div>
-        <p id="login-erro" class="text-red-500 text-sm hidden"></p>
+        <button onclick="fazerLogin()" id="btn-login"
+          class="btn-touch w-full bg-orange-500 hover:bg-orange-600 text-white font-bold py-3.5 rounded-xl text-base transition active:scale-95">
+          Entrar
+        </button>
       </div>
-      <button onclick="fazerLogin()" id="btn-login"
-        class="btn-touch w-full bg-orange-500 hover:bg-orange-600 text-white font-bold py-3.5 rounded-xl text-base transition active:scale-95">
-        Entrar
-      </button>
+
+      <!-- Formulário de cadastro -->
+      <div id="form-cadastro" class="hidden">
+        <div class="space-y-3 mb-4">
+          <input id="cad-nome" type="text" placeholder="Nome completo *" autocomplete="name"
+            class="w-full border-2 border-gray-200 focus:border-orange-400 rounded-xl px-4 py-3 text-base font-medium outline-none">
+          <input id="cad-telefone" type="tel" placeholder="WhatsApp (somente números) *" autocomplete="tel"
+            class="w-full border-2 border-gray-200 focus:border-orange-400 rounded-xl px-4 py-3 text-base font-medium outline-none">
+          <input id="cad-cedula" type="text" placeholder="Cédula / documento (opcional)"
+            class="w-full border-2 border-gray-200 focus:border-orange-400 rounded-xl px-4 py-3 text-base font-medium outline-none">
+          <input id="cad-placa" type="text" placeholder="Placa da moto (opcional)"
+            class="w-full border-2 border-gray-200 focus:border-orange-400 rounded-xl px-4 py-3 text-base font-medium outline-none">
+          <input id="cad-senha" type="password" placeholder="Crie uma senha *"
+            class="w-full border-2 border-gray-200 focus:border-orange-400 rounded-xl px-4 py-3 text-base font-medium outline-none">
+          <input id="cad-confirmar" type="password" placeholder="Confirme a senha *"
+            class="w-full border-2 border-gray-200 focus:border-orange-400 rounded-xl px-4 py-3 text-base font-medium outline-none"
+            onkeydown="if(event.key==='Enter')cadastrar()">
+          <p id="cad-erro" class="text-red-500 text-sm hidden"></p>
+        </div>
+        <button onclick="cadastrar()" id="btn-cadastrar"
+          class="btn-touch w-full bg-orange-500 hover:bg-orange-600 text-white font-bold py-3.5 rounded-xl text-base transition active:scale-95">
+          Cadastrar
+        </button>
+      </div>
+
+      <!-- Toggle login ↔ cadastro -->
+      <div class="border-t border-gray-100 mt-4 pt-3 text-center">
+        <button onclick="toggleCadastro()" id="btn-toggle-cadastro"
+          class="text-sm text-orange-500 hover:text-orange-600 font-medium underline-offset-2 hover:underline">
+          Sou novo aqui → Cadastrar
+        </button>
+      </div>
     </div>
+  </div>
+
+  <!-- Banner ativar notificações -->
+  <div id="banner-notif" class="hidden fixed top-0 left-0 right-0 z-40 bg-orange-500 text-white px-4 py-3 flex items-center justify-between shadow-lg">
+    <div class="flex items-center gap-2 text-sm font-medium">
+      <span>🔔</span>
+      <span>Ativar notificações para receber novas entregas</span>
+    </div>
+    <button onclick="pedirPermissaoNotificacao()"
+      class="btn-touch bg-white text-orange-600 font-bold text-sm px-3 py-1.5 rounded-lg shrink-0">
+      Ativar
+    </button>
   </div>
 
   <!-- Header -->
@@ -53,11 +108,28 @@
         <p class="text-xs text-gray-400" id="meu-nome-label">-</p>
       </div>
     </div>
-    <div class="flex items-center gap-2">
+    <div class="flex items-center gap-3">
       <span id="indicador-socket" class="w-2 h-2 rounded-full bg-red-400 transition-colors"></span>
+      <button onclick="abrirHistorico()" class="text-xs bg-gray-100 hover:bg-gray-200 text-gray-600 font-medium px-3 py-1.5 rounded-lg transition">📦 Viagens</button>
       <button onclick="trocarConta()" class="text-xs text-gray-400 hover:text-gray-600 underline">Trocar conta</button>
     </div>
   </header>
+
+  <!-- Histórico overlay -->
+  <div id="hist-overlay" class="fixed inset-0 bg-black/50 z-40 hidden" onclick="fecharHistorico()"></div>
+  <!-- Histórico drawer -->
+  <div id="hist-drawer" class="fixed top-0 right-0 h-full w-full max-w-md bg-white z-50 flex flex-col shadow-2xl transform translate-x-full transition-transform duration-300">
+    <div class="flex items-center justify-between px-4 py-3 border-b border-gray-200 bg-white sticky top-0">
+      <div>
+        <h2 class="font-bold text-base">📦 Minhas Viagens</h2>
+        <p class="text-xs text-gray-400" id="hist-subtitulo">Últimos 30 dias</p>
+      </div>
+      <button onclick="fecharHistorico()" class="text-gray-400 hover:text-gray-600 text-2xl leading-none w-8 h-8 flex items-center justify-center rounded-lg hover:bg-gray-100">&times;</button>
+    </div>
+    <div id="hist-content" class="flex-1 overflow-y-auto p-4">
+      <div class="text-center py-12 text-gray-400 text-sm">Carregando...</div>
+    </div>
+  </div>
 
   <!-- Main -->
   <main class="max-w-lg mx-auto px-3 py-4 space-y-6">
@@ -86,7 +158,20 @@
       </div>
     </section>
 
+    <!-- Pendente devolução ao restaurante -->
+    <section id="sec-devolucao" class="hidden">
+      <div class="flex items-center gap-2 mb-3">
+        <div class="w-2.5 h-2.5 rounded-full bg-red-500 animate-pulse"></div>
+        <h2 class="font-bold text-sm uppercase tracking-wide text-red-600">Devolver ao restaurante</h2>
+        <span id="count-devolucao" class="ml-auto bg-red-100 text-red-600 text-xs font-bold px-2 py-0.5 rounded-full">0</span>
+      </div>
+      <div id="col-devolucao"></div>
+    </section>
+
   </main>
+
+  <!-- Toast -->
+  <div id="toast" class="fixed bottom-4 left-1/2 -translate-x-1/2 bg-gray-900 text-white text-sm font-medium px-4 py-2 rounded-xl shadow-xl z-50 opacity-0 transition-opacity duration-300 pointer-events-none"></div>
 
 <script>
 const params = new URLSearchParams(location.search);
@@ -100,6 +185,17 @@ if (!slug || !token) {
 let meuId = localStorage.getItem('motoboy-id') || '';
 let meuNome = localStorage.getItem('motoboy-nome') || '';
 let pedidos = [];
+let pendenteDevolucaoGlobal = [];
+let nomeRestaurante = '';
+let moedaAtual = 'R$';
+const trocoEstado = {}; // pedidoId → null | 'solicitado' | 'aprovado' | 'retirado'
+const pendDevolucaoEstado = {}; // pedidoId → null | 'solicitado'
+let historicoAberto = false;
+let toastTimer = null;
+let watchId = null;
+let ultimoEnvioGPS = 0;
+let pedidoRastreando = null;
+const INTERVALO_GPS_MS = 10000;
 
 async function carregarListaMotoboys() {
   try {
@@ -146,6 +242,7 @@ async function fazerLogin() {
     document.getElementById('modal-login').classList.add('hidden');
     document.getElementById('meu-nome-label').textContent = `👤 ${meuNome}`;
     carregar();
+    checkNotificacoes();
   } catch {
     erroEl.textContent = 'Erro de conexão. Tente novamente.';
     erroEl.classList.remove('hidden');
@@ -210,7 +307,7 @@ async function aceitar(id) {
 async function entregar(id) {
   const btn = document.querySelector(`[data-pedido="${id}"] .btn-entregar`);
   if (btn) { btn.disabled = true; btn.textContent = '...'; }
-  const ok = confirm('Confirmar entrega deste pedido?');
+  const ok = confirm(`${nomeRestaurante ? nomeRestaurante + ' — ' : ''}Confirmar entrega deste pedido?`);
   if (!ok) { if (btn) { btn.disabled = false; btn.textContent = '✓ Entregue'; } return; }
   try {
     await fetch(`/painel/pedidos/${id}/entregar?slug=${slug}&t=${token}`, { method: 'POST' });
@@ -218,6 +315,135 @@ async function entregar(id) {
   } catch {
     if (btn) { btn.disabled = false; }
   }
+}
+
+async function solicitarTroco(pedidoId) {
+  trocoEstado[pedidoId] = 'solicitado';
+  atualizarTrocoCard(pedidoId);
+  try {
+    await fetch(`/painel/pedidos/${pedidoId}/solicitar-troco?slug=${slug}&t=${token}`, {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ motoboyId: meuId, motoboyNome: meuNome }),
+    });
+  } catch {
+    trocoEstado[pedidoId] = null;
+    atualizarTrocoCard(pedidoId);
+  }
+}
+
+async function confirmarRetiradaTroco(pedidoId) {
+  trocoEstado[pedidoId] = 'retirado';
+  atualizarTrocoCard(pedidoId);
+  fetch(`/painel/pedidos/${pedidoId}/confirmar-retirada-troco?slug=${slug}&t=${token}`, {
+    method: 'POST',
+    headers: { 'Content-Type': 'application/json' },
+    body: JSON.stringify({ motoboyId: meuId }),
+  }).catch(() => {});
+}
+
+function trocoSecao(p) {
+  if (!/troco/i.test(p.metodoPagamento || '')) return '';
+  const estado = trocoEstado[p.id] || null;
+  const infoTroco = (p.metodoPagamento || '').replace(/dinheiro\s*[-–]\s*troco\s+para\s+/i, 'Troco para: ');
+  if (estado === 'retirado') {
+    return `<div class="bg-emerald-50 border border-emerald-300 rounded-xl px-3 py-2 mb-3 flex items-center gap-2">
+        <span class="text-lg">✅</span>
+        <div><p class="text-xs font-bold text-emerald-700">Troco retirado — pode seguir!</p>
+        <p class="text-sm font-semibold text-emerald-900">${infoTroco}</p></div></div>`;
+  }
+  if (estado === 'aprovado') {
+    return `<div class="bg-emerald-50 border-2 border-emerald-400 rounded-xl px-3 py-2 mb-3">
+        <div class="flex items-center gap-2 mb-2">
+          <span class="text-lg">✅</span>
+          <div><p class="text-xs font-bold text-emerald-700">Troco aprovado! Retire no caixa</p>
+          <p class="text-sm font-semibold text-emerald-900">${infoTroco}</p></div>
+        </div>
+        <button class="btn-touch w-full bg-emerald-500 text-white font-bold py-2.5 rounded-xl text-sm transition active:scale-95"
+          onclick="confirmarRetiradaTroco('${p.id}')">✅ Confirmar retirada do troco</button></div>`;
+  }
+  if (estado === 'solicitado') {
+    return `<div class="bg-yellow-50 border border-yellow-300 rounded-xl px-3 py-2 mb-3 flex items-center gap-2">
+        <span class="text-lg">⏳</span>
+        <div><p class="text-xs font-bold text-yellow-800">Aguardando aprovação do caixa...</p>
+        <p class="text-sm font-semibold text-yellow-900">${infoTroco}</p></div></div>`;
+  }
+  return `<div class="bg-yellow-50 border border-yellow-300 rounded-xl px-3 py-2 mb-3">
+      <div class="flex items-center gap-2 mb-2">
+        <span class="text-lg">💵</span>
+        <div><p class="text-xs font-bold text-yellow-800">Dinheiro com Troco</p>
+        <p class="text-sm font-semibold text-yellow-900">${infoTroco}</p></div>
+      </div>
+      <button class="btn-touch w-full bg-yellow-500 hover:bg-yellow-600 text-white font-bold py-2.5 rounded-xl text-sm transition active:scale-95"
+        onclick="solicitarTroco('${p.id}')">💵 Solicitar troco ao caixa</button></div>`;
+}
+
+function atualizarTrocoCard(pedidoId) {
+  const sec = document.querySelector(`[data-pedido="${pedidoId}"] [data-troco-sec]`);
+  if (!sec) return;
+  const pedido = pedidos.find(p => p.id === pedidoId);
+  if (pedido) sec.innerHTML = trocoSecao(pedido);
+}
+
+function mostrarToast(msg) {
+  const el = document.getElementById('toast');
+  if (!el) return;
+  el.textContent = msg;
+  el.style.opacity = '1';
+  clearTimeout(toastTimer);
+  toastTimer = setTimeout(() => { el.style.opacity = '0'; }, 3000);
+}
+
+function textoADevolver(p) {
+  const mp = p.metodoPagamento || '';
+  // "Dinheiro - Troco para G$ 50.000 (levar troco: ...)" → extrai "G$ 50.000"
+  const m = mp.match(/troco\s+para\s+(.+?)(?:\s*\(|$)/i);
+  if (m) return m[1].trim();
+  return fmtValor(p.total, moedaAtual);
+}
+
+async function solicitarDevolucao(pedidoId) {
+  if (pendDevolucaoEstado[pedidoId] === 'solicitado') return;
+  pendDevolucaoEstado[pedidoId] = 'solicitado';
+  const btn = document.querySelector(`[data-devolucao="${pedidoId}"] .btn-devolver`);
+  if (btn) { btn.disabled = true; btn.textContent = '⏳ Aguardando confirmação do restaurante...'; btn.className = 'btn-touch w-full bg-yellow-400 text-yellow-900 font-bold py-3.5 rounded-xl text-sm cursor-not-allowed'; }
+  try {
+    const p = pendenteDevolucaoGlobal.find(x => x.id === pedidoId);
+    await fetch(`/painel/pedidos/${pedidoId}/solicitar-devolucao?slug=${slug}&t=${token}`, {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ motoboyId: meuId, motoboyNome: meuNome, total: p?.total }),
+    });
+    mostrarToast('✅ Restaurante notificado! Aguarde confirmação.');
+  } catch {
+    pendDevolucaoEstado[pedidoId] = null;
+    if (btn) { btn.disabled = false; }
+    await carregar();
+  }
+}
+
+function criarCardDevolucao(p, moeda) {
+  const valorTexto = textoADevolver(p);
+  const estado = pendDevolucaoEstado[p.id] || null;
+  const div = document.createElement('div');
+  div.className = 'bg-white rounded-2xl p-4 shadow-sm border-2 border-red-300 card-in';
+  div.setAttribute('data-devolucao', p.id);
+  const botaoHtml = estado === 'solicitado'
+    ? `<button disabled class="btn-touch w-full bg-yellow-400 text-yellow-900 font-bold py-3.5 rounded-xl text-sm cursor-not-allowed">⏳ Aguardando confirmação do restaurante...</button>`
+    : `<button class="btn-touch btn-devolver w-full bg-red-500 hover:bg-red-600 text-white font-bold py-3.5 rounded-xl text-sm transition active:scale-95"
+        onclick="solicitarDevolucao('${p.id}')">💰 Devolver ${valorTexto} ao restaurante</button>`;
+  div.innerHTML = `
+    <div class="flex items-start justify-between mb-2">
+      <div>
+        <span class="text-xl font-black">#${numPedido(p)}</span>
+        <span class="ml-2 text-xs bg-red-100 text-red-600 px-2 py-0.5 rounded-full font-medium">Devolução pendente</span>
+      </div>
+      <span class="text-sm font-bold text-red-600">${fmtValor(p.total, moeda)}</span>
+    </div>
+    <p class="text-xs text-gray-500 mb-3">💵 ${(p.metodoPagamento || '').replace(/\s*\(levar troco:[^)]+\)/gi, '')}</p>
+    ${botaoHtml}
+  `;
+  return div;
 }
 
 function criarCardDisponivel(p, moeda) {
@@ -248,7 +474,15 @@ function criarCardDisponivel(p, moeda) {
           ${link ? `<a href="${link}" target="_blank" class="text-xs text-blue-500 font-medium mt-0.5 inline-block">Abrir no Maps →</a>` : ''}
         </div>
       </div>` : ''}
-    ${p.metodoPagamento ? `<p class="text-xs text-gray-400 mb-3">💳 ${p.metodoPagamento}</p>` : ''}
+    ${p.metodoPagamento ? (/troco/i.test(p.metodoPagamento)
+      ? `<div class="bg-yellow-50 border border-yellow-300 rounded-xl px-3 py-2 mb-3 flex items-center gap-2">
+           <span class="text-lg">💵</span>
+           <div>
+             <p class="text-xs font-bold text-yellow-800">Dinheiro com Troco</p>
+             <p class="text-sm font-semibold text-yellow-900">${p.metodoPagamento.replace(/dinheiro\s*[-–]\s*troco\s+para\s+/i, 'Troco para: ')}</p>
+           </div>
+         </div>`
+      : `<p class="text-xs text-gray-400 mb-3">💳 ${p.metodoPagamento}</p>`) : ''}
     <button class="btn-touch btn-aceitar w-full bg-orange-500 hover:bg-orange-600 text-white font-bold py-3.5 rounded-xl text-sm transition active:scale-95"
       onclick="aceitar('${p.id}')">Aceitar Entrega</button>
   `;
@@ -267,6 +501,7 @@ function criarCardMeu(p, moeda) {
       <div class="flex items-center gap-2">
         <span class="text-xl font-black">#${numPedido(p)}</span>
         <span class="text-xs bg-blue-100 text-blue-600 px-2 py-0.5 rounded-full font-medium">Meu pedido</span>
+        <span class="text-xs text-emerald-500 font-medium animate-pulse">📍 GPS ativo</span>
       </div>
       <span class="text-sm font-bold text-blue-600">${fmtValor(p.total, moeda)}</span>
     </div>
@@ -286,7 +521,8 @@ function criarCardMeu(p, moeda) {
           ${link ? `<a href="${link}" target="_blank" class="text-xs text-blue-500 font-medium mt-0.5 inline-block">Abrir no Maps →</a>` : ''}
         </div>
       </div>` : ''}
-    ${p.metodoPagamento ? `<p class="text-xs text-gray-400 mb-3">💳 ${p.metodoPagamento}</p>` : ''}
+    ${p.metodoPagamento && !/troco/i.test(p.metodoPagamento) ? `<p class="text-xs text-gray-400 mb-3">💳 ${p.metodoPagamento}</p>` : ''}
+    <div data-troco-sec>${trocoSecao(p)}</div>
     <button class="btn-touch btn-entregar w-full bg-emerald-500 hover:bg-emerald-600 text-white font-bold py-3.5 rounded-xl text-sm transition active:scale-95"
       onclick="entregar('${p.id}')">✓ Confirmar Entrega</button>
   `;
@@ -295,19 +531,22 @@ function criarCardMeu(p, moeda) {
 
 async function carregar() {
   try {
-    const res = await fetch(`/painel/pedidos?slug=${slug}&t=${token}&tipo=motoboy`);
+    const res = await fetch(`/painel/pedidos?slug=${slug}&t=${token}&tipo=motoboy&motoboyId=${encodeURIComponent(meuId)}`);
     if (res.status === 401) {
       document.body.innerHTML = '<div class="flex items-center justify-center h-screen"><div class="text-center p-8"><p class="text-xl font-bold mb-2">Link expirado</p><p class="text-gray-500">Solicite um novo link ao administrador.</p></div></div>';
       return;
     }
     if (!res.ok) return;
-    const { data, restaurante } = await res.json();
+    const { data, pendenteDevolucao, restaurante } = await res.json();
     pedidos = data;
+    pendenteDevolucaoGlobal = pendenteDevolucao || [];
 
-    document.getElementById('nome-restaurante').textContent = restaurante?.nome || 'Entregas';
+    nomeRestaurante = restaurante?.nome || '';
+    document.getElementById('nome-restaurante').textContent = nomeRestaurante || 'Entregas';
     document.getElementById('meu-nome-label').textContent = meuNome ? `👤 ${meuNome}` : '';
 
-    const moeda = restaurante?.moeda || 'R$';
+    moedaAtual = restaurante?.moeda || 'R$';
+    const moeda = moedaAtual;
     const disponiveis = data.filter(p => p.status === 'AGUARDANDO_DESPACHO' && !p.motoboyId);
     const meus = data.filter(p => p.status === 'EM_CAMINHO' && p.motoboyId === meuId);
 
@@ -326,11 +565,149 @@ async function carregar() {
     }
 
     if (meus.length) {
+      iniciarGPS(meus[0].id);
       meus.forEach(p => colMeus.appendChild(criarCardMeu(p, moeda)));
     } else {
+      pararGPS();
       colMeus.innerHTML = '<div class="text-center py-8 text-gray-400 text-sm">Você não tem entregas em andamento</div>';
     }
+
+    // Seção pendente devolução
+    const secDev = document.getElementById('sec-devolucao');
+    const colDev = document.getElementById('col-devolucao');
+    if (pendenteDevolucaoGlobal.length > 0) {
+      secDev.classList.remove('hidden');
+      document.getElementById('count-devolucao').textContent = pendenteDevolucaoGlobal.length;
+      colDev.innerHTML = '';
+      pendenteDevolucaoGlobal.forEach(p => colDev.appendChild(criarCardDevolucao(p, moeda)));
+    } else {
+      secDev.classList.add('hidden');
+      colDev.innerHTML = '';
+    }
   } catch {}
+}
+
+// ── GPS tracking ─────────────────────────────────────────────────
+
+function iniciarGPS(pedidoId) {
+  if (!navigator.geolocation) return;
+  if (pedidoRastreando === pedidoId && watchId !== null) return;
+  pararGPS();
+  pedidoRastreando = pedidoId;
+  watchId = navigator.geolocation.watchPosition(
+    (pos) => {
+      const agora = Date.now();
+      if (agora - ultimoEnvioGPS < INTERVALO_GPS_MS) return;
+      ultimoEnvioGPS = agora;
+      fetch(`/painel/pedidos/${pedidoId}/localizacao?slug=${slug}&t=${token}`, {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ lat: pos.coords.latitude, lng: pos.coords.longitude }),
+      }).catch(() => {});
+    },
+    () => {},
+    { enableHighAccuracy: true, maximumAge: 5000 }
+  );
+}
+
+function pararGPS() {
+  if (watchId !== null) { navigator.geolocation.clearWatch(watchId); watchId = null; }
+  pedidoRastreando = null;
+}
+
+// ── Histórico de viagens ──────────────────────────────────────────
+
+function abrirHistorico() {
+  document.getElementById('hist-overlay').classList.remove('hidden');
+  document.getElementById('hist-drawer').classList.remove('translate-x-full');
+  historicoAberto = true;
+  carregarHistoricoMotoboy();
+}
+
+function fecharHistorico() {
+  document.getElementById('hist-overlay').classList.add('hidden');
+  document.getElementById('hist-drawer').classList.add('translate-x-full');
+  historicoAberto = false;
+}
+
+function criarCardHistoricoMotoboy(p, moeda) {
+  const itens = Array.isArray(p.itens) ? p.itens : [];
+  const loc = p.localizacao;
+  const link = mapsLink(loc);
+  const hora = new Date(p.createdAt).toLocaleTimeString('pt-BR', { hour: '2-digit', minute: '2-digit' });
+  return `
+    <div class="bg-gray-50 rounded-xl p-3 border border-gray-100">
+      <div class="flex items-center gap-2 mb-1.5">
+        <span class="font-bold text-sm">#${numPedido(p)}</span>
+        <span class="text-xs text-gray-400">${hora}</span>
+      </div>
+      ${p.clienteNome ? `<p class="text-xs text-gray-600 mb-1">👤 ${p.clienteNome}</p>` : ''}
+      <div class="text-xs text-gray-500 space-y-0.5 mb-1.5">
+        ${itens.slice(0,3).map(i => `<div>${i.quantidade||1}× ${i.nome}</div>`).join('')}
+        ${itens.length > 3 ? `<div class="text-gray-400">+ ${itens.length-3} item(s)...</div>` : ''}
+      </div>
+      ${loc && loc !== 'Retirada no balcão' ? `
+        <div class="flex items-start gap-1.5 text-xs text-gray-500 mt-1">
+          <span class="flex-shrink-0">📍</span>
+          ${link ? `<a href="${link}" target="_blank" class="text-blue-500 break-words leading-snug">${loc}</a>`
+                 : `<span class="break-words leading-snug">${loc}</span>`}
+        </div>` : ''}
+      ${p.metodoPagamento ? `<p class="text-xs text-gray-400 mt-1">💳 ${p.metodoPagamento}</p>` : ''}
+    </div>`;
+}
+
+async function carregarHistoricoMotoboy() {
+  if (!meuId) return;
+  const content = document.getElementById('hist-content');
+  content.innerHTML = '<div class="text-center py-12 text-gray-400 text-sm">Carregando...</div>';
+  try {
+    const res = await fetch(`/painel/pedidos?slug=${slug}&t=${token}&tipo=motoboy-historico&motoboyId=${meuId}`);
+    if (!res.ok) { content.innerHTML = '<div class="text-center py-8 text-red-400 text-sm">Erro ao carregar histórico.</div>'; return; }
+    const { data, restaurante } = await res.json();
+    const moeda = restaurante?.moeda || moedaAtual;
+
+    if (!data.length) {
+      content.innerHTML = '<div class="text-center py-12 text-gray-400 text-sm">Nenhuma entrega realizada ainda.</div>';
+      return;
+    }
+
+    // Agrupa por dia (data local)
+    const grupos = {};
+    const optsData = { weekday: 'long', year: 'numeric', month: 'long', day: 'numeric' };
+    for (const p of data) {
+      const key = new Date(p.createdAt).toLocaleDateString('pt-BR', optsData);
+      if (!grupos[key]) grupos[key] = [];
+      grupos[key].push(p);
+    }
+
+    const totalViagens = data.length;
+
+    document.getElementById('hist-subtitulo').textContent = `${totalViagens} entrega${totalViagens !== 1 ? 's' : ''} nos últimos 30 dias`;
+
+    let html = `
+      <div class="bg-emerald-50 border border-emerald-200 rounded-xl p-3 mb-5 flex items-center justify-center gap-3 text-center">
+        <p class="text-4xl font-black text-emerald-500">${totalViagens}</p>
+        <p class="text-sm font-medium text-emerald-700">viagens nos<br>últimos 30 dias</p>
+      </div>`;
+
+    for (const [dataStr, pedidosDia] of Object.entries(grupos)) {
+      const label = dataStr.charAt(0).toUpperCase() + dataStr.slice(1);
+      html += `
+        <div class="mb-5">
+          <div class="flex items-center justify-between mb-2 pb-1.5 border-b border-gray-200">
+            <span class="text-xs font-bold text-gray-600">${label}</span>
+            <span class="text-xs text-gray-500 font-medium">${pedidosDia.length} entrega${pedidosDia.length !== 1 ? 's' : ''}</span>
+          </div>
+          <div class="space-y-2">
+            ${pedidosDia.map(p => criarCardHistoricoMotoboy(p, moeda)).join('')}
+          </div>
+        </div>`;
+    }
+
+    content.innerHTML = html;
+  } catch {
+    content.innerHTML = '<div class="text-center py-8 text-red-400 text-sm">Erro de conexão.</div>';
+  }
 }
 
 // Auto-refresh every 30s
@@ -345,15 +722,158 @@ socket.on('connect', () => {
 socket.on('disconnect', () => {
   document.getElementById('indicador-socket').className = 'w-2 h-2 rounded-full bg-red-400 transition-colors';
 });
-socket.on('pedido:atualizado', carregar);
-socket.on('pedido:status', carregar);
+socket.on('pedido:atualizado', () => { carregar(); if (historicoAberto) carregarHistoricoMotoboy(); });
+socket.on('pedido:status', () => { carregar(); if (historicoAberto) carregarHistoricoMotoboy(); });
 socket.on('pedido:novo', carregar);
+socket.on('motoboy:troco-aprovado', ({ pedidoId, motoboyId }) => {
+  if (motoboyId !== meuId) return;
+  trocoEstado[pedidoId] = 'aprovado';
+  atualizarTrocoCard(pedidoId);
+});
+socket.on('motoboy:devolucao-confirmada', ({ pedidoId, motoboyId }) => {
+  if (motoboyId !== meuId) return;
+  mostrarToast('✅ Devolução confirmada! Obrigado.');
+  carregar();
+});
+
+// ── Cadastro de novo repartidor ───────────────────────────────────────────────
+
+let modoCadastro = false;
+
+function toggleCadastro() {
+  modoCadastro = !modoCadastro;
+  document.getElementById('form-login').classList.toggle('hidden', modoCadastro);
+  document.getElementById('form-cadastro').classList.toggle('hidden', !modoCadastro);
+  document.getElementById('modal-titulo').textContent = modoCadastro ? 'Novo Repartidor' : 'Bem-vindo!';
+  document.getElementById('modal-subtitulo').textContent = modoCadastro
+    ? 'Preencha os dados para criar seu acesso.'
+    : 'Selecione seu nome e insira sua senha para entrar.';
+  document.getElementById('btn-toggle-cadastro').textContent = modoCadastro
+    ? '← Já tenho conta' : 'Sou novo aqui → Cadastrar';
+  document.getElementById('cad-erro').classList.add('hidden');
+}
+
+async function cadastrar() {
+  const nome = document.getElementById('cad-nome').value.trim();
+  const telefone = document.getElementById('cad-telefone').value.trim();
+  const cedula = document.getElementById('cad-cedula').value.trim();
+  const placa = document.getElementById('cad-placa').value.trim();
+  const senha = document.getElementById('cad-senha').value;
+  const confirmar = document.getElementById('cad-confirmar').value;
+  const erroEl = document.getElementById('cad-erro');
+  const btn = document.getElementById('btn-cadastrar');
+
+  erroEl.classList.add('hidden');
+  if (!nome || !telefone || !senha) {
+    erroEl.textContent = 'Preencha nome, WhatsApp e senha.';
+    erroEl.classList.remove('hidden');
+    return;
+  }
+  if (senha !== confirmar) {
+    erroEl.textContent = 'As senhas não conferem.';
+    erroEl.classList.remove('hidden');
+    return;
+  }
+  if (senha.length < 4) {
+    erroEl.textContent = 'A senha deve ter ao menos 4 caracteres.';
+    erroEl.classList.remove('hidden');
+    return;
+  }
+
+  btn.disabled = true; btn.textContent = '...';
+  try {
+    const res = await fetch(`/painel/motoboy/cadastrar?slug=${slug}&t=${token}`, {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ nome, telefone, cedula, placa, senha }),
+    });
+    const json = await res.json();
+    if (!res.ok) {
+      erroEl.textContent = json.error || 'Erro ao cadastrar.';
+      erroEl.classList.remove('hidden');
+      btn.disabled = false; btn.textContent = 'Cadastrar';
+      return;
+    }
+    meuId = json.id;
+    meuNome = json.nome;
+    localStorage.setItem('motoboy-id', meuId);
+    localStorage.setItem('motoboy-nome', meuNome);
+    document.getElementById('modal-login').classList.add('hidden');
+    document.getElementById('meu-nome-label').textContent = `👤 ${meuNome}`;
+    mostrarToast('✅ Cadastro realizado! Bem-vindo, ' + meuNome + '!');
+    carregar();
+    checkNotificacoes();
+  } catch {
+    erroEl.textContent = 'Erro de conexão. Tente novamente.';
+    erroEl.classList.remove('hidden');
+    btn.disabled = false; btn.textContent = 'Cadastrar';
+  }
+}
+
+// ── PWA — manifest dinâmico + service worker ─────────────────────────────────
+
+if (slug && token) {
+  const manifestEl = document.getElementById('pwa-manifest');
+  if (manifestEl) manifestEl.href = `/painel/motoboy/manifest?slug=${slug}&t=${token}`;
+}
+
+if ('serviceWorker' in navigator) {
+  navigator.serviceWorker.register('/sw-motoboy.js').catch(() => {});
+}
+
+// ── Push notifications ────────────────────────────────────────────────────────
+
+function urlBase64ToUint8Array(b64) {
+  const pad = '='.repeat((4 - b64.length % 4) % 4);
+  const raw = atob((b64 + pad).replace(/-/g, '+').replace(/_/g, '/'));
+  return Uint8Array.from([...raw].map(c => c.charCodeAt(0)));
+}
+
+async function subscribePush() {
+  if (!('serviceWorker' in navigator) || !('PushManager' in window) || !meuId) return;
+  try {
+    const reg = await navigator.serviceWorker.ready;
+    let sub = await reg.pushManager.getSubscription();
+    if (!sub) {
+      const keyRes = await fetch(`/painel/motoboy/vapid-key?slug=${slug}&t=${token}`);
+      if (!keyRes.ok) return;
+      const { publicKey } = await keyRes.json();
+      sub = await reg.pushManager.subscribe({ userVisibleOnly: true, applicationServerKey: urlBase64ToUint8Array(publicKey) });
+    }
+    await fetch(`/painel/motoboy/subscribe?slug=${slug}&t=${token}`, {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ motoboyId: meuId, subscription: sub }),
+    });
+  } catch (err) {
+    console.warn('[push] subscribe failed:', err);
+  }
+}
+
+async function pedirPermissaoNotificacao() {
+  document.getElementById('banner-notif').classList.add('hidden');
+  const perm = await Notification.requestPermission();
+  if (perm === 'granted') {
+    await subscribePush();
+    mostrarToast('🔔 Notificações ativadas!');
+  }
+}
+
+function checkNotificacoes() {
+  if (!('Notification' in window) || !('PushManager' in window)) return;
+  if (Notification.permission === 'granted') {
+    subscribePush();
+  } else if (Notification.permission !== 'denied') {
+    setTimeout(() => document.getElementById('banner-notif')?.classList.remove('hidden'), 1500);
+  }
+}
 
 // Init
 if (meuId && meuNome) {
   document.getElementById('modal-login').classList.add('hidden');
   document.getElementById('meu-nome-label').textContent = `👤 ${meuNome}`;
   carregar();
+  checkNotificacoes();
 } else {
   carregarListaMotoboys();
 }

@@ -37,15 +37,14 @@ function formatarHorario(date) {
   });
 }
 
-// ── Numeração diária ──────────────────────────────────────────────────────────
+// ── Numeração acumulativa (não reinicia por dia) ───────────────────────────────
 
 async function proximoNumeroDia(restauranteId) {
-  const agora = new Date();
-  // Dia começa às 05:00 UTC (01:00 horário local -4h) para cobrir serviço noturno
-  const inicioDia = new Date(Date.UTC(agora.getUTCFullYear(), agora.getUTCMonth(), agora.getUTCDate(), 5, 0, 0, 0));
-  if (agora < inicioDia) inicioDia.setUTCDate(inicioDia.getUTCDate() - 1);
-  const count = await prisma.pedido.count({ where: { restauranteId, createdAt: { gte: inicioDia } } });
-  return count + 1;
+  const max = await prisma.pedido.aggregate({
+    where: { restauranteId },
+    _max: { numeroDia: true },
+  });
+  return (max._max.numeroDia || 0) + 1;
 }
 
 function formatNumPedido(pedido) {
@@ -101,7 +100,7 @@ async function finalizarPedido(sessaoId, localizacao, tipoEntrega = "delivery", 
         total,
         localizacao,
         metodoPagamento: metodoPagamento || null,
-        status: metodoPagamento === "Transferência" ? "NOVO" : "CONFIRMADO",
+        status: (metodoPagamento === "Transferência" || /dinheiro/i.test(metodoPagamento || "")) ? "NOVO" : "CONFIRMADO",
         numeroDia,
       },
     }),
@@ -262,19 +261,20 @@ async function notificarStatusPedido(pedidoId, novoStatus) {
     }
 
     const num = formatNumPedido(pedido);
+    const trackingUrl = `${process.env.BOT_PUBLIC_URL || "https://bot.guiafinanceiro.pro"}/rastrear.html?pedido=${pedidoId}`;
     const msgs = {
       pt: {
         PREPARANDO: `👨‍🍳 Seu pedido *#${num}* já está sendo preparado! Em breve ficará pronto. 🍽️`,
         PRONTO_PARA_RETIRADA: `✅ Seu pedido *#${num}* está pronto para retirada no balcão! Pode vir buscar. 🏪`,
         AGUARDANDO_DESPACHO: `✅ Seu pedido *#${num}* está pronto! Aguardando o motoboy para entrega. 📦`,
-        EM_CAMINHO: `🛵 Seu pedido *#${num}* está a caminho! O motoboy já saiu para a entrega.`,
+        EM_CAMINHO: `🛵 Seu pedido *#${num}* está a caminho! O motoboy já saiu para a entrega.\n\n📍 *Acompanhe em tempo real:*\n${trackingUrl}`,
         ENTREGUE: `✅ Pedido *#${num}* entregue! Obrigado pela preferência! 😊`,
       },
       es: {
         PREPARANDO: `👨‍🍳 ¡Tu pedido *#${num}* ya se está preparando! En breve estará listo. 🍽️`,
         PRONTO_PARA_RETIRADA: `✅ ¡Tu pedido *#${num}* está listo para retirarlo en el mostrador! Puedes venir a buscarlo. 🏪`,
         AGUARDANDO_DESPACHO: `✅ ¡Tu pedido *#${num}* está listo! Esperando al repartidor para la entrega. 📦`,
-        EM_CAMINHO: `🛵 ¡Tu pedido *#${num}* está en camino! El repartidor ya salió.`,
+        EM_CAMINHO: `🛵 ¡Tu pedido *#${num}* está en camino! El repartidor ya salió.\n\n📍 *Seguí en tiempo real:*\n${trackingUrl}`,
         ENTREGUE: `✅ ¡Pedido *#${num}* entregado! ¡Gracias por tu preferencia! 😊`,
       },
     };
@@ -295,4 +295,17 @@ async function buscarPedidoAtivoDaSessao(sessaoId) {
   });
 }
 
-module.exports = { finalizarPedido, enviarPedidoParaDono, confirmarPedido, proximoNumeroDia, formatNumPedido, salvarComprovante, buscarPedidoAtivoDaSessao, notificarStatusPedido };
+async function buscarPedidoEntregueNaoPago(clienteNumero, restauranteId) {
+  return prisma.pedido.findFirst({
+    where: {
+      clienteNumero,
+      restauranteId,
+      status: "ENTREGUE",
+      pago: false,
+      metodoPagamento: { contains: "Transf", mode: "insensitive" },
+    },
+    orderBy: { createdAt: "desc" },
+  });
+}
+
+module.exports = { finalizarPedido, enviarPedidoParaDono, confirmarPedido, proximoNumeroDia, formatNumPedido, salvarComprovante, buscarPedidoAtivoDaSessao, buscarPedidoEntregueNaoPago, notificarStatusPedido };

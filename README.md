@@ -1,321 +1,64 @@
-# Bot Restaurante — SaaS Multi-Tenant para WhatsApp
+# Bot Restaurante — SaaS Multi-Tenant para WhatsApp e Telegram
 
-Plataforma de chatbot inteligente para restaurantes via WhatsApp, construída com Claude AI, Evolution API e Strapi CMS. Cada restaurante tem seu próprio número WhatsApp, cardápio e sessões de conversa totalmente independentes.
+Plataforma de chatbot inteligente para restaurantes via WhatsApp e Telegram, construída com Claude AI, Evolution API e PostgreSQL. Cada restaurante tem seu próprio número WhatsApp, cardápio e painel admin independentes.
 
 ---
 
 ## Arquitetura
 
 ```
-Cliente WhatsApp
-      │
-      ▼
-Evolution API ──── webhook POST /webhook/:slug ────▶ Nginx
-                                                       │
-                                          ┌────────────┴────────────┐
-                                          ▼                         ▼
-                                   Bot (Node.js)             Strapi CMS
-                                   ┌────────────┐          (cardápios, planos)
-                                   │ tenantMidd.│
-                                   │ claudeServ.│
-                                   │ sessaoServ.│
-                                   └─────┬──────┘
-                                         │
-                                    PostgreSQL
-                                   (sessões, pedidos,
-                                    fidelidade)
-                                         │
-                                         ▼
-                                  Dono do Restaurante
-                                 (WhatsApp Business)
+Cliente WhatsApp                    Cliente Telegram
+      │                                    │
+      ▼                                    ▼
+Evolution API                     Telegram Bot API
+      │                                    │
+      │  POST /webhook/:slug               │  POST /telegram/webhook
+      └──────────────┬─────────────────────┘
+                     ▼
+              Bot (Node.js)
+         ┌────────────────────┐
+         │  tenantMiddleware  │
+         │  claudeService     │
+         │  sessaoService     │
+         │  pedidoService     │
+         └────────┬───────────┘
+                  │
+             PostgreSQL
+         (restaurantes, sessões,
+          pedidos, fidelidade,
+          estoque, caixa)
+                  │
+                  ▼
+        Dono do Restaurante
+       (WhatsApp + Painel Admin)
 ```
 
-| Serviço | Tecnologia | Porta | Papel |
-|---|---|---|---|
-| **Bot** | Node.js 20 + Express | 3000 | Motor do chatbot + API admin |
-| **CMS** | Strapi v5 | 1337 | Gestão de cardápios e restaurantes |
-| **WhatsApp** | Evolution API | 8080 | Gateway de mensagens |
-| **Banco** | PostgreSQL 15 | 5432 | Persistência de sessões e pedidos |
-| **Proxy** | Nginx | 80/443 | Roteamento + SSL termination |
-| **IA** | Claude claude-sonnet-4-5 | — | Compreensão de linguagem natural |
-
----
-
-## Desenvolvimento Local
-
-### Pré-requisitos
-
-- Node.js >= 20
-- Docker e Docker Compose
-- Chave da API Anthropic ([console.anthropic.com](https://console.anthropic.com))
-
-### Passo a passo
-
-```bash
-# 1. Clone e entre no projeto
-git clone <repo> bot-restaurante
-cd bot-restaurante
-
-# 2. Suba PostgreSQL + Evolution API
-docker compose up postgres evolution-api -d
-
-# 3. Configure o bot
-cd bot
-cp .env.example .env
-# Edite .env com suas chaves (ANTHROPIC_API_KEY é obrigatória)
-
-# 4. Instale dependências e migre o banco
-npm install
-npx prisma migrate dev --name init
-
-# 5. Inicie o bot
-npm run dev
-# Bot disponível em http://localhost:3000
-
-# 6. Configure o Strapi (novo terminal)
-cd ../strapi
-npm install
-cp .env.example .env
-# Edite strapi/.env com APP_KEYS e demais chaves
-npm run develop
-# Strapi disponível em http://localhost:1337/admin
-
-# 7. Crie o usuário admin do Strapi e gere o API Token
-# Settings → API Tokens → Create → Read-only → copie o token → cole em bot/.env STRAPI_TOKEN
-
-# 8. Popule com dados de exemplo
-npm run seed
-```
-
----
-
-## Deploy na VPS
-
-### 1. Escolha e acesse a VPS
-
-Qualquer provedor Ubuntu 22.04+: DigitalOcean, Hostinger, Vultr, Contabo, etc.
-
-- Mínimo recomendado: **2 vCPU / 4 GB RAM / 50 GB SSD**
-- Acesse via SSH: `ssh root@IP_DA_VPS`
-
-### 2. Prepare o servidor
-
-```bash
-# Garante que está atualizado
-apt-get update && apt-get upgrade -y
-
-# Instala git
-apt-get install -y git
-```
-
-### 3. Clone o repositório e configure
-
-```bash
-git clone <repo> /opt/bot-restaurante
-cd /opt/bot-restaurante
-
-# Cria o .env de produção
-cp .env.production.example .env
-nano .env   # preencha TODOS os valores marcados com ⚠️
-```
-
-### 4. Rode o script de deploy
-
-```bash
-chmod +x scripts/deploy.sh
-sudo ./scripts/deploy.sh
-```
-
-O script automaticamente:
-- Instala Docker, Docker Compose e Node.js
-- Valida as variáveis obrigatórias no `.env`
-- Builda e sobe todos os containers (`postgres`, `evolution-api`, `bot`, `nginx`)
-- Instala o Strapi como serviço systemd
-- Configura o firewall (portas 22, 80, 443)
-- Exibe as URLs de acesso
-
-### 5. Configure o Strapi em produção
-
-```bash
-cd /opt/bot-restaurante/strapi
-nano .env   # preencha APP_KEYS e demais variáveis
-npm run build
-systemctl start strapi
-```
-
-Acesse `http://SEU_DOMINIO/admin` para criar o primeiro usuário.
-
-### 6. Ative SSL com Let's Encrypt
-
-```bash
-apt-get install -y certbot python3-certbot-nginx
-certbot --nginx -d seudominio.com -d www.seudominio.com
-
-# O certbot edita o nginx.conf automaticamente.
-# Para renovação automática (já incluída pelo certbot):
-systemctl status certbot.timer
-```
-
-### 7. Aponte seu domínio
-
-No painel do seu registrador de domínio, crie um registro DNS tipo A:
-
-```
-@ (ou seudominio.com)  →  A  →  IP_DA_VPS
-www                    →  A  →  IP_DA_VPS
-```
-
-Aguarde a propagação (até 24h, geralmente minutos).
-
----
-
-## Adicionar Novo Restaurante
-
-### 1. Cadastrar no Strapi
-
-Acesse `http://seudominio.com/admin` → Content Manager → Restaurante → Create new
-
-Preencha:
-- `nome`: Nome do restaurante
-- `slugWhatsapp`: Número WhatsApp com DDI (ex: `5511999999999`)
-- `donoWhatsapp`: Número que recebe os pedidos
-- `plano`: basico / profissional / premium
-- `dataVencimento`: Data de expiração do plano
-
-Depois crie o cardápio: Cardápio → Categoria → Produtos.
-
-### 2. Registrar via API de Onboarding
-
-```bash
-curl -X POST https://seudominio.com/api/onboarding/restaurante \
-  -H "x-admin-token: SEU_ADMIN_TOKEN" \
-  -H "Content-Type: application/json" \
-  -d '{
-    "strapiId": 1,
-    "slug": "5511999999999"
-  }'
-```
-
-A resposta inclui um **QR code em base64**.
-
-### 3. Conectar o WhatsApp Business
-
-Abra o QR code retornado (use qualquer [decodificador base64 → imagem](https://base64.guru/converter/decode/image)) e escaneie com o WhatsApp Business do restaurante:
-
-> WhatsApp Business → Configurações → Dispositivos Conectados → Conectar Dispositivo
-
-### 4. Testar
-
-Envie "oi" para o número WhatsApp do restaurante. O bot deve responder apresentando o cardápio.
-
-### 5. Verificar status da conexão
-
-```bash
-curl https://seudominio.com/api/onboarding/status/5511999999999 \
-  -H "x-admin-token: SEU_ADMIN_TOKEN"
-```
-
----
-
-## Variáveis de Ambiente Explicadas
-
-### docker-compose / raiz (.env)
-
-| Variável | Obrigatório | Descrição |
+| Serviço | Tecnologia | Papel |
 |---|---|---|
-| `DB_USER` | Sim | Usuário do PostgreSQL |
-| `DB_PASSWORD` | Sim | Senha do PostgreSQL — use `openssl rand -hex 32` |
-| `DB_NAME` | Não | Nome do banco (padrão: `botrestaurante`) |
-| `ANTHROPIC_API_KEY` | Sim | Chave da API Claude — [console.anthropic.com](https://console.anthropic.com) |
-| `EVOLUTION_API_KEY` | Sim | Chave da Evolution API — use `openssl rand -hex 24` |
-| `STRAPI_URL` | Sim | URL onde o Strapi está rodando |
-| `STRAPI_TOKEN` | Sim | API Token do Strapi (Read-only) |
-| `ADMIN_TOKEN` | Sim | Token para rotas `/admin` e `/onboarding` — use `openssl rand -hex 32` |
-| `BOT_PUBLIC_URL` | Sim | URL pública do servidor, sem barra final (ex: `https://seudominio.com`) |
-
-### Strapi (strapi/.env)
-
-| Variável | Descrição |
-|---|---|
-| `APP_KEYS` | 4 chaves base64 separadas por vírgula — `openssl rand -base64 16` |
-| `API_TOKEN_SALT` | Salt para tokens de API — `openssl rand -hex 16` |
-| `ADMIN_JWT_SECRET` | Secret JWT do admin — `openssl rand -hex 32` |
-| `TRANSFER_TOKEN_SALT` | Salt para tokens de transferência |
-| `JWT_SECRET` | Secret JWT público |
-| `DATABASE_CLIENT` | `sqlite` (padrão) ou `postgres` |
+| **Bot** | Node.js 20 + Express | Chatbot + API admin + painel motoboy |
+| **IA** | Claude Sonnet via OpenRouter | Compreensão de linguagem natural |
+| **WhatsApp** | Evolution API (Docker) | Gateway de mensagens |
+| **Telegram** | Telegram Bot API | Canal alternativo de atendimento |
+| **Banco** | PostgreSQL 15 + Prisma | Persistência de todos os dados |
+| **Proxy** | Traefik | SSL automático (Let's Encrypt) + roteamento |
+| **Tempo real** | Socket.IO | Painel admin ao vivo |
 
 ---
 
-## API Admin
+## Funcionalidades
 
-Todas as rotas requerem o header `x-admin-token: SEU_ADMIN_TOKEN`.
-
-### Pedidos
-
-```bash
-# Listar pedidos (com filtros)
-GET /api/admin/pedidos?restauranteId=X&status=NOVO&pagina=1
-
-# Atualizar status
-PATCH /api/admin/pedidos/:id/status
-Body: { "status": "CONFIRMADO" }  # NOVO | CONFIRMADO | CANCELADO
-# Ao confirmar, o cliente recebe notificação automática via WhatsApp
-
-# Estatísticas
-GET /api/admin/stats?restauranteId=X
-# Retorna: totalPedidos, pedidosHoje, faturamentoTotal, faturamentoHoje,
-#          clientesUnicos, sessoesAtivas
-```
-
-### Instâncias WhatsApp
-
-```bash
-# Listar todas as instâncias e status de conexão
-GET /api/admin/instancias
-
-# Reconectar (gera novo QR code)
-POST /api/admin/instancias/:slug/reconectar
-
-# Obter QR code atual
-GET /api/admin/instancias/:slug/qrcode
-```
-
----
-
-## Programa de Fidelidade
-
-O sistema acumula automaticamente o histórico de compras de cada cliente (identificado pelo número WhatsApp), independente do restaurante.
-
-### Consultar ranking
-
-```bash
-curl "https://seudominio.com/api/admin/clientes/fidelidade?limite=20" \
-  -H "x-admin-token: SEU_ADMIN_TOKEN"
-```
-
-Resposta:
-```json
-{
-  "data": [
-    {
-      "numero": "5511999999999",
-      "nome": "João Silva",
-      "totalPedidos": 12,
-      "totalGasto": 487.50,
-      "ultimoPedido": "2026-04-01T20:30:00Z",
-      "restaurantes": [
-        { "restauranteId": "uuid-...", "pedidos": 8, "gasto": 320.00 },
-        { "restauranteId": "uuid-...", "pedidos": 4, "gasto": 167.50 }
-      ]
-    }
-  ]
-}
-```
-
-Cada entrada registra:
-- **totalPedidos** e **totalGasto** — acumulado em todos os restaurantes
-- **restaurantes** — histórico detalhado por restaurante
-- **ultimoPedido** — data do pedido mais recente
+- **Multi-tenant**: um bot atende N restaurantes simultaneamente
+- **WhatsApp e Telegram**: canais independentes com o mesmo fluxo de conversa
+- **Cardápio dinâmico**: gerido pelo painel admin (categorias, produtos, tamanhos, fotos)
+- **Pedidos com numeração global**: contador crescente, nunca reseta
+- **Programa de fidelidade**: por pedidos ou valor gasto
+- **Fotos do cardápio**: enviadas automaticamente quando solicitadas
+- **Transcrição de áudio**: cliente pode pedir por voz (OpenAI Whisper)
+- **Comprovante de pagamento**: cliente envia foto, painel exibe thumbnail
+- **Painel motoboy (PWA)**: app instalável no celular, com push notifications para novas entregas
+- **Rastreamento de entrega**: cliente acompanha localização do motoboy em tempo real
+- **Controle de estoque e caixa**: turno de caixa, sangrias, movimentações
+- **Campanhas de marketing**: disparos em massa via WhatsApp
 
 ---
 
@@ -323,55 +66,140 @@ Cada entrada registra:
 
 ```
 bot-restaurante/
-  bot/                        ← Motor do chatbot (Node.js)
+  docker-compose.yml          — infraestrutura de produção
+  bot/
+    Dockerfile                — FROM node:20-alpine
+    prisma/
+      schema.prisma           — schema completo (fonte da verdade)
+      migrations/             — migrations do banco
+    public/
+      painel.html             — painel admin (SPA vanilla JS)
+      motoboy.html            — painel motoboy (PWA)
+      rastrear.html           — página de rastreamento para o cliente
+      sw-motoboy.js           — service worker do PWA motoboy
+      icons/                  — ícones PWA (SVG + PNG)
+      uploads/                — fotos de cardápio e comprovantes
     src/
-      controllers/            ← webhookController
-      middleware/             ← tenantMiddleware
-      routes/                 ← admin, onboarding
-      services/               ← claude, evolution, pedido, sessao, strapi, tenant
-      jobs/                   ← limpeza (crons)
-    prisma/schema.prisma      ← Modelos do banco
-    Dockerfile
-    CLAUDE.md                 ← Guia para desenvolvimento com Claude Code
-  strapi/                     ← CMS Strapi v5
-    src/api/                  ← Content Types: restaurante, cardapio, categoria, produto
-    scripts/seed.js           ← Dados de exemplo
-  nginx/nginx.conf            ← Proxy reverso
-  scripts/deploy.sh           ← Deploy automático em VPS Ubuntu
-  docker-compose.yml          ← Todos os serviços de produção
-  .env.production.example     ← Template de variáveis para produção
-  README.md
+      server.js               — Express + Socket.IO + jobs
+      controllers/
+        webhookController.js  — mensagens WhatsApp
+        telegramController.js — mensagens Telegram
+      middleware/
+        tenantMiddleware.js   — resolve restaurante pelo slug
+        authMiddleware.js     — JWT para rotas do painel admin
+      routes/
+        admin.js              — /admin/* (CRUD completo)
+        auth.js               — /auth/login
+        onboarding.js         — /onboarding/restaurante
+        painel.js             — /painel/* (motoboy + push notifications)
+        telegram.js           — /telegram/webhook
+      services/
+        claudeService.js      — system prompt dinâmico + JSON estruturado
+        evolutionService.js   — envio de mensagens e mídia (WhatsApp)
+        telegramService.js    — envio de mensagens e mídia (Telegram)
+        pedidoService.js      — finaliza pedido, notifica dono, fidelidade
+        sessaoService.js      — CRUD de sessões e mensagens
+        cardapioService.js    — CRUD de cardápio local
+        tenantService.js      — cache em memória TTL 5 min
+        transcricaoService.js — OpenAI Whisper para áudios
+      jobs/
+        limpeza.js            — sessões inativas + relatório diário
 ```
 
 ---
 
-## Comandos Úteis em Produção
+## Variáveis de Ambiente
+
+| Variável | Descrição |
+|---|---|
+| `DATABASE_URL` | PostgreSQL connection string |
+| `OPENROUTER_API_KEY` | Chave OpenRouter (acesso ao Claude AI) |
+| `EVOLUTION_API_URL` | URL da Evolution API |
+| `EVOLUTION_API_KEY` | Chave de autenticação da Evolution API |
+| `ADMIN_TOKEN` | Token para rotas `/admin`, `/onboarding` e webhook Telegram |
+| `BOT_PUBLIC_URL` | URL pública do bot (sem barra final) |
+| `OPENAI_API_KEY` | Whisper para transcrição de áudios |
+| `TELEGRAM_BOT_TOKEN` | Token do bot Telegram |
+| `TELEGRAM_RESTAURANTE_SLUG` | Slug do restaurante associado ao bot Telegram |
+| `PORT` | Porta do servidor (padrão: `3000`) |
+
+---
+
+## Deploy em Produção
+
+O deploy é feito via `scp` + `docker cp` + `docker restart` — **nunca** via `docker compose up -d` (recriaria o container apagando arquivos copiados).
 
 ```bash
-# Status dos containers
-docker compose ps
+# Copiar arquivo atualizado para o container
+scp bot/src/services/claudeService.js root@IP:/tmp/
+ssh root@IP "docker cp /tmp/claudeService.js bot-app:/app/src/services/claudeService.js"
+ssh root@IP "docker restart bot-app"
+ssh root@IP "docker logs bot-app --tail 20"
+```
+
+### Backup do banco
+
+```bash
+FNAME="backup-$(date +%Y%m%d-%H%M).sql.gz"
+ssh root@IP "docker exec bot-postgres sh -c 'pg_dump -U botrestaurante botrestaurante | gzip' > /root/$FNAME"
+scp root@IP:/root/$FNAME .
+```
+
+---
+
+## Adicionar Novo Restaurante
+
+```bash
+curl -X POST https://seudominio.com/onboarding/restaurante \
+  -H "x-admin-token: SEU_ADMIN_TOKEN" \
+  -H "Content-Type: application/json" \
+  -d '{
+    "nome": "Pizzaria Exemplo",
+    "slugWhatsapp": "5511999999999",
+    "donoWhatsapp": "5511888888888"
+  }'
+```
+
+A resposta inclui o QR code para conectar o WhatsApp Business. Após escanear, o cardápio é gerido inteiramente pelo painel admin.
+
+---
+
+## Painel Admin
+
+Acesse `https://seudominio.com/painel.html` e faça login com as credenciais do restaurante.
+
+Funcionalidades:
+- Pedidos em tempo real (Socket.IO)
+- Gestão de cardápio (categorias, produtos, tamanhos, fotos)
+- Sessões ativas e envio de mensagens manuais
+- Controle de caixa e estoque
+- Programa de fidelidade
+- Campanhas de marketing
+- Relatórios e estatísticas
+
+## Painel Motoboy (PWA)
+
+Acesse `https://seudominio.com/motoboy.html?slug=SLUG&t=TOKEN` no celular.
+
+- Instalável como app na tela inicial (Web App Manifest + Service Worker)
+- Recebe push notifications para novas entregas (mesmo com app fechado)
+- Auto-cadastro: motoboy cria sua própria conta pelo link, sem precisar de admin
+- Rastreamento: cliente acompanha localização do motoboy em tempo real
+
+---
+
+## Diagnóstico Rápido
+
+```bash
+# Health check
+curl https://seudominio.com/health
 
 # Logs em tempo real
-docker compose logs -f bot
-docker compose logs -f evolution-api
+ssh root@IP "docker logs bot-app -f"
 
-# Reiniciar um serviço
-docker compose restart bot
+# Verificar exports de um serviço
+ssh root@IP "docker exec bot-app node -e \"console.log(Object.keys(require('./src/services/cardapioService')))\""
 
-# Atualizar após novo deploy
-git pull
-docker compose up -d --build bot
-
-# Backup do banco
-docker compose exec postgres pg_dump -U $DB_USER $DB_NAME > backup-$(date +%F).sql
-
-# Restaurar backup
-cat backup-2026-04-01.sql | docker compose exec -T postgres psql -U $DB_USER $DB_NAME
-
-# Prisma Studio (inspecionar banco)
-cd bot && npx prisma studio
-
-# Status do Strapi
-systemctl status strapi
-journalctl -u strapi -f
+# Regerar Prisma client após mudança de schema
+ssh root@IP "docker exec bot-app sh -c 'cd /app && npx prisma generate' && docker restart bot-app"
 ```

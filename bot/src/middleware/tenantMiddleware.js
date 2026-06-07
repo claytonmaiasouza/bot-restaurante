@@ -8,7 +8,7 @@ const { resolverRestaurante } = require("../services/tenantService");
  * Respostas de erro:
  *   404 — restaurante não encontrado ou inativo
  *   403 — plano vencido
- *   500 — falha de comunicação com Strapi/banco
+ *   500 — falha de comunicação com o banco
  */
 async function tenantMiddleware(req, res, next) {
   const slug = req.params.restauranteSlug;

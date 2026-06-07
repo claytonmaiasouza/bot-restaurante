@@ -134,8 +134,6 @@ Ficam em `/opt/bot-restaurante/.env` e são passadas ao container via `docker-co
 | `ADMIN_TOKEN` | Token para rotas `/admin` e `/onboarding` |
 | `BOT_PUBLIC_URL` | `https://bot.guiafinanceiro.pro` |
 | `OPENAI_API_KEY` | Whisper para transcrição de áudios |
-| `STRAPI_URL` | `http://185.137.92.141:1337` (CMS legado, pode estar inativo) |
-| `STRAPI_TOKEN` | Token de API do Strapi |
 | `PORT` | `3000` |
 
 ---
@@ -171,7 +169,6 @@ bot-restaurante/
         sessaoService.js      — criarOuBuscarSessao / atualizarSessao / salvarMensagem
         cardapioService.js    — CRUD cardápio local + buscarContextoFidelidade
         tenantService.js      — cache em memória TTL 5 min, resolverRestaurante
-        strapiService.js      — integração CMS legado (Strapi)
         transcricaoService.js — OpenAI Whisper para áudios do WhatsApp
       jobs/
         limpeza.js            — sessões inativas (*/30min), relatório diário (00:05)

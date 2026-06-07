@@ -121,7 +121,6 @@ async function deletarTamanho(id) {
   return prisma.tamanho.delete({ where: { id } });
 }
 
-// ── Migração em lote (usado pelo script de migração do Strapi) ────────────────
 async function importarCardapio(restauranteId, categorias) {
   // Limpa cardápio existente antes de reimportar
   await prisma.categoria.deleteMany({ where: { restauranteId } });

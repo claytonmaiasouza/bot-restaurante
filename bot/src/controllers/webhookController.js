@@ -177,7 +177,7 @@ function deduplicar(messageId) {
  *
  * O tenantMiddleware já rodou antes deste controller e injetou:
  *   req.restaurante — dados do restaurante (banco local)
- *   req.cardapio    — cardápio atualizado (Strapi)
+ *   req.cardapio    — cardápio atualizado (banco local)
  */
 async function receberMensagem(req, res) {
   // Responde 200 imediatamente para não bloquear a Evolution API

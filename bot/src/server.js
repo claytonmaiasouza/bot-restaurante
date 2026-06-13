@@ -10,6 +10,7 @@ const adminRoutes = require("./routes/admin");
 const authRoutes = require("./routes/auth");
 const onboardingRoutes = require("./routes/onboarding");
 const painelRoutes = require("./routes/painel");
+const lojaRoutes = require("./routes/loja");
 const { tenantMiddleware } = require("./middleware/tenantMiddleware");
 const { iniciarJobs } = require("./jobs/limpeza");
 
@@ -62,6 +63,9 @@ app.use("/admin", adminRoutes);
 
 // Painéis externos (cozinha + motoboy) — token-based, sem JWT
 app.use("/painel", painelRoutes);
+
+// Loja web pública — cardápio + pedidos sem autenticação
+app.use("/loja", lojaRoutes);
 
 // ── Socket.IO — eventos em tempo real ─────────────────────────────────────────
 io.on("connection", (socket) => {

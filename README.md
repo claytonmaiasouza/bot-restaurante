@@ -1,20 +1,19 @@
-# Bot Restaurante — SaaS Multi-Tenant para WhatsApp e Telegram
+# Bot Restaurante — SaaS Multi-Tenant para WhatsApp
 
-Plataforma de chatbot inteligente para restaurantes via WhatsApp e Telegram, construída com Claude AI, Evolution API e PostgreSQL. Cada restaurante tem seu próprio número WhatsApp, cardápio e painel admin independentes.
+Plataforma de chatbot inteligente para restaurantes via WhatsApp, construída com Claude AI, Evolution API e PostgreSQL. Cada restaurante tem seu próprio número WhatsApp, cardápio e painel admin independentes.
 
 ---
 
 ## Arquitetura
 
 ```
-Cliente WhatsApp                    Cliente Telegram
-      │                                    │
-      ▼                                    ▼
-Evolution API                     Telegram Bot API
-      │                                    │
-      │  POST /webhook/:slug               │  POST /telegram/webhook
-      └──────────────┬─────────────────────┘
-                     ▼
+Cliente WhatsApp
+      │
+      │  POST /webhook/:slug
+      ▼
+Evolution API
+      │
+      ▼
               Bot (Node.js)
          ┌────────────────────┐
          │  tenantMiddleware  │
@@ -38,7 +37,6 @@ Evolution API                     Telegram Bot API
 | **Bot** | Node.js 20 + Express | Chatbot + API admin + painel motoboy |
 | **IA** | Claude Sonnet via OpenRouter | Compreensão de linguagem natural |
 | **WhatsApp** | Evolution API (Docker) | Gateway de mensagens |
-| **Telegram** | Telegram Bot API | Canal alternativo de atendimento |
 | **Banco** | PostgreSQL 15 + Prisma | Persistência de todos os dados |
 | **Proxy** | Traefik | SSL automático (Let's Encrypt) + roteamento |
 | **Tempo real** | Socket.IO | Painel admin ao vivo |
@@ -48,7 +46,6 @@ Evolution API                     Telegram Bot API
 ## Funcionalidades
 
 - **Multi-tenant**: um bot atende N restaurantes simultaneamente
-- **WhatsApp e Telegram**: canais independentes com o mesmo fluxo de conversa
 - **Cardápio dinâmico**: gerido pelo painel admin (categorias, produtos, tamanhos, fotos)
 - **Pedidos com numeração global**: contador crescente, nunca reseta
 - **Programa de fidelidade**: por pedidos ou valor gasto
@@ -83,7 +80,6 @@ bot-restaurante/
       server.js               — Express + Socket.IO + jobs
       controllers/
         webhookController.js  — mensagens WhatsApp
-        telegramController.js — mensagens Telegram
       middleware/
         tenantMiddleware.js   — resolve restaurante pelo slug
         authMiddleware.js     — JWT para rotas do painel admin
@@ -92,11 +88,9 @@ bot-restaurante/
         auth.js               — /auth/login
         onboarding.js         — /onboarding/restaurante
         painel.js             — /painel/* (motoboy + push notifications)
-        telegram.js           — /telegram/webhook
       services/
         claudeService.js      — system prompt dinâmico + JSON estruturado
         evolutionService.js   — envio de mensagens e mídia (WhatsApp)
-        telegramService.js    — envio de mensagens e mídia (Telegram)
         pedidoService.js      — finaliza pedido, notifica dono, fidelidade
         sessaoService.js      — CRUD de sessões e mensagens
         cardapioService.js    — CRUD de cardápio local
@@ -116,11 +110,9 @@ bot-restaurante/
 | `OPENROUTER_API_KEY` | Chave OpenRouter (acesso ao Claude AI) |
 | `EVOLUTION_API_URL` | URL da Evolution API |
 | `EVOLUTION_API_KEY` | Chave de autenticação da Evolution API |
-| `ADMIN_TOKEN` | Token para rotas `/admin`, `/onboarding` e webhook Telegram |
+| `ADMIN_TOKEN` | Token para rotas `/admin` e `/onboarding` |
 | `BOT_PUBLIC_URL` | URL pública do bot (sem barra final) |
 | `OPENAI_API_KEY` | Whisper para transcrição de áudios |
-| `TELEGRAM_BOT_TOKEN` | Token do bot Telegram |
-| `TELEGRAM_RESTAURANTE_SLUG` | Slug do restaurante associado ao bot Telegram |
 | `PORT` | Porta do servidor (padrão: `3000`) |
 
 ---

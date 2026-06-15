@@ -2,10 +2,10 @@ const { PrismaClient } = require("@prisma/client");
 
 const prisma = new PrismaClient();
 
-// ── Busca cardápio completo de um restaurante ─────────────────────────────────
+// ── Busca cardápio ativo (para o bot e app público) ──────────────────────────
 async function buscarCardapioDB(restauranteId) {
   const categorias = await prisma.categoria.findMany({
-    where: { restauranteId },
+    where: { restauranteId, ativo: true },
     orderBy: { ordem: "asc" },
     include: {
       produtos: {
@@ -16,25 +16,67 @@ async function buscarCardapioDB(restauranteId) {
     },
   });
 
-  return categorias
-    .map((cat) => ({
-      id: cat.id,
-      nome: cat.nome,
-      ordem: cat.ordem,
-      produtos: cat.produtos.map((p) => ({
-        id: p.id,
-        nome: p.nome,
-        descricao: p.descricao || null,
-        preco: p.tamanhos.length > 0 ? null : p.preco,
-        tamanhos: p.tamanhos.length > 0 ? p.tamanhos.map((t) => ({
-          id: t.id,
-          nome: t.nome,
-          preco: t.preco,
-          precoComBorda: t.precoComBorda || null,
-        })) : null,
-      })),
-    }))
-;
+  return categorias.map((cat) => ({
+    id: cat.id,
+    nome: cat.nome,
+    ordem: cat.ordem,
+    tamanhos: cat.tamanhos || [],
+    tipoTamanhos: cat.tipoTamanhos || "simples",
+    bordas: cat.bordas || [],
+    produtos: cat.produtos.map((p) => ({
+      id: p.id,
+      nome: p.nome,
+      descricao: p.descricao || null,
+      imagemUrl: p.imagemUrl || null,
+      preco: p.tamanhos.length > 0 ? null : p.preco,
+      tamanhos: p.tamanhos.length > 0 ? p.tamanhos.map((t) => ({
+        id: t.id,
+        nome: t.nome,
+        preco: t.preco,
+        precoComBorda: t.precoComBorda || null,
+      })) : null,
+    })),
+  }));
+}
+
+// ── Busca cardápio completo para o painel admin (inclui inativos) ─────────────
+async function buscarCardapioAdmin(restauranteId) {
+  const categorias = await prisma.categoria.findMany({
+    where: { restauranteId },
+    orderBy: { ordem: "asc" },
+    include: {
+      produtos: {
+        orderBy: { nome: "asc" },
+        include: { tamanhos: { orderBy: { preco: "asc" } } },
+      },
+    },
+  });
+
+  return categorias.map((cat) => ({
+    id: cat.id,
+    nome: cat.nome,
+    ordem: cat.ordem,
+    ativo: cat.ativo,
+    tamanhos: cat.tamanhos || [],
+    tipoTamanhos: cat.tipoTamanhos || "simples",
+    bordas: cat.bordas || [],
+    imagemUrl: cat.imagemUrl || null,
+    ocultarMobile: cat.ocultarMobile || false,
+    produtos: cat.produtos.map((p) => ({
+      id: p.id,
+      nome: p.nome,
+      descricao: p.descricao || null,
+      imagemUrl: p.imagemUrl || null,
+      preco: p.tamanhos.length > 0 ? null : p.preco,
+      ativo: p.ativo,
+      tamanhos: p.tamanhos.length > 0 ? p.tamanhos.map((t) => ({
+        id: t.id,
+        nome: t.nome,
+        preco: t.preco,
+        precoComBorda: t.precoComBorda || null,
+      })) : null,
+    })),
+  }));
 }
 
 // ── Verifica se o restaurante tem cardápio no banco ───────────────────────────
@@ -44,9 +86,9 @@ async function temCardapioDB(restauranteId) {
 }
 
 // ── CRUD Categorias ───────────────────────────────────────────────────────────
-async function criarCategoria(restauranteId, nome, ordem = 0) {
+async function criarCategoria(restauranteId, nome, ordem = 0, tamanhos = [], tipoTamanhos = "simples", bordas = []) {
   return prisma.categoria.create({
-    data: { restauranteId, nome, ordem },
+    data: { restauranteId, nome, ordem, tamanhos, tipoTamanhos, bordas },
     include: { produtos: true },
   });
 }
@@ -180,6 +222,7 @@ async function buscarContextoFidelidade(restauranteId, clienteNumero) {
 
 module.exports = {
   buscarCardapioDB,
+  buscarCardapioAdmin,
   temCardapioDB,
   criarCategoria,
   atualizarCategoria,

@@ -154,6 +154,7 @@
         <li><button id="nav-conversas" onclick="mostrarSecao('conversas')" class="sidebar-nav-item w-full text-left" data-i18n="nav.conversas">💬 Conversas</button></li>
         <li><button id="nav-clientes" onclick="mostrarSecao('clientes')" class="sidebar-nav-item w-full text-left" data-i18n="nav.clientes">👥 Clientes</button></li>
         <li><button id="nav-cardapio" onclick="mostrarSecao('cardapio')" class="sidebar-nav-item w-full text-left" data-i18n="nav.cardapio">🍽 Cardápio</button></li>
+        <li><button onclick="abrirLojaApp()" class="sidebar-nav-item w-full text-left">🛍️ App Mobile</button></li>
         <li><button id="nav-motoboys" onclick="mostrarSecao('motoboys')" class="sidebar-nav-item w-full text-left" data-i18n="nav.motoboys">🛵 Motoboys</button></li>
         <li><button id="nav-crm" onclick="mostrarSecao('crm')" class="sidebar-nav-item w-full text-left" data-i18n="nav.crm">🎯 CRM</button></li>
         <li><button id="nav-metricas" onclick="mostrarSecao('metricas')" class="sidebar-nav-item w-full text-left" data-i18n="nav.metricas">📊 Métricas</button></li>
@@ -1884,19 +1885,92 @@
 
 <!-- MODAL CATEGORIA -->
 <div id="modal-categoria" class="hidden fixed inset-0 bg-black/50 z-50 flex items-center justify-center p-4">
-  <div class="bg-white rounded-2xl shadow-2xl w-full max-w-sm">
-    <div class="p-6">
-      <div class="flex items-center justify-between mb-4">
+  <div class="bg-white rounded-2xl shadow-2xl w-full max-w-lg max-h-[90vh] overflow-y-auto">
+    <div class="p-6 flex flex-col gap-4">
+      <div class="flex items-center justify-between">
         <h2 id="modal-categoria-titulo" class="text-lg font-bold text-gray-800">Nova Categoria</h2>
         <button onclick="fecharModalCategoria()" class="text-gray-400 hover:text-gray-600 text-xl">✕</button>
       </div>
-      <input id="cat-nome" type="text" data-i18n-ph="card.cat-nome" placeholder="Nome da categoria"
-        class="w-full border border-gray-300 rounded-lg px-3 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-orange-400 mb-3">
+      <input id="cat-nome" type="text" placeholder="Nome da categoria"
+        class="w-full border border-gray-300 rounded-lg px-3 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-orange-400">
       <input type="hidden" id="cat-id">
+
+      <!-- Imagem da categoria -->
+      <div>
+        <label class="text-xs font-semibold text-gray-500 uppercase tracking-wide mb-2 block">Imagem da categoria (opcional)</label>
+        <div class="flex items-center gap-3">
+          <img id="cat-imagem-preview" src="" alt="" class="hidden w-16 h-16 object-cover rounded-xl border border-gray-200">
+          <label class="cursor-pointer flex items-center gap-2 text-sm text-orange-500 font-medium hover:text-orange-700 transition">
+            <span>📷</span>
+            <span id="cat-imagem-label">Escolher imagem</span>
+            <input type="file" id="cat-imagem-file" accept="image/jpeg,image/png,image/webp" class="hidden" onchange="previewCatImagem(this)">
+          </label>
+          <button id="cat-imagem-remove" type="button" onclick="removerCatImagem()" class="hidden text-xs text-red-400 hover:text-red-600 transition">✕ Remover</button>
+        </div>
+      </div>
+
+      <div>
+        <label class="text-xs font-semibold text-gray-500 uppercase tracking-wide mb-2 block">Tipo de tamanhos</label>
+        <div class="grid grid-cols-2 gap-2" id="cat-tipo-grid">
+          <label id="cat-tipo-card-simples" onclick="mudarTipoCat('simples')" class="cat-tipo-card flex items-start gap-2 p-3 border-2 border-gray-200 rounded-xl cursor-pointer hover:border-orange-300 transition">
+            <input type="radio" name="cat-tipo" value="simples" class="mt-0.5 accent-orange-500 shrink-0">
+            <div><p class="text-sm font-semibold text-gray-700">Simples</p><p class="text-xs text-gray-400">Preço único por produto</p></div>
+          </label>
+          <label id="cat-tipo-card-pizza" onclick="mudarTipoCat('pizza')" class="cat-tipo-card flex items-start gap-2 p-3 border-2 border-gray-200 rounded-xl cursor-pointer hover:border-orange-300 transition">
+            <input type="radio" name="cat-tipo" value="pizza" class="mt-0.5 accent-orange-500 shrink-0">
+            <div><p class="text-sm font-semibold text-gray-700">🍕 Pizza</p><p class="text-xs text-gray-400">4 tamanhos + borda recheada</p></div>
+          </label>
+          <label id="cat-tipo-card-porcao" onclick="mudarTipoCat('porcao')" class="cat-tipo-card flex items-start gap-2 p-3 border-2 border-gray-200 rounded-xl cursor-pointer hover:border-orange-300 transition">
+            <input type="radio" name="cat-tipo" value="porcao" class="mt-0.5 accent-orange-500 shrink-0">
+            <div><p class="text-sm font-semibold text-gray-700">🍽️ Porção</p><p class="text-xs text-gray-400">Inteira / Meia Porção</p></div>
+          </label>
+          <label id="cat-tipo-card-custom" onclick="mudarTipoCat('custom')" class="cat-tipo-card flex items-start gap-2 p-3 border-2 border-gray-200 rounded-xl cursor-pointer hover:border-orange-300 transition">
+            <input type="radio" name="cat-tipo" value="custom" class="mt-0.5 accent-orange-500 shrink-0">
+            <div><p class="text-sm font-semibold text-gray-700">⚙️ Personalizado</p><p class="text-xs text-gray-400">Variantes livres</p></div>
+          </label>
+        </div>
+      </div>
+
+      <!-- Forma pizza: 4 linhas fixas (nome + preço) + tabela de bordas -->
+      <div id="cat-form-pizza" class="hidden flex flex-col gap-3">
+        <div>
+          <div class="grid grid-cols-2 gap-2 text-xs text-gray-400 font-medium px-1 mb-1">
+            <span>Tamanho</span><span>Preço (sem borda)</span>
+          </div>
+          <div id="cat-pizza-lista" class="flex flex-col gap-2"></div>
+        </div>
+        <div>
+          <div class="flex items-center justify-between mb-1">
+            <span class="text-xs font-semibold text-amber-700">🧀 Bordas Recheadas</span>
+            <button onclick="adicionarLinhaBordaCat()" type="button"
+              class="text-xs text-orange-500 hover:text-orange-700 font-medium transition">+ Sabor</button>
+          </div>
+          <div id="cat-bordas-header" class="text-xs text-gray-400 font-medium px-1 mb-1 overflow-x-auto whitespace-nowrap"></div>
+          <div id="cat-bordas-lista" class="flex flex-col gap-2"></div>
+        </div>
+      </div>
+
+      <!-- Forma porção: 2 linhas fixas (nome + preço) -->
+      <div id="cat-form-porcao" class="hidden flex flex-col gap-2">
+        <p class="text-xs text-gray-400 italic">Preço 0 = definido individualmente em cada produto.</p>
+        <div class="grid grid-cols-2 gap-2 text-xs text-gray-400 font-medium px-1">
+          <span>Variante</span><span>Preço padrão</span>
+        </div>
+        <div id="cat-porcao-lista" class="flex flex-col gap-2"></div>
+      </div>
+
+      <!-- Forma personalizado: linhas livres -->
+      <div id="cat-form-custom" class="hidden flex flex-col gap-2">
+        <div class="grid grid-cols-2 gap-2 text-xs text-gray-400 font-medium px-1">
+          <span>Variação</span><span>Preço</span>
+        </div>
+        <div id="cat-tamanhos-lista" class="flex flex-col gap-2"></div>
+        <button onclick="adicionarLinhaTamanhoCat()" type="button"
+          class="text-xs text-orange-500 hover:text-orange-700 text-left font-medium transition">+ Adicionar variante</button>
+      </div>
+
       <button onclick="salvarCategoria()"
-        class="w-full bg-orange-500 hover:bg-orange-600 text-white rounded-lg py-2.5 font-semibold transition text-sm" data-i18n="card.salvar">
-        Salvar
-      </button>
+        class="w-full bg-orange-500 hover:bg-orange-600 text-white rounded-lg py-2.5 font-semibold transition text-sm">Salvar</button>
     </div>
   </div>
 </div>
@@ -1919,19 +1993,15 @@
           <input id="prod-preco" type="number" min="0" step="0.01" value="0"
             class="w-full border border-gray-300 rounded-lg px-3 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-orange-400">
         </div>
-        <label class="flex items-center gap-2 text-sm text-gray-600 cursor-pointer">
+        <label id="prod-tamanhos-toggle-label" class="flex items-center gap-2 text-sm text-gray-600 cursor-pointer">
           <input id="prod-tem-tamanhos" type="checkbox" class="rounded" onchange="toggleTamanhos()">
-          Produto com tamanhos (ex: pizzas P, M, G)
+          Produto com tamanhos
         </label>
         <div id="prod-tamanhos-wrapper" class="hidden flex flex-col gap-2">
-          <div class="grid grid-cols-3 gap-2 text-xs text-gray-400 font-medium px-1">
-            <span>Tamanho</span>
-            <span>Sem borda</span>
-            <span>Com borda</span>
-          </div>
+          <div id="prod-tamanhos-header" class="text-xs text-gray-400 font-medium px-1"></div>
           <div id="prod-tamanhos-lista" class="flex flex-col gap-2"></div>
-          <button onclick="adicionarLinhaTamanho()" type="button"
-            class="text-xs text-orange-500 hover:text-orange-700 text-left transition">+ Adicionar tamanho</button>
+          <button id="prod-add-tamanho-btn" onclick="adicionarLinhaTamanho()" type="button"
+            class="text-xs text-orange-500 hover:text-orange-700 text-left transition hidden">+ Adicionar tamanho</button>
         </div>
         <input type="hidden" id="prod-id">
         <input type="hidden" id="prod-categoria-id">
@@ -2603,6 +2673,12 @@ function sair() {
   localStorage.removeItem('jwt_token');
   localStorage.removeItem('user_role');
   location.reload();
+}
+
+function abrirLojaApp() {
+  const rest = restaurantes.find(r => r.id === restauranteAtual);
+  if (!rest) { mostrarToast('Selecione um restaurante primeiro'); return; }
+  window.open(`/cardapio.html?slug=${rest.slugWhatsapp}`, '_blank');
 }
 
 // ── Init ──────────────────────────────────────────────────────────────────────
@@ -3648,7 +3724,7 @@ function criarCard(pedido) {
 
     <div>
       <p class="font-semibold text-gray-800 text-sm">${isMesa ? `Mesa ${pedido.mesa}` : (pedido.clienteNome || 'Cliente')}</p>
-      <p class="text-xs text-gray-400">${isMesa ? '' : pedido.clienteNumero}</p>
+      <p class="text-xs text-gray-400">${isMesa ? '' : formatarNumeroDisplay(pedido.clienteNumero)}</p>
     </div>
 
     <div class="bg-gray-50 rounded-lg p-2 text-xs text-gray-600 leading-relaxed">${itensTexto}</div>
@@ -4034,6 +4110,22 @@ function tempoAtras(data) {
   return `${Math.floor(diff / 60)}h${diff % 60 ? String(diff % 60).padStart(2,'0') + 'm' : ''}`;
 }
 
+// Detecta LID de iOS (14+ dígitos) e formata para exibição amigável
+function isLID(numero) {
+  return typeof numero === 'string' && /^\d{14,}$/.test(numero);
+}
+function formatarNumeroDisplay(numero) {
+  if (!numero) return '';
+  if (isLID(numero)) return '📱 ID privado';
+  return numero;
+}
+
+// Retorna true se a categoria tem ao menos um tamanho com preço > 0 (modo "pizza")
+// Retorna false se todos os preços são 0 (modo "porção" — só define nomes)
+function catTemPrecosPadrao(catTamanhos) {
+  return (catTamanhos || []).some(t => t.preco > 0);
+}
+
 function mostrarToast(msg) {
   const t = document.getElementById('toast');
   t.textContent = msg;
@@ -4143,7 +4235,7 @@ function renderizarConversas() {
     const ultima = s.mensagens?.[0];
     div.innerHTML = `
       <div class="flex items-center justify-between gap-1 mb-0.5">
-        <span class="font-medium text-sm text-gray-800 truncate">${s.clienteNome || s.clienteNumero}</span>
+        <span class="font-medium text-sm text-gray-800 truncate">${s.clienteNome || formatarNumeroDisplay(s.clienteNumero)}</span>
         ${s.botPausado ? '<span class="text-xs bg-red-100 text-red-600 px-1.5 py-0.5 rounded-full shrink-0">Pausado</span>' : ''}
       </div>
       <p class="text-xs text-gray-400 truncate">${ultima?.conteudo?.slice(0, 50) || '...'}</p>
@@ -4160,8 +4252,8 @@ async function abrirConversa(sessao) {
   document.getElementById('chat-vazio').classList.add('hidden');
   document.getElementById('chat-header').classList.remove('hidden');
   document.getElementById('chat-input').classList.remove('hidden');
-  document.getElementById('chat-nome').textContent = sessao.clienteNome || sessao.clienteNumero;
-  document.getElementById('chat-numero').textContent = sessao.clienteNumero;
+  document.getElementById('chat-nome').textContent = sessao.clienteNome || formatarNumeroDisplay(sessao.clienteNumero);
+  document.getElementById('chat-numero').textContent = formatarNumeroDisplay(sessao.clienteNumero);
 
   atualizarBotaoPausar(sessao.botPausado);
 
@@ -4296,7 +4388,7 @@ function renderizarClientes(clientes, meta) {
       const nomeEscapado = (c.nome || '').replace(/'/g, "\\'");
       tr.innerHTML = `
         <td class="px-4 py-3 font-medium text-gray-800">${c.nome || '<span class="text-gray-400 italic">Sem nome</span>'}</td>
-        <td class="px-4 py-3 text-gray-600">${c.numero}</td>
+        <td class="px-4 py-3 text-gray-600">${formatarNumeroDisplay(c.numero)}</td>
         <td class="px-4 py-3 text-center">
           <span class="bg-orange-100 text-orange-700 text-xs font-semibold px-2 py-0.5 rounded-full">${c.totalPedidos}</span>
         </td>
@@ -4654,6 +4746,7 @@ async function criarRestaurante() {
 let cardapioRestauranteId = '';
 let cardapioModalCatId = null;
 let cardapioData = [];
+const categoriasExpandidas = new Set();
 
 async function carregarCardapio() {
   const rid = restauranteAtual || (restaurantes[0]?.id || '');
@@ -4784,6 +4877,7 @@ async function excluirPromocao(id) {
 function renderizarCardapio(categorias) {
   const lista = document.getElementById('cardapio-lista');
   lista.innerHTML = '';
+  const moeda = getMoeda() || 'R$';
 
   if (!categorias.length) {
     lista.innerHTML = `<p class="text-sm text-gray-400 text-center py-8">${t('card.vazio')}</p>`;
@@ -4791,68 +4885,325 @@ function renderizarCardapio(categorias) {
   }
 
   categorias.forEach((cat) => {
+    const inativa = cat.ativo === false;
+    const expandida = categoriasExpandidas.has(cat.id);
+    const numProdutos = cat.produtos.length;
+    const temTamanhosCat = (cat.tamanhos || []).length > 0;
+
+    const tamanhosBanner = '';
+
+    const bordasBanner = (cat.tipoTamanhos === 'pizza' && (cat.bordas || []).length > 0) ? (() => {
+      const chips = cat.bordas.map(b =>
+        `<span class="text-xs text-amber-700 bg-amber-100 px-2 py-0.5 rounded-full">🧀 ${b.nome}</span>`
+      ).join('');
+      return `<div class="px-4 py-2 bg-amber-50 border-b border-amber-100 flex items-center gap-2 flex-wrap">
+        <span class="text-xs text-amber-600 font-semibold shrink-0">Bordas:</span>
+        ${chips}
+      </div>`;
+    })() : '';
+
     const div = document.createElement('div');
-    div.className = 'bg-white rounded-2xl shadow-sm overflow-hidden';
+    div.className = `rounded-2xl shadow-sm overflow-hidden border ${inativa ? 'border-gray-200 opacity-60' : 'bg-white border-transparent'}`;
     div.innerHTML = `
-      <div class="flex items-center justify-between px-4 py-3 border-b border-gray-100">
-        <span class="font-semibold text-gray-800">${cat.nome}</span>
-        <div class="flex gap-2">
+      <div class="flex items-center justify-between px-4 py-3 border-b border-gray-100 ${inativa ? 'bg-gray-50' : 'bg-white'} cursor-pointer select-none" onclick="toggleExpandirCategoria('${cat.id}')">
+        <div class="flex items-center gap-2 min-w-0">
+          <span class="text-gray-400 text-xs transition-transform" id="cat-toggle-icon-${cat.id}">${expandida ? '▲' : '▼'}</span>
+          <span class="font-semibold text-gray-800 truncate">${cat.nome}</span>
+          <span class="text-xs bg-gray-100 text-gray-500 px-2 py-0.5 rounded-full shrink-0">${numProdutos} ${numProdutos === 1 ? 'produto' : 'produtos'}</span>
+          ${cat.tipoTamanhos && cat.tipoTamanhos !== 'simples' ? `<span class="text-xs bg-gray-100 text-gray-500 px-2 py-0.5 rounded-full shrink-0">${{pizza:'🍕 Pizza',porcao:'🍽️ Porção',custom:'⚙️ Custom'}[cat.tipoTamanhos]||''}</span>` : ''}
+          ${inativa ? '<span class="text-xs bg-gray-200 text-gray-500 px-2 py-0.5 rounded-full shrink-0">Oculta</span>' : ''}
+          ${cat.ocultarMobile ? '<span class="text-xs bg-blue-100 text-blue-600 px-2 py-0.5 rounded-full shrink-0">📵 App</span>' : ''}
+        </div>
+        <div class="flex gap-1.5 shrink-0 ml-2" onclick="event.stopPropagation()">
+          <button onclick="toggleCategoria('${cat.id}', ${cat.ativo !== false})"
+            title="${inativa ? 'Mostrar categoria' : 'Ocultar categoria'}"
+            class="text-xs px-2.5 py-1.5 rounded-lg transition font-semibold ${inativa ? 'bg-green-100 hover:bg-green-200 text-green-700' : 'bg-yellow-100 hover:bg-yellow-200 text-yellow-700'}">
+            ${inativa ? '👁 Mostrar' : '🙈 Ocultar'}
+          </button>
+          <button onclick="toggleCategoriaMobile('${cat.id}', ${!!cat.ocultarMobile})"
+            title="${cat.ocultarMobile ? 'Mostrar no app mobile' : 'Ocultar no app mobile'}"
+            class="text-xs px-2.5 py-1.5 rounded-lg transition font-semibold ${cat.ocultarMobile ? 'bg-blue-100 hover:bg-blue-200 text-blue-700' : 'bg-gray-100 hover:bg-gray-200 text-gray-500'}">
+            ${cat.ocultarMobile ? '📱 Mostrar app' : '📵 Ocultar app'}
+          </button>
           <button onclick="abrirModalProduto('${cat.id}')"
-            class="text-xs bg-orange-100 hover:bg-orange-200 text-orange-700 px-3 py-1 rounded-lg transition">${t('card.add-prod')}</button>
-          <button onclick="editarCategoria('${cat.id}', '${cat.nome.replace(/'/g, "\\'")}')"
-            class="text-xs text-gray-400 hover:text-gray-600 transition">✏️</button>
+            class="text-xs bg-orange-100 hover:bg-orange-200 text-orange-700 px-2.5 py-1.5 rounded-lg transition">${t('card.add-prod')}</button>
+          <button onclick="editarCategoria('${cat.id}')"
+            class="text-xs text-gray-400 hover:text-gray-600 transition px-1.5 py-1.5">✏️</button>
           <button onclick="confirmarDeletarCategoria('${cat.id}', '${cat.nome.replace(/'/g, "\\'")}')"
-            class="text-xs text-red-400 hover:text-red-600 transition">🗑</button>
+            class="text-xs text-red-400 hover:text-red-600 transition px-1.5 py-1.5">🗑</button>
         </div>
       </div>
-      <div class="divide-y divide-gray-50">
-        ${cat.produtos.length
-          ? cat.produtos.map((p) => renderizarProdutoLinha(p)).join('')
-          : `<p class="text-xs text-gray-400 px-4 py-3">${t('card.vazio-prod')}</p>`
-        }
+      <div id="cat-produtos-${cat.id}" class="${expandida ? '' : 'hidden'}">
+        ${tamanhosBanner}${bordasBanner}
+        <div class="${inativa ? 'bg-gray-50' : 'bg-white'} divide-y divide-gray-50">
+          ${cat.produtos.length
+            ? cat.produtos.map((p) => renderizarProdutoLinha(p, cat.tamanhos || [])).join('')
+            : `<p class="text-xs text-gray-400 px-4 py-3">${t('card.vazio-prod')}</p>`
+          }
+        </div>
       </div>
     `;
     lista.appendChild(div);
   });
 }
 
-function renderizarProdutoLinha(p) {
+function toggleExpandirCategoria(id) {
+  const prodArea = document.getElementById(`cat-produtos-${id}`);
+  const icon = document.getElementById(`cat-toggle-icon-${id}`);
+  if (!prodArea) return;
+  if (categoriasExpandidas.has(id)) {
+    categoriasExpandidas.delete(id);
+    prodArea.classList.add('hidden');
+    if (icon) icon.textContent = '▼';
+  } else {
+    categoriasExpandidas.add(id);
+    prodArea.classList.remove('hidden');
+    if (icon) icon.textContent = '▲';
+  }
+}
+
+async function toggleCategoria(id, ativoAtual) {
+  await fetch(`/admin/cardapio/categorias/${id}`, {
+    method: 'PATCH',
+    headers: getHeaders({ 'Content-Type': 'application/json' }),
+    body: JSON.stringify({ ativo: !ativoAtual }),
+  });
+  carregarCardapio();
+}
+
+async function toggleCategoriaMobile(id, ocultarAtual) {
+  await fetch(`/admin/cardapio/categorias/${id}`, {
+    method: 'PATCH',
+    headers: getHeaders({ 'Content-Type': 'application/json' }),
+    body: JSON.stringify({ ocultarMobile: !ocultarAtual }),
+  });
+  carregarCardapio();
+}
+
+async function toggleProduto(id, ativoAtual) {
+  await fetch(`/admin/cardapio/produtos/${id}`, {
+    method: 'PATCH',
+    headers: getHeaders({ 'Content-Type': 'application/json' }),
+    body: JSON.stringify({ ativo: !ativoAtual }),
+  });
+  carregarCardapio();
+}
+
+function renderizarProdutoLinha(p, catTamanhos = []) {
   const moeda = getMoeda() || 'R$';
   let precoTexto = '';
-  if (p.tamanhos?.length) {
-    precoTexto = `${p.tamanhos.map(t => `${t.nome}: ${formatarPreco(t.preco, moeda)}`).join(' / ')}`;
+  let precoClass = inativo => inativo ? 'text-gray-400' : 'text-orange-600';
+  const inativo = p.ativo === false;
+
+  if (catTamanhos.length > 0) {
+    const temPadrao = catTemPrecosPadrao(catTamanhos);
+    if (temPadrao) {
+      // Modo pizza: banner já exibe preços padrão — só mostra produto se diferente (âmbar)
+      if (p.tamanhos?.length > 0 && !tamanhosIguaisACategoria(p.tamanhos, catTamanhos)) {
+        precoTexto = p.tamanhos.map(t => `${t.nome}: ${formatarPreco(t.preco, moeda)}`).join(' / ');
+        precoClass = () => inativo ? 'text-gray-400' : 'text-amber-600 font-semibold';
+      }
+    } else {
+      // Modo porção: categoria define só nomes, cada produto tem seu próprio preço
+      if (p.tamanhos?.length > 0) {
+        precoTexto = p.tamanhos.map(t => `${t.nome}: ${formatarPreco(t.preco, moeda)}`).join(' / ');
+      }
+    }
+  } else if (p.tamanhos?.length) {
+    precoTexto = p.tamanhos.map(t => `${t.nome}: ${formatarPreco(t.preco, moeda)}`).join(' / ');
   } else {
     precoTexto = formatarPreco(p.preco, moeda);
   }
+
   return `
-    <div class="flex items-center justify-between px-4 py-2.5 hover:bg-gray-50 transition">
-      <div>
-        <span class="text-sm text-gray-800 font-medium">${p.nome}</span>
-        ${p.descricao ? `<span class="text-xs text-gray-400 ml-2">— ${p.descricao}</span>` : ''}
-        <p class="text-xs text-orange-600 mt-0.5">${precoTexto}</p>
+    <div class="flex items-center justify-between px-4 py-2.5 transition ${inativo ? 'bg-gray-50 opacity-55' : 'hover:bg-gray-50'}">
+      <div class="flex items-center gap-2 min-w-0">
+        <div class="min-w-0">
+          <span class="text-sm font-medium ${inativo ? 'text-gray-400 line-through' : 'text-gray-800'}">${p.nome}</span>
+          ${p.descricao ? `<span class="text-xs text-gray-400 ml-2">— ${p.descricao}</span>` : ''}
+          ${inativo ? '<span class="text-xs bg-gray-200 text-gray-500 px-1.5 py-0.5 rounded ml-1">Oculto</span>' : ''}
+          ${precoTexto ? `<p class="text-xs ${precoClass(inativo)} mt-0.5">${precoTexto}</p>` : ''}
+        </div>
       </div>
-      <div class="flex gap-2 shrink-0 ml-2">
-        <button onclick="editarProduto('${p.id}')" class="text-xs text-gray-400 hover:text-gray-600 transition">✏️</button>
-        <button onclick="deletarProduto('${p.id}')" class="text-xs text-red-400 hover:text-red-600 transition">🗑</button>
+      <div class="flex gap-1.5 shrink-0 ml-2">
+        <button onclick="toggleProduto('${p.id}', ${p.ativo !== false})"
+          title="${inativo ? 'Mostrar produto' : 'Ocultar produto'}"
+          class="text-xs px-2 py-1 rounded-lg transition ${inativo ? 'bg-green-100 hover:bg-green-200 text-green-700' : 'bg-yellow-100 hover:bg-yellow-200 text-yellow-700'}">
+          ${inativo ? '👁' : '🙈'}
+        </button>
+        <button onclick="editarProduto('${p.id}')" class="text-xs text-gray-400 hover:text-gray-600 transition px-1">✏️</button>
+        <button onclick="deletarProduto('${p.id}')" class="text-xs text-red-400 hover:text-red-600 transition px-1">🗑</button>
       </div>
     </div>
   `;
 }
 
 // ── Modal Categoria ───────────────────────────────────────────────────────────
+function _setCatTipoAtivo(tipo) {
+  document.querySelectorAll('.cat-tipo-card').forEach(el => {
+    const isActive = el.id === `cat-tipo-card-${tipo}`;
+    el.classList.toggle('border-orange-500', isActive);
+    el.classList.toggle('bg-orange-50', isActive);
+    el.classList.toggle('border-gray-200', !isActive);
+    const radio = el.querySelector('input[type=radio]');
+    if (radio) radio.checked = isActive;
+  });
+}
+
+function mudarTipoCat(tipo) {
+  _setCatTipoAtivo(tipo);
+  ['pizza', 'porcao', 'custom'].forEach(t => {
+    document.getElementById(`cat-form-${t}`).classList.add('hidden');
+  });
+  if (tipo === 'pizza') {
+    document.getElementById('cat-form-pizza').classList.remove('hidden');
+    if (!document.getElementById('cat-pizza-lista').children.length) {
+      _initPizzaRowsCat([
+        {nome: 'Individual (até 2 sabores)', preco: 0},
+        {nome: 'Pequeña (até 2 sabores)', preco: 0},
+        {nome: 'Mediana (até 3 sabores)', preco: 0},
+        {nome: 'Grande (até 4 sabores)', preco: 0},
+      ]);
+    }
+    if (!document.getElementById('cat-bordas-lista').children.length) {
+      _initBordasTable([]);
+    }
+  } else if (tipo === 'porcao') {
+    document.getElementById('cat-form-porcao').classList.remove('hidden');
+    if (!document.getElementById('cat-porcao-lista').children.length) {
+      _initPorcaoRowsCat([{nome: 'Inteira', preco: 0}, {nome: 'Meia Porção', preco: 0}]);
+    }
+  } else if (tipo === 'custom') {
+    document.getElementById('cat-form-custom').classList.remove('hidden');
+    if (!document.getElementById('cat-tamanhos-lista').children.length) adicionarLinhaTamanhoCat();
+  }
+}
+
+function _initPizzaRowsCat(rows) {
+  const lista = document.getElementById('cat-pizza-lista');
+  lista.innerHTML = '';
+  rows.forEach(r => {
+    const div = document.createElement('div');
+    div.className = 'grid grid-cols-2 gap-2 items-center';
+    div.innerHTML = `
+      <input type="text" value="${r.nome || ''}" placeholder="Tamanho"
+        class="border border-gray-300 rounded-lg px-2.5 py-1.5 text-sm focus:outline-none focus:ring-1 focus:ring-orange-400">
+      <input type="number" min="0" step="0.01" placeholder="Preço" value="${r.preco || ''}"
+        class="border border-gray-300 rounded-lg px-2.5 py-1.5 text-sm focus:outline-none focus:ring-1 focus:ring-orange-400">
+    `;
+    lista.appendChild(div);
+  });
+}
+
+function _initPorcaoRowsCat(rows) {
+  const lista = document.getElementById('cat-porcao-lista');
+  lista.innerHTML = '';
+  rows.forEach(r => {
+    const div = document.createElement('div');
+    div.className = 'grid grid-cols-2 gap-2 items-center';
+    div.innerHTML = `
+      <input type="text" value="${r.nome || ''}" placeholder="Variante"
+        class="border border-gray-300 rounded-lg px-2.5 py-1.5 text-sm focus:outline-none focus:ring-1 focus:ring-orange-400">
+      <input type="number" min="0" step="0.01" placeholder="0 = por produto" value="${r.preco || ''}"
+        class="border border-gray-300 rounded-lg px-2.5 py-1.5 text-sm focus:outline-none focus:ring-1 focus:ring-orange-400">
+    `;
+    lista.appendChild(div);
+  });
+}
+
 function abrirModalCategoria() {
   cardapioModalCatId = null;
   document.getElementById('modal-categoria-titulo').textContent = t('card.nova-cat-modal');
   document.getElementById('cat-nome').value = '';
   document.getElementById('cat-id').value = '';
+  document.getElementById('cat-pizza-lista').innerHTML = '';
+  document.getElementById('cat-porcao-lista').innerHTML = '';
+  document.getElementById('cat-tamanhos-lista').innerHTML = '';
+  document.getElementById('cat-bordas-lista').innerHTML = '';
+  document.getElementById('cat-bordas-header').innerHTML = '';
+  _resetCatImagem();
+  ['pizza', 'porcao', 'custom'].forEach(t => document.getElementById(`cat-form-${t}`).classList.add('hidden'));
+  mudarTipoCat('simples');
   document.getElementById('modal-categoria').classList.remove('hidden');
 }
 
-function editarCategoria(id, nome) {
+function _resetCatImagem(url) {
+  const preview = document.getElementById('cat-imagem-preview');
+  const label = document.getElementById('cat-imagem-label');
+  const remove = document.getElementById('cat-imagem-remove');
+  document.getElementById('cat-imagem-file').value = '';
+  preview.dataset.remove = '';
+  if (url) {
+    preview.src = url;
+    preview.classList.remove('hidden');
+    label.textContent = 'Alterar imagem';
+    remove.classList.remove('hidden');
+  } else {
+    preview.src = '';
+    preview.classList.add('hidden');
+    label.textContent = 'Escolher imagem';
+    remove.classList.add('hidden');
+  }
+}
+
+function previewCatImagem(input) {
+  const file = input.files[0];
+  if (!file) return;
+  const preview = document.getElementById('cat-imagem-preview');
+  preview.src = URL.createObjectURL(file);
+  preview.classList.remove('hidden');
+  document.getElementById('cat-imagem-label').textContent = file.name;
+  document.getElementById('cat-imagem-remove').classList.remove('hidden');
+  preview.dataset.remove = '';
+}
+
+function removerCatImagem() {
+  document.getElementById('cat-imagem-file').value = '';
+  const preview = document.getElementById('cat-imagem-preview');
+  preview.src = '';
+  preview.classList.add('hidden');
+  preview.dataset.remove = 'true';
+  document.getElementById('cat-imagem-label').textContent = 'Escolher imagem';
+  document.getElementById('cat-imagem-remove').classList.add('hidden');
+}
+
+function editarCategoria(id) {
+  const cat = cardapioData?.find(c => c.id === id);
+  if (!cat) return;
   cardapioModalCatId = id;
   document.getElementById('modal-categoria-titulo').textContent = t('card.editar-cat');
-  document.getElementById('cat-nome').value = nome;
+  document.getElementById('cat-nome').value = cat.nome;
   document.getElementById('cat-id').value = id;
+  document.getElementById('cat-pizza-lista').innerHTML = '';
+  document.getElementById('cat-porcao-lista').innerHTML = '';
+  document.getElementById('cat-tamanhos-lista').innerHTML = '';
+  ['pizza', 'porcao', 'custom'].forEach(t => document.getElementById(`cat-form-${t}`).classList.add('hidden'));
+
+  _resetCatImagem(cat.imagemUrl || null);
+
+  const tipo = cat.tipoTamanhos || 'simples';
+  _setCatTipoAtivo(tipo);
+
+  if (tipo === 'pizza') {
+    document.getElementById('cat-form-pizza').classList.remove('hidden');
+    const rows = cat.tamanhos?.length ? cat.tamanhos : [
+      {nome: 'Individual (até 2 sabores)', preco: 0},
+      {nome: 'Pequeña (até 2 sabores)', preco: 0},
+      {nome: 'Mediana (até 3 sabores)', preco: 0},
+      {nome: 'Grande (até 4 sabores)', preco: 0},
+    ];
+    _initPizzaRowsCat(rows);
+    _initBordasTable(cat.bordas || []);
+  } else if (tipo === 'porcao') {
+    document.getElementById('cat-form-porcao').classList.remove('hidden');
+    const rows = cat.tamanhos?.length ? cat.tamanhos : [{nome: 'Inteira', preco: 0}, {nome: 'Meia Porção', preco: 0}];
+    _initPorcaoRowsCat(rows);
+  } else if (tipo === 'custom') {
+    document.getElementById('cat-form-custom').classList.remove('hidden');
+    (cat.tamanhos || []).forEach(tam => adicionarLinhaTamanhoCat(tam.nome, tam.preco));
+    if (!document.getElementById('cat-tamanhos-lista').children.length) adicionarLinhaTamanhoCat();
+  }
+
   document.getElementById('modal-categoria').classList.remove('hidden');
 }
 
@@ -4861,26 +5212,83 @@ function fecharModalCategoria() {
 }
 
 async function salvarCategoria() {
-  const nome = document.getElementById('cat-nome').value.trim();
-  const id = document.getElementById('cat-id').value;
-  if (!nome) return;
+  try {
+    const nome = document.getElementById('cat-nome').value.trim();
+    const id = document.getElementById('cat-id').value;
+    if (!nome) return;
 
-  if (id) {
-    await fetch(`/admin/cardapio/categorias/${id}`, {
-      method: 'PATCH',
-      headers: getHeaders({ 'Content-Type': 'application/json' }),
-      body: JSON.stringify({ nome }),
-    });
-  } else {
-    await fetch(`/admin/cardapio/${cardapioRestauranteId}/categorias`, {
-      method: 'POST',
-      headers: getHeaders({ 'Content-Type': 'application/json' }),
-      body: JSON.stringify({ nome }),
-    });
+    const tipoTamanhos = document.querySelector('input[name="cat-tipo"]:checked')?.value || 'simples';
+    const tamanhos = [];
+
+    if (tipoTamanhos === 'pizza') {
+      for (const linha of document.getElementById('cat-pizza-lista').children) {
+        const inp = linha.querySelectorAll('input');
+        const n = inp[0].value.trim();
+        const p = parseFloat(inp[1].value) || 0;
+        if (n) tamanhos.push({ nome: n, preco: p });
+      }
+    } else if (tipoTamanhos === 'porcao') {
+      for (const linha of document.getElementById('cat-porcao-lista').children) {
+        const inp = linha.querySelectorAll('input');
+        const n = inp[0].value.trim();
+        const p = parseFloat(inp[1].value) || 0;
+        if (n) tamanhos.push({ nome: n, preco: p });
+      }
+    } else if (tipoTamanhos === 'custom') {
+      for (const linha of document.getElementById('cat-tamanhos-lista').children) {
+        const inp = linha.querySelectorAll('input');
+        const n = inp[0].value.trim();
+        const p = parseFloat(inp[1].value) || 0;
+        if (n) tamanhos.push({ nome: n, preco: p });
+      }
+    }
+
+    const bordas = [];
+    if (tipoTamanhos === 'pizza') {
+      for (const row of document.getElementById('cat-bordas-lista').children) {
+        const nomeB = row.querySelector('.borda-nome')?.value.trim();
+        const precoInputs = row.querySelectorAll('.borda-preco');
+        const precos = Array.from(precoInputs).map(i => parseFloat(i.value) || 0);
+        if (nomeB) bordas.push({ nome: nomeB, precos });
+      }
+    }
+
+    const body = JSON.stringify({ nome, tamanhos, tipoTamanhos, bordas });
+    let res;
+    if (id) {
+      res = await fetch(`/admin/cardapio/categorias/${id}`, { method: 'PATCH', headers: getHeaders({ 'Content-Type': 'application/json' }), body });
+    } else {
+      res = await fetch(`/admin/cardapio/${cardapioRestauranteId}/categorias`, { method: 'POST', headers: getHeaders({ 'Content-Type': 'application/json' }), body });
+    }
+    if (!res.ok) {
+      const err = await res.json().catch(() => ({}));
+      mostrarToast('Erro ao salvar: ' + (err.error || res.status));
+      return;
+    }
+    const resData = await res.json().catch(() => ({}));
+    const savedId = id || resData?.data?.id;
+
+    // Upload imagem se selecionada
+    const fileInput = document.getElementById('cat-imagem-file');
+    const preview = document.getElementById('cat-imagem-preview');
+    if (fileInput.files?.[0] && savedId) {
+      const formData = new FormData();
+      formData.append('imagem', fileInput.files[0]);
+      await fetch(`/admin/cardapio/categorias/${savedId}/imagem`, {
+        method: 'POST', headers: getHeaders(), body: formData
+      });
+    } else if (preview.dataset.remove === 'true' && savedId) {
+      await fetch(`/admin/cardapio/categorias/${savedId}`, {
+        method: 'PATCH', headers: getHeaders({ 'Content-Type': 'application/json' }),
+        body: JSON.stringify({ imagemUrl: null })
+      });
+    }
+
+    fecharModalCategoria();
+    carregarCardapio();
+  } catch (e) {
+    mostrarToast('Erro JS: ' + e.message);
   }
-
-  fecharModalCategoria();
-  carregarCardapio();
 }
 
 async function confirmarDeletarCategoria(id, nome) {
@@ -4889,21 +5297,175 @@ async function confirmarDeletarCategoria(id, nome) {
   carregarCardapio();
 }
 
+function adicionarLinhaTamanhoCat(nome = '', preco = '') {
+  const lista = document.getElementById('cat-tamanhos-lista');
+  const div = document.createElement('div');
+  div.className = 'grid grid-cols-2 gap-2 items-center';
+  div.innerHTML = `
+    <input type="text" placeholder="Ex: Pequeno" value="${nome}"
+      class="border border-gray-300 rounded-lg px-2.5 py-1.5 text-sm focus:outline-none focus:ring-1 focus:ring-orange-400">
+    <div class="flex gap-1.5 items-center">
+      <input type="number" min="0" step="0.01" placeholder="Preço" value="${preco}"
+        class="flex-1 min-w-0 border border-gray-300 rounded-lg px-2.5 py-1.5 text-sm focus:outline-none focus:ring-1 focus:ring-orange-400">
+      <button type="button" onclick="this.closest('.grid').remove()"
+        class="text-red-400 hover:text-red-600 text-xl leading-none shrink-0">×</button>
+    </div>
+  `;
+  lista.appendChild(div);
+}
+
+function _updateBordasHeader() {
+  const header = document.getElementById('cat-bordas-header');
+  if (!header) return;
+  const tamanhos = [];
+  for (const row of document.getElementById('cat-pizza-lista').children) {
+    const nome = row.querySelector('input[type=text]')?.value || '—';
+    tamanhos.push(nome);
+  }
+  let html = '<div class="flex gap-1 items-center">';
+  html += '<span class="w-28 shrink-0 text-xs font-medium text-gray-400">Sabor</span>';
+  tamanhos.forEach(t => {
+    const label = t.length > 9 ? t.slice(0, 8) + '…' : t;
+    html += `<span class="flex-1 text-center text-xs font-medium text-gray-400 truncate" title="${t}">${label}</span>`;
+  });
+  html += '<span class="w-6"></span>';
+  html += '</div>';
+  header.innerHTML = html;
+}
+
+function adicionarLinhaBordaCat(nome = '', precos = []) {
+  _updateBordasHeader();
+  const numSizes = document.getElementById('cat-pizza-lista').children.length || 4;
+  const lista = document.getElementById('cat-bordas-lista');
+  const div = document.createElement('div');
+  div.className = 'flex gap-1 items-center';
+  let html = `<input type="text" value="${nome.replace(/"/g, '&quot;')}" placeholder="Sabor"
+    class="borda-nome w-28 shrink-0 border border-gray-300 rounded-lg px-2 py-1.5 text-sm focus:outline-none focus:ring-1 focus:ring-orange-400">`;
+  for (let i = 0; i < numSizes; i++) {
+    const v = (precos && precos[i] !== undefined && precos[i] !== 0) ? precos[i] : '';
+    html += `<input type="number" min="0" step="0.01" value="${v}" placeholder="0"
+      class="borda-preco flex-1 min-w-0 border border-gray-300 rounded-lg px-1 py-1.5 text-sm text-center focus:outline-none focus:ring-1 focus:ring-orange-400">`;
+  }
+  html += `<button type="button" onclick="this.closest('.flex').remove()"
+    class="text-red-400 hover:text-red-600 text-lg leading-none shrink-0 w-6 text-center">×</button>`;
+  div.innerHTML = html;
+  lista.appendChild(div);
+}
+
+function _initBordasTable(bordas) {
+  const lista = document.getElementById('cat-bordas-lista');
+  lista.innerHTML = '';
+  const defaultBordas = [
+    {nome: 'Requeson', precos: []},
+    {nome: 'Cheedar', precos: []},
+    {nome: 'Chocolate Branco', precos: []},
+    {nome: 'Chocolate', precos: []},
+    {nome: 'Borde Mixto', precos: []},
+  ];
+  const rows = (bordas && bordas.length) ? bordas : defaultBordas;
+  rows.forEach(b => adicionarLinhaBordaCat(b.nome, b.precos || []));
+}
+
 // ── Modal Produto ─────────────────────────────────────────────────────────────
 let prodCategoriaId = null;
 
+function _configurarProdModal(catTipo, catTamanhos, prodTamanhos) {
+  const lista = document.getElementById('prod-tamanhos-lista');
+  const header = document.getElementById('prod-tamanhos-header');
+  const addBtn = document.getElementById('prod-add-tamanho-btn');
+  const toggleLabel = document.getElementById('prod-tamanhos-toggle-label');
+  lista.innerHTML = '';
+
+  if (catTipo === 'pizza') {
+    header.className = 'grid grid-cols-2 gap-2 text-xs text-gray-400 font-medium px-1';
+    header.innerHTML = '<span>Tamanho</span><span>Preço</span>';
+    addBtn.classList.add('hidden');
+    toggleLabel.classList.add('hidden');
+    const rows = catTamanhos.length ? catTamanhos : [];
+    rows.forEach(ct => {
+      const ov = prodTamanhos.find(pt => pt.nome === ct.nome);
+      const preco = ov ? ov.preco : ct.preco;
+      const div = document.createElement('div');
+      div.className = 'grid grid-cols-2 gap-2 items-center';
+      div.innerHTML = `
+        <input type="text" value="${ct.nome}" readonly
+          class="tamanho-nome border border-gray-200 bg-gray-50 rounded-lg px-2 py-1.5 text-sm text-gray-500">
+        <input type="number" min="0" step="0.01" value="${preco || ''}" placeholder="Preço"
+          class="tamanho-preco border border-gray-300 rounded-lg px-2 py-1.5 text-sm focus:outline-none focus:ring-1 focus:ring-orange-400">
+        <input type="number" class="tamanho-borda hidden" value="">
+      `;
+      lista.appendChild(div);
+    });
+  } else if (catTipo === 'porcao') {
+    header.className = 'grid grid-cols-2 gap-2 text-xs text-gray-400 font-medium px-1';
+    header.innerHTML = '<span>Variante</span><span>Preço</span>';
+    addBtn.classList.add('hidden');
+    toggleLabel.classList.add('hidden');
+    const rows = catTamanhos.length ? catTamanhos : [];
+    rows.forEach(ct => {
+      const ov = prodTamanhos.find(pt => pt.nome === ct.nome);
+      const preco = ov ? ov.preco : ct.preco;
+      const div = document.createElement('div');
+      div.className = 'grid grid-cols-2 gap-2 items-center';
+      div.innerHTML = `
+        <input type="text" value="${ct.nome}" readonly
+          class="tamanho-nome border border-gray-200 bg-gray-50 rounded-lg px-2 py-1.5 text-sm text-gray-500">
+        <input type="number" min="0" step="0.01" value="${preco || ''}" placeholder="Preço"
+          class="tamanho-preco border border-gray-300 rounded-lg px-2 py-1.5 text-sm focus:outline-none focus:ring-1 focus:ring-orange-400">
+        <input type="number" class="tamanho-borda hidden" value="">
+      `;
+      lista.appendChild(div);
+    });
+  } else {
+    header.className = 'grid grid-cols-3 gap-2 text-xs text-gray-400 font-medium px-1';
+    header.innerHTML = '<span>Tamanho</span><span>Sem borda</span><span>Com borda</span>';
+    addBtn.classList.remove('hidden');
+    toggleLabel.classList.remove('hidden');
+    prodTamanhos.forEach(t => {
+      adicionarLinhaTamanho();
+      const ultima = lista.lastElementChild;
+      ultima.querySelector('.tamanho-nome').value = t.nome;
+      ultima.querySelector('.tamanho-preco').value = t.preco;
+      if (t.precoComBorda) ultima.querySelector('.tamanho-borda').value = t.precoComBorda;
+    });
+    if (!prodTamanhos.length && catTamanhos.length) {
+      catTamanhos.forEach(ct => {
+        adicionarLinhaTamanho();
+        const ultima = lista.lastElementChild;
+        ultima.querySelector('.tamanho-nome').value = ct.nome;
+        ultima.querySelector('.tamanho-preco').value = ct.preco;
+        if (ct.precoComBorda) ultima.querySelector('.tamanho-borda').value = ct.precoComBorda;
+      });
+    }
+  }
+}
+
 function abrirModalProduto(categoriaId) {
   prodCategoriaId = categoriaId;
+  const cat = cardapioData?.find(c => c.id === categoriaId);
+  const catTipo = cat?.tipoTamanhos || 'simples';
+  const catTamanhos = cat?.tamanhos || [];
+
   document.getElementById('modal-produto-titulo').textContent = t('card.novo-prod-modal');
   document.getElementById('prod-nome').value = '';
   document.getElementById('prod-descricao').value = '';
   document.getElementById('prod-preco').value = '0';
   document.getElementById('prod-id').value = '';
   document.getElementById('prod-categoria-id').value = categoriaId;
-  document.getElementById('prod-tem-tamanhos').checked = false;
-  document.getElementById('prod-tamanhos-wrapper').classList.add('hidden');
-  document.getElementById('prod-preco-wrapper').classList.remove('hidden');
-  document.getElementById('prod-tamanhos-lista').innerHTML = '';
+
+  const temCatSizes = catTipo !== 'simples' && catTamanhos.length > 0;
+  document.getElementById('prod-tem-tamanhos').checked = temCatSizes;
+  document.getElementById('prod-tamanhos-wrapper').classList.toggle('hidden', !temCatSizes);
+  document.getElementById('prod-preco-wrapper').classList.toggle('hidden', temCatSizes);
+
+  if (temCatSizes) _configurarProdModal(catTipo, catTamanhos, []);
+  else {
+    document.getElementById('prod-tamanhos-lista').innerHTML = '';
+    document.getElementById('prod-tamanhos-toggle-label').classList.remove('hidden');
+    document.getElementById('prod-add-tamanho-btn').classList.add('hidden');
+    document.getElementById('prod-tamanhos-header').innerHTML = '';
+  }
+
   document.getElementById('modal-produto').classList.remove('hidden');
 }
 
@@ -4916,6 +5478,10 @@ function toggleTamanhos() {
   document.getElementById('prod-tamanhos-wrapper').classList.toggle('hidden', !temTamanhos);
   document.getElementById('prod-preco-wrapper').classList.toggle('hidden', temTamanhos);
   if (temTamanhos && !document.getElementById('prod-tamanhos-lista').children.length) {
+    const header = document.getElementById('prod-tamanhos-header');
+    header.className = 'grid grid-cols-3 gap-2 text-xs text-gray-400 font-medium px-1';
+    header.innerHTML = '<span>Tamanho</span><span>Sem borda</span><span>Com borda</span>';
+    document.getElementById('prod-add-tamanho-btn').classList.remove('hidden');
     adicionarLinhaTamanho();
   }
 }
@@ -4923,35 +5489,61 @@ function toggleTamanhos() {
 function adicionarLinhaTamanho() {
   const lista = document.getElementById('prod-tamanhos-lista');
   const div = document.createElement('div');
-  div.className = 'flex gap-2 items-center';
+  div.className = 'grid grid-cols-3 gap-2 items-center';
   div.innerHTML = `
-    <input type="text" placeholder="Ex: Grande" class="tamanho-nome flex-1 border border-gray-300 rounded-lg px-2 py-1.5 text-sm focus:outline-none focus:ring-1 focus:ring-orange-400">
-    <input type="number" placeholder="0.00" min="0" step="0.01" class="tamanho-preco w-28 border border-gray-300 rounded-lg px-2 py-1.5 text-sm focus:outline-none focus:ring-1 focus:ring-orange-400">
-    <input type="number" placeholder="opcional" min="0" step="0.01" class="tamanho-borda w-28 border border-gray-300 rounded-lg px-2 py-1.5 text-sm focus:outline-none focus:ring-1 focus:ring-orange-400">
-    <button onclick="this.parentElement.remove()" class="text-red-400 hover:text-red-600 text-sm">✕</button>
+    <input type="text" placeholder="Ex: Grande" class="tamanho-nome border border-gray-300 rounded-lg px-2 py-1.5 text-sm focus:outline-none focus:ring-1 focus:ring-orange-400">
+    <input type="number" placeholder="0.00" min="0" step="0.01" class="tamanho-preco border border-gray-300 rounded-lg px-2 py-1.5 text-sm focus:outline-none focus:ring-1 focus:ring-orange-400">
+    <div class="flex gap-1 items-center">
+      <input type="number" placeholder="borda" min="0" step="0.01" class="tamanho-borda flex-1 border border-gray-300 rounded-lg px-2 py-1.5 text-sm focus:outline-none focus:ring-1 focus:ring-orange-400">
+      <button onclick="this.closest('.grid').remove()" class="text-red-400 hover:text-red-600 text-lg leading-none shrink-0">✕</button>
+    </div>
   `;
   lista.appendChild(div);
 }
 
+function tamanhosIguaisACategoria(prodTamanhos, catTamanhos) {
+  if (!catTamanhos?.length || !prodTamanhos?.length) return false;
+  if (prodTamanhos.length !== catTamanhos.length) return false;
+  return prodTamanhos.every((pt, i) => {
+    const ct = catTamanhos[i];
+    return pt.nome === ct.nome && Math.abs(pt.preco - ct.preco) < 0.01;
+  });
+}
+
 function editarProduto(id) {
-  const produto = cardapioData.flatMap(c => c.produtos).find(p => p.id === id);
+  const cat = cardapioData?.find(c => c.produtos.some(p => p.id === id));
+  const produto = cat?.produtos.find(p => p.id === id);
   if (!produto) return;
+
+  const catTipo = cat?.tipoTamanhos || 'simples';
+  const catTamanhos = cat?.tamanhos || [];
+  const prodTamanhos = produto.tamanhos || [];
 
   document.getElementById('modal-produto-titulo').textContent = t('card.editar-prod');
   document.getElementById('prod-id').value = produto.id;
-  document.getElementById('prod-categoria-id').value = ''; // não usado no PATCH
+  document.getElementById('prod-categoria-id').value = '';
   document.getElementById('prod-nome').value = produto.nome;
   document.getElementById('prod-descricao').value = produto.descricao || '';
 
-  const temTamanhos = produto.tamanhos?.length > 0;
-  document.getElementById('prod-tem-tamanhos').checked = temTamanhos;
-  document.getElementById('prod-tamanhos-wrapper').classList.toggle('hidden', !temTamanhos);
-  document.getElementById('prod-preco-wrapper').classList.toggle('hidden', temTamanhos);
+  const temCatSizes = catTipo !== 'simples' && catTamanhos.length > 0;
 
-  if (temTamanhos) {
+  if (temCatSizes) {
+    document.getElementById('prod-tem-tamanhos').checked = true;
+    document.getElementById('prod-tamanhos-wrapper').classList.remove('hidden');
+    document.getElementById('prod-preco-wrapper').classList.add('hidden');
+    _configurarProdModal(catTipo, catTamanhos, prodTamanhos);
+  } else if (prodTamanhos.length > 0) {
+    document.getElementById('prod-tem-tamanhos').checked = true;
+    document.getElementById('prod-tamanhos-wrapper').classList.remove('hidden');
+    document.getElementById('prod-preco-wrapper').classList.add('hidden');
+    document.getElementById('prod-tamanhos-toggle-label').classList.remove('hidden');
+    document.getElementById('prod-add-tamanho-btn').classList.remove('hidden');
+    const header = document.getElementById('prod-tamanhos-header');
+    header.className = 'grid grid-cols-3 gap-2 text-xs text-gray-400 font-medium px-1';
+    header.innerHTML = '<span>Tamanho</span><span>Sem borda</span><span>Com borda</span>';
     const lista = document.getElementById('prod-tamanhos-lista');
     lista.innerHTML = '';
-    produto.tamanhos.forEach((t) => {
+    prodTamanhos.forEach(t => {
       adicionarLinhaTamanho();
       const ultima = lista.lastElementChild;
       ultima.querySelector('.tamanho-nome').value = t.nome;
@@ -4959,8 +5551,14 @@ function editarProduto(id) {
       if (t.precoComBorda) ultima.querySelector('.tamanho-borda').value = t.precoComBorda;
     });
   } else {
+    document.getElementById('prod-tem-tamanhos').checked = false;
+    document.getElementById('prod-tamanhos-wrapper').classList.add('hidden');
+    document.getElementById('prod-preco-wrapper').classList.remove('hidden');
     document.getElementById('prod-preco').value = produto.preco || 0;
     document.getElementById('prod-tamanhos-lista').innerHTML = '';
+    document.getElementById('prod-tamanhos-toggle-label').classList.remove('hidden');
+    document.getElementById('prod-add-tamanho-btn').classList.add('hidden');
+    document.getElementById('prod-tamanhos-header').innerHTML = '';
   }
 
   document.getElementById('modal-produto').classList.remove('hidden');
@@ -5142,7 +5740,7 @@ function renderizarCRMClientes(clientes, meta, vipThreshold) {
       tbody.innerHTML += `
         <tr class="hover:bg-gray-50 transition border-t border-gray-50">
           <td class="px-4 py-3 font-medium text-gray-800">${c.nome || `<span class="text-gray-400 italic">${t('crm.sem-nome')}</span>`}</td>
-          <td class="px-4 py-3 text-gray-500 text-sm">${c.numero}</td>
+          <td class="px-4 py-3 text-gray-500 text-sm">${formatarNumeroDisplay(c.numero)}</td>
           <td class="px-4 py-3 text-center"><span class="bg-orange-100 text-orange-700 text-xs font-semibold px-2 py-0.5 rounded-full">${c.totalPedidos}</span></td>
           <td class="px-4 py-3 text-right font-semibold text-gray-800">${formatarPreco(c.totalGasto, moeda)}</td>
           <td class="px-4 py-3 text-gray-400 text-xs">${up}</td>
@@ -7381,8 +7979,8 @@ function renderizarHistorico(resgates, meta) {
         <div class="flex items-center gap-3">
           <span class="w-7 h-7 rounded-full bg-green-100 text-green-700 text-xs font-bold flex items-center justify-center shrink-0">#${numero}</span>
           <div>
-            <span class="font-medium text-gray-800 text-sm">${r.clienteNome || r.clienteNumero}</span>
-            ${r.clienteNome ? `<span class="text-xs text-gray-400 ml-1">${r.clienteNumero}</span>` : ''}
+            <span class="font-medium text-gray-800 text-sm">${r.clienteNome || formatarNumeroDisplay(r.clienteNumero)}</span>
+            ${r.clienteNome ? `<span class="text-xs text-gray-400 ml-1">${formatarNumeroDisplay(r.clienteNumero)}</span>` : ''}
             <p class="text-xs text-gray-400 mt-0.5">Registrado por: <span class="text-gray-600">${r.registradoPor}</span></p>
           </div>
         </div>

@@ -9,7 +9,7 @@ const { confirmarPedido, proximoNumeroDia, formatNumPedido } = require("../servi
 const { enviarMensagem, listarInstancias, obterQRCode, verificarConexao, criarInstancia, configurarWebhook, excluirInstancia } = require("../services/evolutionService");
 const { authMiddleware } = require("../middleware/authMiddleware");
 const {
-  buscarCardapioDB, criarCategoria, atualizarCategoria, deletarCategoria,
+  buscarCardapioDB, buscarCardapioAdmin, criarCategoria, atualizarCategoria, deletarCategoria,
   criarProduto, atualizarProduto, deletarProduto, atualizarTamanho, deletarTamanho,
   importarCardapio,
 } = require("../services/cardapioService");
@@ -43,6 +43,20 @@ const uploadDisco = multer({
 
 // Multer: salva fotos de cardápio em disco (múltiplas)
 const FOTO_EXTS = { "image/jpeg": "jpg", "image/png": "png", "image/webp": "webp" };
+
+// Multer: salva imagem de categoria em disco
+const uploadCatImagem = multer({
+  storage: multer.diskStorage({
+    destination: (_req, _file, cb) => cb(null, UPLOADS_DIR),
+    filename: (req, file, cb) => {
+      const ext = FOTO_EXTS[file.mimetype] || "jpg";
+      cb(null, `cat-${req.params.id}.${ext}`);
+    },
+  }),
+  limits: { fileSize: 5 * 1024 * 1024 },
+  fileFilter: (_req, file, cb) => cb(null, file.mimetype in FOTO_EXTS),
+});
+
 const uploadDiscoFotos = multer({
   storage: multer.diskStorage({
     destination: (_req, _file, cb) => cb(null, UPLOADS_DIR),
@@ -1557,7 +1571,7 @@ router.get("/cardapio/:restauranteId", async (req, res) => {
   }
   try {
     const [cardapio, rest] = await Promise.all([
-      buscarCardapioDB(restauranteId),
+      buscarCardapioAdmin(restauranteId),
       prisma.restaurante.findUnique({ where: { id: restauranteId }, select: { instrucoes: true } }),
     ]);
     res.json({ data: cardapio, instrucoes: rest?.instrucoes || null });
@@ -1593,10 +1607,10 @@ router.post("/cardapio/:restauranteId/categorias", async (req, res) => {
   if (req.user.role === "restaurante" && req.user.restauranteId !== restauranteId) {
     return res.status(403).json({ error: "Acesso negado" });
   }
-  const { nome, ordem } = req.body;
+  const { nome, ordem, tamanhos, tipoTamanhos, bordas } = req.body;
   if (!nome) return res.status(400).json({ error: "nome é obrigatório" });
   try {
-    const cat = await criarCategoria(restauranteId, nome, ordem);
+    const cat = await criarCategoria(restauranteId, nome, ordem, tamanhos || [], tipoTamanhos || "simples", bordas || []);
     await invalidarCachePorRestauranteId(restauranteId);
     res.status(201).json({ data: cat });
   } catch (err) {
@@ -1612,6 +1626,21 @@ router.patch("/cardapio/categorias/:id", async (req, res) => {
     res.json({ data: cat });
   } catch (err) {
     res.status(500).json({ error: err.message });
+  }
+});
+
+// POST /admin/cardapio/categorias/:id/imagem
+router.post("/cardapio/categorias/:id/imagem", uploadCatImagem.single("imagem"), async (req, res) => {
+  try {
+    if (!req.file) return res.status(400).json({ error: "Nenhum arquivo enviado" });
+    const ext = FOTO_EXTS[req.file.mimetype] || "jpg";
+    const url = `${process.env.BOT_PUBLIC_URL}/uploads/cat-${req.params.id}.${ext}`;
+    await atualizarCategoria(req.params.id, { imagemUrl: url });
+    await invalidarCachePorCategoriaId(req.params.id);
+    res.json({ data: { imagemUrl: url } });
+  } catch (e) {
+    console.error("[admin] POST categorias/:id/imagem", e.message);
+    res.status(500).json({ error: e.message });
   }
 });
 

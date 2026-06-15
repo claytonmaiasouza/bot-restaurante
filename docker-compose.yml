@@ -50,6 +50,7 @@ services:
       BOT_PUBLIC_URL: https://bot.guiafinanceiro.pro
     volumes:
       - bot_logs:/app/logs
+      - /opt/bot-restaurante/uploads:/app/public/uploads
     depends_on:
       postgres:
         condition: service_healthy

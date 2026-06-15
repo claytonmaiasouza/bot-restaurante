@@ -40,10 +40,16 @@ model Restaurante {
 }
 
 model Categoria {
-  id            String      @id @default(uuid())
-  nome          String
-  ordem         Int         @default(0)
-  restauranteId String
+  id             String      @id @default(uuid())
+  nome           String
+  ordem          Int         @default(0)
+  ativo          Boolean     @default(true)
+  tamanhos       Json        @default("[]")
+  tipoTamanhos   String      @default("simples")
+  bordas         Json        @default("[]")
+  imagemUrl      String?
+  ocultarMobile  Boolean     @default(false)
+  restauranteId  String
   restaurante   Restaurante @relation(fields: [restauranteId], references: [id], onDelete: Cascade)
   produtos      Produto[]
   createdAt     DateTime    @default(now())
@@ -53,6 +59,7 @@ model Produto {
   id          String    @id @default(uuid())
   nome        String
   descricao   String?
+  imagemUrl   String?
   preco       Float     @default(0)
   ativo       Boolean   @default(true)
   categoriaId String

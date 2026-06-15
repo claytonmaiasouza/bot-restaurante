@@ -12,6 +12,7 @@ router.get("/:slug", async (req, res) => {
       where: { slugWhatsapp: req.params.slug },
       include: {
         categorias: {
+          where: { ativo: true, ocultarMobile: { not: true } },
           orderBy: { ordem: "asc" },
           include: {
             produtos: {
@@ -40,10 +41,15 @@ router.get("/:slug", async (req, res) => {
         .map((cat) => ({
           id: cat.id,
           nome: cat.nome,
+          tipoTamanhos: cat.tipoTamanhos,
+          tamanhos: cat.tamanhos || [],
+          bordas: cat.bordas || [],
+          imagemUrl: cat.imagemUrl || null,
           produtos: cat.produtos.map((p) => ({
             id: p.id,
             nome: p.nome,
             descricao: p.descricao || null,
+            imagemUrl: p.imagemUrl || null,
             preco: p.tamanhos.length > 0 ? null : p.preco,
             tamanhos: p.tamanhos.length > 0 ? p.tamanhos.map((t) => ({
               id: t.id,
@@ -112,8 +118,10 @@ router.post("/:slug/pedido", async (req, res) => {
 
     const pedidoCompleto = { ...pedido, itens, total, subtotal, taxaEntrega: taxa };
 
-    // Notificar dono via WhatsApp
-    await enviarPedidoParaDono(pedidoCompleto, restaurante, tipoEntrega);
+    // Notificar dono via WhatsApp (falha silenciosa — pedido já está salvo)
+    enviarPedidoParaDono(pedidoCompleto, restaurante, tipoEntrega).catch(err =>
+      console.error('[loja] erro ao notificar dono:', err.message)
+    );
 
     // Emitir Socket.IO para o painel
     const io = req.app.get("io");

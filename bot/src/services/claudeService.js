@@ -81,23 +81,87 @@ function montarSystemPrompt(restaurante, cardapio, fidelidade = null, promocoes 
       ? `${moeda} ${preco.toFixed(2)}`
       : `${moeda} ${Math.round(preco)}`;
 
+  const tamanhosIguais = (a, b) => {
+    if (!a?.length || !b?.length || a.length !== b.length) return false;
+    return a.every((ta, i) => {
+      const tb = b[i];
+      return ta.nome === tb.nome &&
+        Math.abs(ta.preco - tb.preco) < 0.01 &&
+        Math.abs((ta.precoComBorda || 0) - (tb.precoComBorda || 0)) < 0.01;
+    });
+  };
+
+  // Categoria com preços padrão (modo pizza) vs só nomes (modo porção)
+  const catTemPrecosPadrao = (tamanhos) => (tamanhos || []).some((t) => t.preco > 0);
+
   const cardapioFormatado = cardapio
     .filter((categoria) => categoria.produtos.length > 0)
     .map((categoria) => {
-      // Se algum produto da categoria tiver tamanhos, exibe a tabela de tamanhos uma vez no cabeçalho
-      const produtoComTamanhos = categoria.produtos.find((p) => p.tamanhos?.length > 0);
       let cabecalhoTamanhos = "";
-      if (produtoComTamanhos) {
-        const tamanhosFmt = produtoComTamanhos.tamanhos
-          .map((t) => t.precoComBorda
-            ? `${t.nome}: ${formatarPreco(t.preco)} / com borda: ${formatarPreco(t.precoComBorda)}`
-            : `${t.nome}: ${formatarPreco(t.preco)}`)
-          .join("\n  ");
-        cabecalhoTamanhos = `\n  📏 Tamanhos e preços:\n  ${tamanhosFmt}`;
+
+      if (categoria.tamanhos?.length > 0) {
+        const temPadrao = catTemPrecosPadrao(categoria.tamanhos);
+        if (temPadrao) {
+          // Modo pizza: exibe nomes + preços padrão no cabeçalho
+          const tamanhosFmt = categoria.tamanhos
+            .map((t) => `${t.nome}: ${formatarPreco(t.preco)}`)
+            .join("\n  ");
+          let bordaFmt = "";
+          if (categoria.bordas?.length > 0) {
+            const nomesT = categoria.tamanhos.map((t) => t.nome);
+            const linhasBorda = categoria.bordas
+              .map((b) => {
+                const precosStr = (b.precos || [])
+                  .map((p, i) => `${nomesT[i] || `T${i + 1}`}: +${formatarPreco(p)}`)
+                  .join(" | ");
+                return `  ${b.nome}: ${precosStr}`;
+              })
+              .join("\n");
+            bordaFmt = `\n  🧀 Bordas recheadas (adicional ao preço do tamanho):\n${linhasBorda}`;
+          }
+          cabecalhoTamanhos = `\n  📏 Tamanhos e preços:\n  ${tamanhosFmt}${bordaFmt}`;
+        } else {
+          // Modo porção: exibe só os nomes, preços ficam em cada produto
+          const nomes = categoria.tamanhos.map((t) => t.nome).join(" / ");
+          cabecalhoTamanhos = `\n  📏 Tamanhos: ${nomes}`;
+        }
+      } else {
+        // Fallback: tamanhos definidos ao nível do produto (categorias sem catTamanhos)
+        const produtoComTamanhos = categoria.produtos.find((p) => p.tamanhos?.length > 0);
+        if (produtoComTamanhos) {
+          const tamanhosFmt = produtoComTamanhos.tamanhos
+            .map((t) => t.precoComBorda
+              ? `${t.nome}: ${formatarPreco(t.preco)} / com borda: ${formatarPreco(t.precoComBorda)}`
+              : `${t.nome}: ${formatarPreco(t.preco)}`)
+            .join("\n  ");
+          cabecalhoTamanhos = `\n  📏 Tamanhos e preços:\n  ${tamanhosFmt}`;
+        }
       }
 
       const itens = categoria.produtos
         .map((p) => {
+          if (categoria.tamanhos?.length > 0) {
+            const temPadrao = catTemPrecosPadrao(categoria.tamanhos);
+            if (temPadrao) {
+              // Modo pizza: oculta preço se igual ao padrão, destaca se diferente
+              if (p.tamanhos?.length > 0 && !tamanhosIguais(p.tamanhos, categoria.tamanhos)) {
+                const pFmt = p.tamanhos
+                  .map((t) => `${t.nome}: ${formatarPreco(t.preco)}`)
+                  .join(", ");
+                return `  *${p.nome}*${p.descricao ? ` — ${p.descricao}` : ""} ⚡ Preço especial: ${pFmt}`;
+              }
+              return `  *${p.nome}*${p.descricao ? ` — ${p.descricao}` : ""}`;
+            } else {
+              // Modo porção: cada produto mostra seus próprios preços
+              if (p.tamanhos?.length > 0) {
+                const pFmt = p.tamanhos
+                  .map((t) => `${t.nome}: ${formatarPreco(t.preco)}`)
+                  .join(", ");
+                return `  *${p.nome}*: ${pFmt}${p.descricao ? ` — ${p.descricao}` : ""}`;
+              }
+              return `  *${p.nome}*${p.descricao ? ` — ${p.descricao}` : ""}`;
+            }
+          }
           if (p.tamanhos?.length > 0) {
             return `  *${p.nome}*${p.descricao ? ` — ${p.descricao}` : ""}`;
           }
@@ -160,7 +224,7 @@ function montarSystemPrompt(restaurante, cardapio, fidelidade = null, promocoes 
 ## Fluxo de atendimento
 1. **INICIO**: Cumprimente o cliente pelo nome (se souber) e apresente o restaurante. Mostre as categorias disponíveis e pergunte o que ele deseja.
 2. **VENDO_CARDAPIO**: Apresente os itens da categoria solicitada com preços. Permita que o cliente adicione itens.${oferecerFotosFluxo}
-3. **ADICIONANDO_ITEM**: Se o produto tiver tamanhos e o cliente **não** tiver especificado o tamanho na mensagem, pergunte qual tamanho deseja. Se o tamanho já foi mencionado (ex: "pizza grande", "mediana", "família", "broto"), use-o diretamente sem perguntar de novo. Se o tamanho tiver preço "com borda", pergunte também se deseja borda recheada (e informe o valor adicional). Use o preço correto conforme tamanho e borda escolhidos. Confirme o item no carrinho com o nome incluindo tamanho e borda (ex: "Pizza Americana - Mediana com borda"). Em seguida, **se o cardápio tiver bebidas/refrigerantes e o carrinho ainda não tiver nenhuma bebida**, faça uma sugestão natural e breve de refrigerante com base no pedido:
+3. **ADICIONANDO_ITEM**: Se o produto tiver tamanhos e o cliente **não** tiver especificado o tamanho na mensagem, pergunte qual tamanho deseja. Se o tamanho já foi mencionado (ex: "pizza grande", "mediana", "família", "broto"), use-o diretamente sem perguntar de novo. Se a categoria tiver bordas recheadas no cardápio, pergunte se o cliente deseja borda e qual sabor (cite os sabores disponíveis e o preço adicional para o tamanho escolhido). Use o preço total correto (preço do tamanho + preço da borda escolhida). Confirme o item no carrinho com o nome incluindo tamanho e borda (ex: "Pizza Americana - Mediana com borda Cheedar"). Em seguida, **se o cardápio tiver bebidas/refrigerantes e o carrinho ainda não tiver nenhuma bebida**, faça uma sugestão natural e breve de refrigerante com base no pedido:
    - Pedido individual pequeno (1 hambúrguer ou pizza pequena/broto): sugira um refrigerante de 500 mL do cardápio.
    - Pedido maior (pizza média, grande ou família; 2+ hambúrgueres; ou qualquer combinação com mais de 1 item principal): sugira um refrigerante de 2 litros do cardápio.
    - Sempre cite o nome exato e o preço do item sugerido. A sugestão e a pergunta sobre continuar devem ser UMA ÚNICA frase — nunca faça duas perguntas separadas. Exemplo: "Que tal adicionarmos uma *Coca-Cola 2L* (Gs 12.000) nesse pedido, ou prefere fechar sem bebida?" — não adicione depois "Posso adicionar mais alguma coisa?".

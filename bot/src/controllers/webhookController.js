@@ -221,10 +221,15 @@ async function receberMensagem(req, res) {
   }
 
   // Número para o CRM: tenta resolver LID → telefone real
+  // Quando é @lid, também atualiza remoteJid para @s.whatsapp.net (envio funciona melhor)
   let clienteNumero = extrairNumeroCliente(mensagem);
   if (remoteJid.includes("@lid")) {
-    const telefoneReal = await buscarTelefoneDoLID(mensagem.pushName || "", instanceName);
-    if (telefoneReal) clienteNumero = telefoneReal;
+    // Passa o JID completo como fallback para quando pushName está ausente (áudio, imagem, etc.)
+    const telefoneReal = await buscarTelefoneDoLID(mensagem.pushName || "", instanceName, remoteJid);
+    if (telefoneReal) {
+      clienteNumero = telefoneReal;
+      remoteJid = telefoneReal + "@s.whatsapp.net";
+    }
   }
 
   try {

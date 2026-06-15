@@ -10,9 +10,17 @@ const TEMPO_INATIVIDADE_MS = 2 * 60 * 60 * 1000;
  * Se não existir, cria uma nova.
  */
 async function criarOuBuscarSessao(clienteNumero, restauranteId) {
+  // Números com 15+ dígitos são JIDs @lid sem sufixo (iOS com privacidade).
+  // Incluímos esse número alternativo na busca para não criar sessão duplicada
+  // quando a resolução @lid→telefone falha em algumas mensagens (ex: áudios).
+  const isLid = /^\d{15,}$/.test(clienteNumero);
+  const whereNumero = isLid
+    ? { OR: [{ clienteNumero }, { clienteNumero: clienteNumero.replace(/^595/, "") }] }
+    : { clienteNumero };
+
   // Busca sessão não-FINALIZADO mais recente (ordenada por ultimaAtividade)
   const sessaoExistente = await prisma.sessao.findFirst({
-    where: { clienteNumero, restauranteId, estado: { not: "FINALIZADO" } },
+    where: { ...whereNumero, restauranteId, estado: { not: "FINALIZADO" } },
     include: { mensagens: { orderBy: { createdAt: "asc" } } },
     orderBy: { ultimaAtividade: "desc" },
   });
@@ -20,7 +28,7 @@ async function criarOuBuscarSessao(clienteNumero, restauranteId) {
   // Busca sessão FINALIZADO com pedido ainda em andamento (não ENTREGUE/CANCELADO)
   const sessaoComPedidoAtivo = await prisma.sessao.findFirst({
     where: {
-      clienteNumero,
+      ...whereNumero,
       restauranteId,
       estado: "FINALIZADO",
       pedido: { status: { notIn: ["ENTREGUE", "CANCELADO"] } },
@@ -156,23 +164,50 @@ async function buscarSessaoFinalizada(clienteNumero, restauranteId) {
 /**
  * Tenta resolver um JID @lid para o número de telefone real consultando
  * a tabela Contact da Evolution API (mesmo banco PostgreSQL).
- * Correlaciona pelo pushName + instanceName.
+ * Método 1 (primário): correlaciona pelo pushName + instanceName.
+ * Método 2 (fallback): busca diretamente pelo JID @lid quando pushName está ausente
+ *   (ocorre em mensagens de áudio, imagem, reações de contatos iOS).
  * Retorna null se não encontrar.
  */
-async function buscarTelefoneDoLID(pushName, instanceName) {
-  if (!pushName || !instanceName) return null;
+async function buscarTelefoneDoLID(pushName, instanceName, lidJid = null) {
+  if (!instanceName) return null;
   try {
-    const result = await prisma.$queryRaw`
-      SELECT c."remoteJid"
-      FROM "Contact" c
-      JOIN "Instance" i ON c."instanceId" = i.id
-      WHERE i.name = ${instanceName}
-        AND c."pushName" = ${pushName}
-        AND c."remoteJid" LIKE '%@s.whatsapp.net'
-      LIMIT 1
-    `;
-    if (result.length > 0) {
-      return result[0].remoteJid.replace("@s.whatsapp.net", "");
+    // Método 1: por pushName (mais confiável)
+    if (pushName) {
+      const result = await prisma.$queryRaw`
+        SELECT c."remoteJid"
+        FROM "Contact" c
+        JOIN "Instance" i ON c."instanceId" = i.id
+        WHERE i.name = ${instanceName}
+          AND c."pushName" = ${pushName}
+          AND c."remoteJid" LIKE '%@s.whatsapp.net'
+        LIMIT 1
+      `;
+      if (result.length > 0) {
+        return result[0].remoteJid.replace("@s.whatsapp.net", "");
+      }
+    }
+    // Método 2: por JID @lid (fallback quando pushName não está disponível)
+    if (lidJid) {
+      const result2 = await prisma.$queryRaw`
+        SELECT c2."remoteJid"
+        FROM "Contact" c2
+        JOIN "Instance" i ON c2."instanceId" = i.id
+        WHERE i.name = ${instanceName}
+          AND c2."remoteJid" LIKE '%@s.whatsapp.net'
+          AND c2."pushName" = (
+            SELECT c1."pushName" FROM "Contact" c1
+            JOIN "Instance" i1 ON c1."instanceId" = i1.id
+            WHERE i1.name = ${instanceName} AND c1."remoteJid" = ${lidJid}
+            LIMIT 1
+          )
+        LIMIT 1
+      `;
+      if (result2.length > 0) {
+        const telefone = result2[0].remoteJid.replace("@s.whatsapp.net", "");
+        console.log(`[sessao] @lid fallback (sem pushName): ${lidJid} → ${telefone}`);
+        return telefone;
+      }
     }
   } catch (e) {
     console.error("[sessao] erro ao resolver LID para telefone:", e.message);

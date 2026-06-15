@@ -124,7 +124,7 @@ async function finalizarPedido(sessaoId, localizacao, tipoEntrega = "delivery", 
   await enviarPedidoParaDono(pedidoCompleto, sessao.restaurante, tipoEntrega);
 
   // f) Confirmar ao cliente
-  const instanceName = sessao.restaurante.slugWhatsapp;
+  const instanceName = sessao.restaurante.instanceEvolution || sessao.restaurante.slugWhatsapp;
   const numFormatado = formatNumPedido({ ...pedido, localizacao, origem: "WHATSAPP" });
   const pedirComprovante = metodoPagamento === "Transferência";
   const msgConfirmacao = idioma === "es"
@@ -174,7 +174,7 @@ async function enviarPedidoParaDono(pedido, restaurante, tipoEntrega = "delivery
   await enviarMensagem(
     restaurante.donoWhatsapp,
     mensagem,
-    restaurante.slugWhatsapp
+    restaurante.instanceEvolution || restaurante.slugWhatsapp
   );
 }
 
@@ -203,7 +203,7 @@ async function confirmarPedido(pedidoId) {
     ? `🎉 ¡Buenas noticias! El restaurante *${pedido.restaurante.nome}* confirmó tu pedido #${formatNumPedido(pedido)} y ya lo está preparando. 🍽️`
     : `🎉 Boa notícia! O restaurante *${pedido.restaurante.nome}* confirmou seu pedido #${formatNumPedido(pedido)} e já está preparando tudo para você. 🍽️`;
 
-  await enviarMensagem(pedido.clienteNumero, msg, pedido.restaurante.slugWhatsapp);
+  await enviarMensagem(pedido.clienteNumero, msg, pedido.restaurante.instanceEvolution || pedido.restaurante.slugWhatsapp);
 
   return pedido;
 }
@@ -281,7 +281,7 @@ async function notificarStatusPedido(pedidoId, novoStatus) {
 
     const msg = msgs[idioma]?.[novoStatus];
     if (msg) {
-      await enviarMensagem(pedido.clienteNumero, msg, pedido.restaurante.slugWhatsapp);
+      await enviarMensagem(pedido.clienteNumero, msg, pedido.restaurante.instanceEvolution || pedido.restaurante.slugWhatsapp);
     }
   } catch (e) {
     console.error("[pedidoService] notificarStatusPedido:", e.message);

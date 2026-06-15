@@ -25,6 +25,7 @@ model Restaurante {
   cardapioPdfUrl      String?
   dadosTransferencia  String?     // Dados para PIX/transferência exibidos ao cliente
   instrucoes          String?     // Instruções livres para o agente IA (recheios de borda, regras de tamanho, etc.)
+  instanceEvolution   String?     // Nome da instância na Evolution API (se diferente do slugWhatsapp)
   sessoes              Sessao[]
   pedidos              Pedido[]
   turnosCaixa          TurnoCaixa[]

@@ -157,7 +157,7 @@ function iniciarJobLembrete() {
         await enviarMensagem(
           sessao.clienteNumero,
           msg,
-          sessao.restaurante.slugWhatsapp
+          sessao.restaurante.instanceEvolution || sessao.restaurante.slugWhatsapp
         );
 
         await prisma.sessao.update({
@@ -196,7 +196,7 @@ function iniciarJobLembreteComprovante() {
           metodoPagamento: { contains: "Transf", mode: "insensitive" },
         },
         include: {
-          restaurante: { select: { slugWhatsapp: true } },
+          restaurante: { select: { slugWhatsapp: true, instanceEvolution: true } },
           sessao: {
             include: {
               mensagens: {
@@ -226,7 +226,7 @@ function iniciarJobLembreteComprovante() {
         await enviarMensagem(
           pedido.clienteNumero,
           msg,
-          pedido.restaurante.slugWhatsapp
+          pedido.restaurante.instanceEvolution || pedido.restaurante.slugWhatsapp
         ).catch(() => {});
 
         ultimosLembretesComprovante.set(pedido.id, Date.now());

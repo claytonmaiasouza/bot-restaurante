@@ -878,6 +878,17 @@ router.patch("/conversas/:id/pausar", async (req, res) => {
       data: { botPausado: !sessao.botPausado },
     });
 
+    // Propaga botPausado para todas as outras sessões ativas do mesmo cliente
+    await prisma.sessao.updateMany({
+      where: {
+        clienteNumero: sessao.clienteNumero,
+        restauranteId: sessao.restauranteId,
+        estado: { not: "FINALIZADO" },
+        id: { not: sessao.id },
+      },
+      data: { botPausado: atualizada.botPausado },
+    });
+
     io?.to("admin").emit("conversa:atualizada", { id: atualizada.id, botPausado: atualizada.botPausado });
     res.json({ data: { botPausado: atualizada.botPausado } });
   } catch (err) {
@@ -894,14 +905,22 @@ router.delete("/conversas/:id", async (req, res) => {
     });
     if (!sessao) return res.status(404).json({ error: "Sessão não encontrada" });
 
+    const instanceName = sessao.restaurante.instanceEvolution || sessao.restaurante.slugWhatsapp;
     const despedida = "Olá! 👋 Esta conversa foi encerrada pelo nosso atendimento. Caso precise de mais alguma coisa, é só nos chamar. Obrigado! 😊";
-    await enviarMensagem(sessao.clienteNumero, despedida, sessao.restaurante.slugWhatsapp);
+    enviarMensagem(sessao.clienteNumero, despedida, instanceName).catch(e =>
+      console.error("[admin] erro ao enviar despedida:", e.message)
+    );
     await prisma.mensagem.create({
       data: { sessaoId: sessao.id, role: "bot", conteudo: `[admin] ${despedida}` },
     });
 
-    await prisma.sessao.update({
-      where: { id: req.params.id },
+    // Finaliza todas as sessões ativas do mesmo cliente neste restaurante
+    await prisma.sessao.updateMany({
+      where: {
+        clienteNumero: sessao.clienteNumero,
+        restauranteId: sessao.restauranteId,
+        estado: { not: "FINALIZADO" },
+      },
       data: { estado: "FINALIZADO" },
     });
 
@@ -923,7 +942,8 @@ router.post("/conversas/:id/mensagem", async (req, res) => {
     });
     if (!sessao) return res.status(404).json({ error: "Sessão não encontrada" });
 
-    await enviarMensagem(sessao.clienteNumero, mensagem.trim(), sessao.restaurante.slugWhatsapp);
+    const instanceName = sessao.restaurante.instanceEvolution || sessao.restaurante.slugWhatsapp;
+    await enviarMensagem(sessao.clienteNumero, mensagem.trim(), instanceName);
 
     const msg = await prisma.mensagem.create({
       data: { sessaoId: sessao.id, role: "bot", conteudo: `[admin] ${mensagem.trim()}` },

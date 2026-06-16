@@ -143,6 +143,15 @@ function resolverRestauranteId(req) {
   return req.query.restauranteId || req.body?.restauranteId || null;
 }
 
+// ── Helper: bloqueia acesso de um restaurante a recurso de outro tenant ────────
+function denegarOutroTenant(req, res, restauranteId) {
+  if (req.user.role === "restaurante" && req.user.restauranteId !== restauranteId) {
+    res.status(403).json({ error: "Acesso negado" });
+    return true;
+  }
+  return false;
+}
+
 // ── GET /admin/restaurantes ───────────────────────────────────────────────────
 router.get("/restaurantes", async (req, res) => {
   try {
@@ -880,6 +889,9 @@ router.get("/conversas", async (req, res) => {
 
 router.get("/conversas/:id/mensagens", async (req, res) => {
   try {
+    const sessao = await prisma.sessao.findUnique({ where: { id: req.params.id }, select: { restauranteId: true } });
+    if (!sessao) return res.status(404).json({ error: "Sessão não encontrada" });
+    if (denegarOutroTenant(req, res, sessao.restauranteId)) return;
     const mensagens = await prisma.mensagem.findMany({
       where: { sessaoId: req.params.id },
       orderBy: { createdAt: "asc" },
@@ -895,6 +907,7 @@ router.patch("/conversas/:id/pausar", async (req, res) => {
   try {
     const sessao = await prisma.sessao.findUnique({ where: { id: req.params.id } });
     if (!sessao) return res.status(404).json({ error: "Sessão não encontrada" });
+    if (denegarOutroTenant(req, res, sessao.restauranteId)) return;
 
     const atualizada = await prisma.sessao.update({
       where: { id: req.params.id },
@@ -927,6 +940,7 @@ router.delete("/conversas/:id", async (req, res) => {
       include: { restaurante: true },
     });
     if (!sessao) return res.status(404).json({ error: "Sessão não encontrada" });
+    if (denegarOutroTenant(req, res, sessao.restauranteId)) return;
 
     const instanceName = sessao.restaurante.instanceEvolution || sessao.restaurante.slugWhatsapp;
     const despedida = "Olá! 👋 Esta conversa foi encerrada pelo nosso atendimento. Caso precise de mais alguma coisa, é só nos chamar. Obrigado! 😊";
@@ -964,6 +978,7 @@ router.post("/conversas/:id/mensagem", async (req, res) => {
       include: { restaurante: true },
     });
     if (!sessao) return res.status(404).json({ error: "Sessão não encontrada" });
+    if (denegarOutroTenant(req, res, sessao.restauranteId)) return;
 
     const instanceName = sessao.restaurante.instanceEvolution || sessao.restaurante.slugWhatsapp;
     await enviarMensagem(sessao.clienteNumero, mensagem.trim(), instanceName);
@@ -1495,7 +1510,10 @@ router.delete("/restaurantes/:id/upload-cardapio-fotos/:filename", async (req, r
   const restaurante = await prisma.restaurante.findUnique({ where: { id }, select: { cardapioPdfUrl: true } });
   const fotos = parseFotos(restaurante.cardapioPdfUrl).filter(url => !url.endsWith(`/${filename}`));
 
-  const filePath = path.join(UPLOADS_DIR, filename);
+  const filePath = path.resolve(UPLOADS_DIR, filename);
+  if (!filePath.startsWith(UPLOADS_DIR + path.sep)) {
+    return res.status(400).json({ error: "Nome de arquivo inválido" });
+  }
   if (fs.existsSync(filePath)) fs.unlinkSync(filePath);
 
   const newValue = fotos.length > 0 ? JSON.stringify(fotos) : null;
@@ -1674,6 +1692,9 @@ router.post("/cardapio/:restauranteId/categorias", async (req, res) => {
 // PATCH /admin/cardapio/categorias/:id
 router.patch("/cardapio/categorias/:id", async (req, res) => {
   try {
+    const existing = await prisma.categoria.findUnique({ where: { id: req.params.id }, select: { restauranteId: true } });
+    if (!existing) return res.status(404).json({ error: "Categoria não encontrada" });
+    if (denegarOutroTenant(req, res, existing.restauranteId)) return;
     const cat = await atualizarCategoria(req.params.id, req.body);
     await invalidarCachePorCategoriaId(req.params.id);
     res.json({ data: cat });
@@ -1700,6 +1721,9 @@ router.post("/cardapio/categorias/:id/imagem", uploadCatImagem.single("imagem"),
 // DELETE /admin/cardapio/categorias/:id
 router.delete("/cardapio/categorias/:id", async (req, res) => {
   try {
+    const existing = await prisma.categoria.findUnique({ where: { id: req.params.id }, select: { restauranteId: true } });
+    if (!existing) return res.status(404).json({ error: "Categoria não encontrada" });
+    if (denegarOutroTenant(req, res, existing.restauranteId)) return;
     await invalidarCachePorCategoriaId(req.params.id);
     await deletarCategoria(req.params.id);
     res.json({ ok: true });
@@ -1722,6 +1746,9 @@ router.post("/cardapio/categorias/:categoriaId/produtos", async (req, res) => {
 // PATCH /admin/cardapio/produtos/:id
 router.patch("/cardapio/produtos/:id", async (req, res) => {
   try {
+    const existing = await prisma.produto.findUnique({ where: { id: req.params.id }, select: { categoria: { select: { restauranteId: true } } } });
+    if (!existing) return res.status(404).json({ error: "Produto não encontrado" });
+    if (denegarOutroTenant(req, res, existing.categoria.restauranteId)) return;
     const produto = await atualizarProduto(req.params.id, req.body);
     await invalidarCachePorProdutoId(req.params.id);
     res.json({ data: produto });
@@ -1733,6 +1760,9 @@ router.patch("/cardapio/produtos/:id", async (req, res) => {
 // DELETE /admin/cardapio/produtos/:id
 router.delete("/cardapio/produtos/:id", async (req, res) => {
   try {
+    const existing = await prisma.produto.findUnique({ where: { id: req.params.id }, select: { categoria: { select: { restauranteId: true } } } });
+    if (!existing) return res.status(404).json({ error: "Produto não encontrado" });
+    if (denegarOutroTenant(req, res, existing.categoria.restauranteId)) return;
     await invalidarCachePorProdutoId(req.params.id);
     await deletarProduto(req.params.id);
     res.json({ ok: true });
@@ -1744,6 +1774,9 @@ router.delete("/cardapio/produtos/:id", async (req, res) => {
 // PATCH /admin/cardapio/tamanhos/:id
 router.patch("/cardapio/tamanhos/:id", async (req, res) => {
   try {
+    const existing = await prisma.tamanho.findUnique({ where: { id: req.params.id }, select: { produto: { select: { categoria: { select: { restauranteId: true } } } } } });
+    if (!existing) return res.status(404).json({ error: "Tamanho não encontrado" });
+    if (denegarOutroTenant(req, res, existing.produto.categoria.restauranteId)) return;
     const tamanho = await atualizarTamanho(req.params.id, req.body);
     res.json({ data: tamanho });
   } catch (err) {
@@ -1754,6 +1787,9 @@ router.patch("/cardapio/tamanhos/:id", async (req, res) => {
 // DELETE /admin/cardapio/tamanhos/:id
 router.delete("/cardapio/tamanhos/:id", async (req, res) => {
   try {
+    const existing = await prisma.tamanho.findUnique({ where: { id: req.params.id }, select: { produto: { select: { categoria: { select: { restauranteId: true } } } } } });
+    if (!existing) return res.status(404).json({ error: "Tamanho não encontrado" });
+    if (denegarOutroTenant(req, res, existing.produto.categoria.restauranteId)) return;
     await deletarTamanho(req.params.id);
     res.json({ ok: true });
   } catch (err) {
@@ -2151,6 +2187,9 @@ router.post("/estoque", async (req, res) => {
 
 router.put("/estoque/:id", async (req, res) => {
   const { nome, categoria, unidade, quantidadeAtual, quantidadeMinima, precoUnitario, fornecedor } = req.body;
+  const existing = await prisma.itemEstoque.findUnique({ where: { id: req.params.id }, select: { restauranteId: true } });
+  if (!existing) return res.status(404).json({ error: "Item não encontrado" });
+  if (denegarOutroTenant(req, res, existing.restauranteId)) return;
   const item = await prisma.itemEstoque.update({
     where: { id: req.params.id },
     data: {
@@ -2165,6 +2204,9 @@ router.put("/estoque/:id", async (req, res) => {
 });
 
 router.delete("/estoque/:id", async (req, res) => {
+  const existing = await prisma.itemEstoque.findUnique({ where: { id: req.params.id }, select: { restauranteId: true } });
+  if (!existing) return res.status(404).json({ error: "Item não encontrado" });
+  if (denegarOutroTenant(req, res, existing.restauranteId)) return;
   await prisma.itemEstoque.update({ where: { id: req.params.id }, data: { ativo: false } });
   res.json({ ok: true });
 });
@@ -2175,6 +2217,7 @@ router.post("/estoque/:id/movimentacao", async (req, res) => {
   if (!tipo || !qtd || !motivo) return res.status(400).json({ error: "tipo, quantidade e motivo são obrigatórios" });
   const item = await prisma.itemEstoque.findUnique({ where: { id: req.params.id } });
   if (!item) return res.status(404).json({ error: "Item não encontrado" });
+  if (denegarOutroTenant(req, res, item.restauranteId)) return;
 
   let novaQtd = item.quantidadeAtual;
   if (tipo === "ENTRADA") novaQtd += qtd;
@@ -2196,6 +2239,9 @@ router.post("/estoque/:id/movimentacao", async (req, res) => {
 });
 
 router.get("/estoque/:id/movimentacoes", async (req, res) => {
+  const existing = await prisma.itemEstoque.findUnique({ where: { id: req.params.id }, select: { restauranteId: true } });
+  if (!existing) return res.status(404).json({ error: "Item não encontrado" });
+  if (denegarOutroTenant(req, res, existing.restauranteId)) return;
   const movs = await prisma.movimentacaoEstoque.findMany({
     where: { itemId: req.params.id },
     orderBy: { createdAt: "desc" },
@@ -2386,6 +2432,9 @@ router.post("/mesas/:num/fechar", async (req, res) => {
 
 router.patch("/pedidos/:id/mesa", async (req, res) => {
   const { itens, metodoPagamento } = req.body;
+  const existing = await prisma.pedido.findUnique({ where: { id: req.params.id }, select: { restauranteId: true } });
+  if (!existing) return res.status(404).json({ error: "Pedido não encontrado" });
+  if (denegarOutroTenant(req, res, existing.restauranteId)) return;
   const total = itens.reduce((s, i) => s + i.preco * i.quantidade, 0);
   const upd = { itens, total };
   if (metodoPagamento !== undefined) upd.metodoPagamento = metodoPagamento;
@@ -2579,6 +2628,9 @@ router.put("/promocoes/:id", async (req, res) => {
   const { id } = req.params;
   const { nome, descricao, precoPromocional, ativa } = req.body;
   try {
+    const existing = await prisma.promocao.findUnique({ where: { id }, select: { restauranteId: true } });
+    if (!existing) return res.status(404).json({ error: "Promoção não encontrada" });
+    if (denegarOutroTenant(req, res, existing.restauranteId)) return;
     const data = await prisma.promocao.update({
       where: { id },
       data: { ...(nome && { nome }), descricao: descricao ?? undefined, precoPromocional: precoPromocional != null ? parseFloat(precoPromocional) : null, ...(ativa !== undefined && { ativa }) },
@@ -2590,6 +2642,9 @@ router.put("/promocoes/:id", async (req, res) => {
 router.delete("/promocoes/:id", async (req, res) => {
   const { id } = req.params;
   try {
+    const existing = await prisma.promocao.findUnique({ where: { id }, select: { restauranteId: true } });
+    if (!existing) return res.status(404).json({ error: "Promoção não encontrada" });
+    if (denegarOutroTenant(req, res, existing.restauranteId)) return;
     await prisma.promocao.delete({ where: { id } });
     res.json({ ok: true });
   } catch (err) { res.status(500).json({ error: err.message }); }
@@ -2601,7 +2656,7 @@ const bcryptAdmin = require("bcryptjs");
 router.get("/garcons/:restauranteId", authMiddleware, async (req, res) => {
   const garcons = await prisma.garcon.findMany({
     where: { restauranteId: req.params.restauranteId, ativo: true },
-    select: { id: true, nome: true, telefone: true, cedula: true, cor: true, senhaHash: true, createdAt: true },
+    select: { id: true, nome: true, telefone: true, cedula: true, cor: true, createdAt: true },
     orderBy: { nome: "asc" },
   });
   res.json({ data: garcons });
@@ -2662,6 +2717,9 @@ router.post("/pedidos/balcao", authMiddleware, async (req, res) => {
 // ── Ticket reimpressão ────────────────────────────────────────────────────────
 router.put("/pedidos/:id/ticket", authMiddleware, async (req, res) => {
   const { ticketHtml } = req.body;
+  const existing = await prisma.pedido.findUnique({ where: { id: req.params.id }, select: { restauranteId: true } });
+  if (!existing) return res.status(404).json({ error: "Pedido não encontrado" });
+  if (denegarOutroTenant(req, res, existing.restauranteId)) return;
   await prisma.pedido.update({ where: { id: req.params.id }, data: { ticketHtml } });
   res.json({ ok: true });
 });

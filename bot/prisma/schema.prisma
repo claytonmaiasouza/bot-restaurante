@@ -32,7 +32,18 @@ model Restaurante {
   categorias           Categoria[]
   programasFidelidade  ProgramaFidelidade[]
   motoboys             Motoboy[]
+  garcons              Garcon[]
   clientesFidelidade   ClienteFidelidade[]
+  // Dados para Factura Legal (Paraguay RUC/SET)
+  faturaRuc          String?
+  faturaRazaoSocial  String?
+  faturaEndereco     String?
+  faturaCiudad       String?
+  faturaTelefone     String?
+  faturaTimbrado     String?
+  faturaVencTimbrado String?
+  faturaSerie        String   @default("001-001")
+  faturaProximoNum   Int      @default(1)
   campanhas            CampanhaMarketing[]
   itensEstoque         ItemEstoque[]
   custosMensais        CustoMensal[]
@@ -123,6 +134,10 @@ model Pedido {
   motoboyNome   String?     // nome denormalizado para exibição
   mesa          Int?        // número da mesa (null = pedido via WhatsApp)
   origem        String      @default("WHATSAPP") // WHATSAPP | MESA
+  garconId      String?
+  garconNome    String?
+  garconCor     String?
+  ticketHtml    String?
   numeroDia      Int?        // sequencial diário reiniciado a cada dia por restaurante
   comprovanteUrl String?    // URL da foto do comprovante de pagamento enviado pelo cliente
   createdAt      DateTime   @default(now())
@@ -174,6 +189,19 @@ model Motoboy {
   cedula        String?     // número de cédula de identidade
   placa         String?     // placa da moto
   senhaHash     String?     // senha para login no painel do motoboy (bcrypt)
+  restauranteId String
+  restaurante   Restaurante @relation(fields: [restauranteId], references: [id], onDelete: Cascade)
+  ativo         Boolean     @default(true)
+  createdAt     DateTime    @default(now())
+}
+
+model Garcon {
+  id            String      @id @default(uuid())
+  nome          String
+  telefone      String?
+  cedula        String?
+  senhaHash     String?
+  cor           String      @default("#6366f1")
   restauranteId String
   restaurante   Restaurante @relation(fields: [restauranteId], references: [id], onDelete: Cascade)
   ativo         Boolean     @default(true)

@@ -206,7 +206,7 @@ async function receberMensagem(req, res) {
   let remoteJid = extrairJidEnvio(mensagem);
   if (!remoteJid) return;
 
-  const instanceName = evento.instance || restaurante.slugWhatsapp;
+  const instanceName = restaurante.instanceEvolution || evento.instance || restaurante.slugWhatsapp;
 
   // Alguns eventos do Evolution API omitem o sufixo @lid para contatos iOS —
   // nesse caso buscamos o JID completo na tabela Contact para poder enviar corretamente.
@@ -229,6 +229,10 @@ async function receberMensagem(req, res) {
     if (telefoneReal) {
       clienteNumero = telefoneReal;
       remoteJid = telefoneReal + "@s.whatsapp.net";
+    } else {
+      // LID não resolvido: ignorar para não criar sessão fantasma com número inválido
+      console.warn(`[webhook] LID não resolvido: ${remoteJid} — mensagem ignorada`);
+      return;
     }
   }
 
@@ -240,9 +244,13 @@ async function receberMensagem(req, res) {
       const sessaoFinalizada = await buscarSessaoFinalizada(clienteNumero, restaurante.id);
       if (sessaoFinalizada) {
         let { base64, mimeType } = await baixarMidiaBase64(instanceName, mensagem);
-        // Evolution API pode ainda não ter a mídia disponível — aguarda e tenta uma vez mais
+        // Evolution API pode ainda não ter a mídia disponível — tenta até 3 vezes
         if (!base64) {
           await new Promise(r => setTimeout(r, 3000));
+          ({ base64, mimeType } = await baixarMidiaBase64(instanceName, mensagem));
+        }
+        if (!base64) {
+          await new Promise(r => setTimeout(r, 7000));
           ({ base64, mimeType } = await baixarMidiaBase64(instanceName, mensagem));
         }
         if (base64) {
@@ -617,6 +625,11 @@ async function receberMensagem(req, res) {
 
     const { resposta, novoEstado, carrinhoAtualizado, pedidoPronto, tipoEntrega, mostrarFotos } =
       await processarMensagem(sessao, textoCliente, restaurante, cardapio, fidelidade, promocoes);
+
+    if (!resposta) {
+      console.warn(`[webhook] resposta vazia do Claude para ${clienteNumero} — ignorando envio`);
+      return;
+    }
 
     // ── e) Persistir ──────────────────────────────────────────────────────────
     await Promise.all([

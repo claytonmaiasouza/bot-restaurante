@@ -27,7 +27,7 @@
       "Bash(ssh root@185.137.92.141 \"docker logs bot-app --tail 10\")",
       "Bash(ssh root@185.137.92.141 \"docker exec bot-app grep -n 'main-scroll\\\\|min-h-0\\\\|pt-2\\\\|mostrarSecao' /app/public/painel.html | head -20\")",
       "Bash(ssh root@185.137.92.141 \"docker exec bot-app grep -n 'id=\\\\\"app\\\\\"\\\\|id=\\\\\"painel-principal\\\\\"\\\\|static\\\\|Cache' /app/public/painel.html | head -10\")",
-      "Bash(awk 'NR>=505 && NR<=720 {if \\(/<div/\\) opens++; if \\(/<\\\\/div>/\\) closes++} END {print \"opens:\", opens, \"closes:\", closes}' \"d:/atendenterestaurante/bot-restaurante/bot/public/painel.html\")",
+      "Bash(awk 'NR>=505 && NR<=720 {if \\(/<div/\\) opens++; if \\(/<\\\\/div>/\\) closes++} END {print \"opens:\", opens, \"closes:\", closes}' bot/public/painel.html)",
       "Bash(scp bot/public/painel.html root@185.137.92.141:/tmp/painel.html)",
       "Bash(ssh root@185.137.92.141 \"docker cp /tmp/painel.html bot-app:/app/public/painel.html && echo OK\")",
       "Bash(ssh root@185.137.92.141 \"curl -s https://bot.guiafinanceiro.pro/painel.html | head -50\")",

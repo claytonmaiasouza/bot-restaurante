@@ -177,6 +177,8 @@ function montarSystemPrompt(restaurante, cardapio, fidelidade = null, promocoes 
     ? `\n- Taxa de entrega fixa: ${formatarPreco(restaurante.taxaEntrega)}`
     : "\n- Entrega grátis";
 
+  const urlSelfService = `${process.env.BOT_PUBLIC_URL || 'https://bot.guiafinanceiro.pro'}/cardapio.html?slug=${restaurante.slugWhatsapp}`;
+
   let fotosInfo = "";
   let oferecerFotosFluxo = "";
   if (restaurante.cardapioPdfUrl) {
@@ -222,7 +224,7 @@ function montarSystemPrompt(restaurante, cardapio, fidelidade = null, promocoes 
 - **Múltiplos sabores:** Uma pizza pode ser feita com até 3 sabores diferentes. Ao apresentar o cardápio de pizzas, informe isso de forma natural (ex: "Você pode combinar até 3 sabores em uma mesma pizza!"). Quando o cliente quiser mais de um sabor, registre no carrinho como "Pizza [Sabor1]/[Sabor2]/[Sabor3] - [Tamanho]" usando o preço do tamanho escolhido (o preço não muda por ter mais sabores). Se pedir apenas um sabor, registre normalmente.
 
 ## Fluxo de atendimento
-1. **INICIO**: Cumprimente o cliente pelo nome (se souber) e apresente o restaurante. Mostre as categorias disponíveis e pergunte o que ele deseja.
+1. **INICIO**: Cumprimente o cliente pelo nome (se souber) e apresente o restaurante. Ofereça o link para pedido self-service de forma natural e breve: "${urlSelfService}" — apresente como opção para quem preferir montar o pedido pelo site. Depois mostre as categorias disponíveis e pergunte o que ele deseja. Não repita o link em outras etapas do atendimento.
 2. **VENDO_CARDAPIO**: Apresente os itens da categoria solicitada com preços. Permita que o cliente adicione itens.${oferecerFotosFluxo}
 3. **ADICIONANDO_ITEM**: Se o produto tiver tamanhos e o cliente **não** tiver especificado o tamanho na mensagem, pergunte qual tamanho deseja. Se o tamanho já foi mencionado (ex: "pizza grande", "mediana", "família", "broto"), use-o diretamente sem perguntar de novo. Se a categoria tiver bordas recheadas no cardápio, pergunte se o cliente deseja borda e qual sabor (cite os sabores disponíveis e o preço adicional para o tamanho escolhido). Use o preço total correto (preço do tamanho + preço da borda escolhida). Confirme o item no carrinho com o nome incluindo tamanho e borda (ex: "Pizza Americana - Mediana com borda Cheedar"). Em seguida, **se o cardápio tiver bebidas/refrigerantes e o carrinho ainda não tiver nenhuma bebida**, faça uma sugestão natural e breve de refrigerante com base no pedido:
    - Pedido individual pequeno (1 hambúrguer ou pizza pequena/broto): sugira um refrigerante de 500 mL do cardápio.
@@ -264,19 +266,28 @@ Ao final de CADA resposta, inclua obrigatoriamente um bloco JSON no seguinte for
 
 // ── Extrai o JSON estruturado da resposta ────────────────────────────────────
 function extrairDadosEstruturados(texto) {
-  const regex = /\|\|\|JSON\|\|\|([\s\S]*?)\|\|\|FIM\|\|\|/;
-  const match = texto.match(regex);
-  if (!match) return { estado: null, carrinho: [], pedidoPronto: false, mostrarFotos: false };
-  try {
-    return JSON.parse(match[1].trim());
-  } catch {
-    return { estado: null, carrinho: [], pedidoPronto: false, mostrarFotos: false };
+  // Tenta delimitadores primários |||JSON|||...|||FIM|||
+  const match = texto.match(/\|\|\|JSON\|\|\|([\s\S]*?)\|\|\|FIM\|\|\|/);
+  if (match) {
+    try { return JSON.parse(match[1].trim()); } catch {}
   }
+  // Fallback: bloco markdown ```json ... ``` (Claude às vezes ignora os delimitadores)
+  const mdMatch = texto.match(/```(?:json)?\s*([\s\S]*?)```/);
+  if (mdMatch) {
+    try {
+      const parsed = JSON.parse(mdMatch[1].trim());
+      if (parsed.estado) return parsed;
+    } catch {}
+  }
+  return { estado: null, carrinho: [], pedidoPronto: false, mostrarFotos: false };
 }
 
 // ── Remove o bloco JSON da resposta antes de enviar ao cliente ───────────────
 function limparResposta(texto) {
-  return texto.replace(/\|\|\|JSON\|\|\|[\s\S]*?\|\|\|FIM\|\|\|/g, "").trim();
+  return texto
+    .replace(/\|\|\|JSON\|\|\|[\s\S]*?\|\|\|FIM\|\|\|/g, "")
+    .replace(/```(?:json)?\s*[\s\S]*?```/g, "")
+    .trim();
 }
 
 // ── Monta histórico de mensagens ─────────────────────────────────────────────

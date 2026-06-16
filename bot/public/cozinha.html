@@ -233,11 +233,27 @@ function criarCard(p) {
       <span class="text-sm font-semibold ${urgencyClass(p.createdAt)} flex-shrink-0 ml-2" id="tempo-${p.id}">${elapsed(p.createdAt)}</span>
     </div>
     <div class="space-y-2 mb-4 border-t border-slate-700 pt-3">
-      ${itens.map(i => `
-        <div class="flex items-center gap-3 bg-slate-700/50 rounded-xl px-3 py-2">
-          <span class="text-2xl font-black text-amber-400 leading-none w-8 text-center flex-shrink-0">${i.quantidade||1}×</span>
-          <span class="text-base font-bold text-white leading-tight">${i.nome}</span>
-        </div>`).join('')}
+      ${itens.map(i => {
+        const slashIdx = i.nome.indexOf(' / ');
+        if (slashIdx < 0) {
+          return `<div class="flex items-center gap-3 bg-slate-700/50 rounded-xl px-3 py-2">
+            <span class="text-2xl font-black text-amber-400 leading-none w-8 text-center flex-shrink-0">${i.quantidade||1}×</span>
+            <span class="text-base font-bold text-white leading-tight">${i.nome}</span>
+          </div>`;
+        }
+        // Pizza com múltiplos sabores: separa por " - " (tamanho) e " / " (sabores)
+        const dashIdx = i.nome.lastIndexOf(' - ');
+        const saboresPart = dashIdx >= 0 ? i.nome.substring(0, dashIdx) : i.nome;
+        const tamPart = dashIdx >= 0 ? i.nome.substring(dashIdx + 3) : '';
+        const sabores = saboresPart.split(' / ');
+        return `<div class="flex items-start gap-3 bg-slate-700/50 rounded-xl px-3 py-2.5">
+          <span class="text-2xl font-black text-amber-400 leading-none w-8 text-center flex-shrink-0 mt-0.5">${i.quantidade||1}×</span>
+          <div class="flex-1 min-w-0">
+            ${tamPart ? `<p class="text-xs font-bold text-amber-300/70 mb-1.5 uppercase tracking-wide">${tamPart}</p>` : ''}
+            ${sabores.map((s, idx) => `<p class="text-sm font-bold text-white leading-snug mb-0.5"><span class="text-slate-400 font-normal mr-1">${idx+1}.</span>${s}</p>`).join('')}
+          </div>
+        </div>`;
+      }).join('')}
     </div>
     ${p.clienteNome ? `<p class="text-xs text-slate-500 mb-3">👤 ${p.clienteNome}</p>` : ''}
     <button class="btn-acao w-full py-3 rounded-xl font-bold text-sm transition ${btnClasse}"

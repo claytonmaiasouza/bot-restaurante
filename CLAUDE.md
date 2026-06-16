@@ -11,7 +11,7 @@ Pode executar **sem pedir confirmação**:
 - `git add`, `git commit`, `git push`
 - `ssh` para leitura de logs, verificação de status, testes de API
 
-Deve **perguntar antes** de executar:
+Deve **perguntar antes** de executar e exibir uma mensagem em cor vermelha em maiúscula sobre os riscos deste procedimento, pedir também uma confirmação por escrito, o usuário deve escrever a palavra PROSSEGUIR para continuar:
 - `docker compose up -d` — recria containers e apaga tudo que foi copiado via `docker cp`
 - `docker rmi` / `docker system prune`
 - `rm -rf` em qualquer diretório de produção
@@ -134,6 +134,8 @@ Ficam em `/opt/bot-restaurante/.env` e são passadas ao container via `docker-co
 | `ADMIN_TOKEN` | Token para rotas `/admin` e `/onboarding` |
 | `BOT_PUBLIC_URL` | `https://bot.guiafinanceiro.pro` |
 | `OPENAI_API_KEY` | Whisper para transcrição de áudios |
+| `STRAPI_URL` | `http://185.137.92.141:1337` (CMS legado, pode estar inativo) |
+| `STRAPI_TOKEN` | Token de API do Strapi |
 | `PORT` | `3000` |
 
 ---
@@ -169,6 +171,7 @@ bot-restaurante/
         sessaoService.js      — criarOuBuscarSessao / atualizarSessao / salvarMensagem
         cardapioService.js    — CRUD cardápio local + buscarContextoFidelidade
         tenantService.js      — cache em memória TTL 5 min, resolverRestaurante
+        strapiService.js      — integração CMS legado (Strapi)
         transcricaoService.js — OpenAI Whisper para áudios do WhatsApp
       jobs/
         limpeza.js            — sessões inativas (*/30min), relatório diário (00:05)
@@ -182,7 +185,7 @@ bot-restaurante/
 |---|---|
 | `Restaurante` | `slugWhatsapp` (PK lógica), `horarioAtendimento` (JSON), `cardapioPdfUrl` (URL ou JSON array de URLs), `dadosTransferencia`, `instrucoes` (prompt livre para o Claude) |
 | `Sessao` | `estado` (INICIO→FINALIZADO), `carrinho` (JSON), `botPausado`, `localizacaoPendente` |
-| `Pedido` | `itens` (JSON), `status` (NOVO→ENTREGUE), `metodoPagamento`, `numeroDia`, `comprovanteUrl`, `origem` (WHATSAPP\|MESA) |
+| `Pedido` | `itens` (JSON), `status` (NOVO→ENTREGUE), `metodoPagamento`, `numeroDia`, `origem` (WHATSAPP\|MESA) |
 | `ClienteFidelidade` | Por `(numero, restauranteId)` — `totalPedidos`, `totalGasto`, `resgates` |
 | `ProgramaFidelidade` | `tipo` (PEDIDOS\|VALOR), `meta` |
 | `Motoboy` | `nome`, `telefone` (WhatsApp) |
@@ -191,7 +194,7 @@ bot-restaurante/
 | `CampanhaMarketing` | Disparos em massa |
 | `CustoMensal` | Custos fixos e variáveis por mês |
 
-> O schema local em `bot/prisma/schema.prisma` é a fonte da verdade. O container Docker pode ter o Prisma client desatualizado se o schema evoluiu depois do último build — nesse caso rodar `docker exec bot-app sh -c 'cd /app && npx prisma generate'` + `docker restart bot-app`.
+> O schema local em `bot/prisma/schema.prisma` é a fonte da verdade. O container Docker pode ter o Prisma client desatualizado se o schema mudou após o último build — nesse caso rodar `docker exec bot-app sh -c 'cd /app && npx prisma generate'` + `docker restart bot-app`.
 
 ---
 
@@ -263,7 +266,7 @@ Resposta estruturada — Claude retorna JSON entre delimitadores `|||JSON|||` e 
   "mostrarFotos": false
 }
 ```
-- `mostrarFotos: true` → `webhookController` envia as fotos do cardápio via `enviarImagem`
+- `mostrarFotos: true` → `webhookController` envia as fotos via `enviarImagem` (Evolution API)
 
 ---
 
@@ -274,7 +277,6 @@ Resposta estruturada — Claude retorna JSON entre delimitadores `|||JSON|||` e 
 | `conversa:mensagem` | Nova mensagem de cliente ou bot |
 | `conversa:encerrada` | Sessão encerrada (pedido finalizado) |
 | `pedido:novo` | Novo pedido criado |
-| `pedido:comprovante` | Cliente enviou foto do comprovante de pagamento |
 
 Salas:
 - `admin` — painel geral (todos os restaurantes)
@@ -294,18 +296,6 @@ Upload via painel: `POST /admin/restaurantes/:id/upload-cardapio-fotos`
 
 ---
 
-## Comprovante de Pagamento
-
-Quando o cliente envia uma foto após o pedido ser finalizado:
-1. `webhookController` detecta `messageType === "imageMessage"` + `sessao.estado === "FINALIZADO"`
-2. Baixa a imagem via `baixarMidiaBase64` (Evolution API)
-3. Salva em `/app/public/uploads/comprovantes/`
-4. Atualiza `Pedido.comprovanteUrl` via `salvarComprovante(sessaoId, url)`
-5. Emite `pedido:comprovante` via Socket.IO para o painel
-6. Painel exibe thumbnail no card do pedido e transforma o botão "💳 Pago" em "✅ Confirmar Pagamento"
-
----
-
 ## Jobs Agendados
 
 | Job | Cron | Função |
@@ -317,10 +307,10 @@ Quando o cliente envia uma foto após o pedido ser finalizado:
 
 ## Restaurantes em Produção
 
-| Restaurante | Slug WhatsApp | Moeda |
-|---|---|---|
-| Don Pedro Pizzeria & Heladeria | `31645730876` | G$ |
-| Fuego Burger | `595984743801` | Gs |
+| Restaurante | Slug WhatsApp |
+|---|---|
+| (restaurante 1) | `31645730876` |
+| (restaurante 2) | `595984743801` |
 
 ---
 

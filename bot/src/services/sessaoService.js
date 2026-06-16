@@ -10,22 +10,21 @@ const TEMPO_INATIVIDADE_MS = 2 * 60 * 60 * 1000;
  * Se não existir, cria uma nova.
  */
 async function criarOuBuscarSessao(clienteNumero, restauranteId) {
-  // Números com 15+ dígitos são JIDs @lid sem sufixo (iOS com privacidade).
-  // Incluímos esse número alternativo na busca para não criar sessão duplicada
-  // quando a resolução @lid→telefone falha em algumas mensagens (ex: áudios).
   const isLid = /^\d{15,}$/.test(clienteNumero);
   const whereNumero = isLid
     ? { OR: [{ clienteNumero }, { clienteNumero: clienteNumero.replace(/^595/, "") }] }
     : { clienteNumero };
 
-  // Busca sessão não-FINALIZADO mais recente (ordenada por ultimaAtividade)
-  const sessaoExistente = await prisma.sessao.findFirst({
-    where: { ...whereNumero, restauranteId, estado: { not: "FINALIZADO" } },
+  // 1. Sessão em estado AVANÇADO (não INICIO, não FINALIZADO) — maior prioridade,
+  //    independente da data. Evita que uma sessão INICIO mais recente "vença" uma
+  //    sessão em AGUARDANDO_LOCALIZACAO ou CONFIRMANDO_PEDIDO.
+  const sessaoAtiva = await prisma.sessao.findFirst({
+    where: { ...whereNumero, restauranteId, estado: { notIn: ["FINALIZADO", "INICIO"] } },
     include: { mensagens: { orderBy: { createdAt: "asc" } } },
     orderBy: { ultimaAtividade: "desc" },
   });
 
-  // Busca sessão FINALIZADO com pedido ainda em andamento (não ENTREGUE/CANCELADO)
+  // 2. Sessão FINALIZADO com pedido ainda em andamento (não ENTREGUE/CANCELADO)
   const sessaoComPedidoAtivo = await prisma.sessao.findFirst({
     where: {
       ...whereNumero,
@@ -37,26 +36,25 @@ async function criarOuBuscarSessao(clienteNumero, restauranteId) {
     orderBy: { ultimaAtividade: "desc" },
   });
 
-  // Se ambas existem, retorna a mais recente (pedido ativo tem prioridade se for mais novo)
-  if (sessaoExistente && sessaoComPedidoAtivo) {
-    const pedidoAtivoEhMaisRecente =
-      sessaoComPedidoAtivo.ultimaAtividade > sessaoExistente.ultimaAtividade;
-    const chosen = pedidoAtivoEhMaisRecente ? sessaoComPedidoAtivo : sessaoExistente;
+  // Sessão ativa avançada tem prioridade absoluta sobre pedido ativo
+  if (sessaoAtiva && sessaoComPedidoAtivo) {
+    const pedidoEhMaisRecente = sessaoComPedidoAtivo.ultimaAtividade > sessaoAtiva.ultimaAtividade;
+    const chosen = pedidoEhMaisRecente ? sessaoComPedidoAtivo : sessaoAtiva;
     await prisma.sessao.update({
       where: { id: chosen.id },
-      data: pedidoAtivoEhMaisRecente
+      data: pedidoEhMaisRecente
         ? { ultimaAtividade: new Date() }
         : { ultimaAtividade: new Date(), lembreteEnviado: false },
     });
     return chosen;
   }
 
-  if (sessaoExistente) {
+  if (sessaoAtiva) {
     await prisma.sessao.update({
-      where: { id: sessaoExistente.id },
+      where: { id: sessaoAtiva.id },
       data: { ultimaAtividade: new Date(), lembreteEnviado: false },
     });
-    return sessaoExistente;
+    return sessaoAtiva;
   }
 
   if (sessaoComPedidoAtivo) {
@@ -67,8 +65,7 @@ async function criarOuBuscarSessao(clienteNumero, restauranteId) {
     return sessaoComPedidoAtivo;
   }
 
-  // Sessão FINALIZADO com pedido ENTREGUE aguardando comprovante: retorna ela
-  // em vez de criar nova INICIO (evita sessão órfã enquanto pagamento pendente)
+  // 3. Sessão FINALIZADO com pedido ENTREGUE aguardando comprovante
   const sessaoComPagamentoPendente = await prisma.sessao.findFirst({
     where: {
       clienteNumero,
@@ -92,7 +89,22 @@ async function criarOuBuscarSessao(clienteNumero, restauranteId) {
     return sessaoComPagamentoPendente;
   }
 
-  // Cria nova sessão INICIO
+  // 4. Sessão INICIO existente — reutiliza em vez de criar nova
+  const sessaoInicio = await prisma.sessao.findFirst({
+    where: { ...whereNumero, restauranteId, estado: "INICIO" },
+    include: { mensagens: { orderBy: { createdAt: "asc" } } },
+    orderBy: { ultimaAtividade: "desc" },
+  });
+
+  if (sessaoInicio) {
+    await prisma.sessao.update({
+      where: { id: sessaoInicio.id },
+      data: { ultimaAtividade: new Date(), lembreteEnviado: false },
+    });
+    return sessaoInicio;
+  }
+
+  // 5. Cria nova sessão INICIO
   return prisma.sessao.create({
     data: { clienteNumero, restauranteId, estado: "INICIO", carrinho: [] },
     include: { mensagens: true },

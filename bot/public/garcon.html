@@ -1,0 +1,1022 @@
+<!DOCTYPE html>
+<html lang="pt-BR">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width,initial-scale=1,maximum-scale=1,user-scalable=no">
+<meta name="mobile-web-app-capable" content="yes">
+<meta name="apple-mobile-web-app-capable" content="yes">
+<meta name="apple-mobile-web-app-status-bar-style" content="black-translucent">
+<meta name="apple-mobile-web-app-title" content="Garçom">
+<meta name="theme-color" content="#6366f1">
+<title>Garçom</title>
+<link id="pwa-manifest" rel="manifest">
+<link rel="apple-touch-icon" href="/icons/garcon-icon.svg">
+<script src="/socket.io/socket.io.js"></script>
+<style>
+*{box-sizing:border-box;margin:0;padding:0;-webkit-tap-highlight-color:transparent}
+body{font-family:-apple-system,BlinkMacSystemFont,'Segoe UI',sans-serif;background:#f6f6f6;min-height:100vh;overflow-x:hidden}
+.screen{display:none;flex-direction:column;min-height:100vh}
+.screen.active{display:flex}
+/* Login */
+#screen-login{align-items:center;justify-content:center;padding:32px 24px;background:linear-gradient(135deg,#4f46e5,#7c3aed)}
+.login-card{background:#fff;border-radius:24px;padding:32px 24px;width:100%;max-width:360px;box-shadow:0 20px 60px rgba(0,0,0,.18)}
+.login-logo{text-align:center;font-size:56px;margin-bottom:8px}
+.login-title{text-align:center;font-size:22px;font-weight:800;color:#1a202c;margin-bottom:4px}
+.login-sub{text-align:center;font-size:13px;color:#9ca3af;margin-bottom:28px}
+.form-group{margin-bottom:16px}
+.form-group label{display:block;font-size:12px;font-weight:600;color:#4b5563;margin-bottom:6px;text-transform:uppercase;letter-spacing:.5px}
+.form-group select,.form-group input{width:100%;padding:12px 14px;border:2px solid #e5e7eb;border-radius:12px;font-size:15px;color:#1a202c;background:#fff;outline:none;transition:border-color .15s}
+.form-group select:focus,.form-group input:focus{border-color:#6366f1}
+.btn-primary{width:100%;padding:14px;background:#6366f1;color:#fff;font-size:16px;font-weight:700;border:none;border-radius:12px;cursor:pointer;transition:background .15s;margin-top:8px}
+.btn-primary:hover{background:#4f46e5}
+.btn-primary:active{background:#4338ca}
+.login-err{color:#ef4444;font-size:13px;text-align:center;margin-top:10px;min-height:18px}
+/* Header */
+.app-header{background:#fff;padding:12px 16px;display:flex;align-items:center;gap:10px;border-bottom:1.5px solid #f0f0f0;position:sticky;top:0;z-index:50;box-shadow:0 1px 6px rgba(0,0,0,.06)}
+.app-header .back-btn{width:34px;height:34px;border-radius:50%;background:#f6f6f6;border:none;cursor:pointer;font-size:18px;display:flex;align-items:center;justify-content:center;flex-shrink:0}
+.header-title{flex:1;font-size:16px;font-weight:700;color:#1a202c}
+.header-badge{background:#6366f1;color:#fff;font-size:12px;font-weight:700;padding:4px 10px;border-radius:20px;white-space:nowrap}
+.garcon-dot{width:12px;height:12px;border-radius:50%;flex-shrink:0;border:2px solid #fff;box-shadow:0 0 0 1px rgba(0,0,0,.1)}
+/* Mesas grid */
+#screen-home .body{flex:1;overflow-y:auto;padding:16px}
+.mesas-grid{display:grid;grid-template-columns:repeat(3,1fr);gap:10px}
+.mesa-card{background:#fff;border-radius:16px;padding:14px 10px;text-align:center;cursor:pointer;border:2.5px solid #e5e7eb;transition:transform .1s,box-shadow .1s;box-shadow:0 2px 8px rgba(0,0,0,.06);position:relative;overflow:hidden}
+.mesa-card:active{transform:scale(.96)}
+.mesa-card.ativa{border-color:var(--garcon-cor,#6366f1)}
+.mesa-card .garcon-stripe{position:absolute;top:0;left:0;right:0;height:4px;background:var(--garcon-cor,transparent)}
+.mesa-card .num{font-size:24px;font-weight:900;color:#1a202c}
+.mesa-card .itens-count{font-size:11px;color:#6b7280;margin-top:2px}
+.mesa-card .garcon-name{font-size:10px;font-weight:600;margin-top:4px;padding:2px 6px;border-radius:20px;background:var(--garcon-cor,#e5e7eb);color:#fff;display:inline-block;max-width:80px;overflow:hidden;text-overflow:ellipsis;white-space:nowrap}
+.mesa-card .status-dot{width:8px;height:8px;border-radius:50%;background:#10b981;position:absolute;top:10px;right:10px}
+.nova-mesa-btn{background:#fff;border:2.5px dashed #d1d5db;border-radius:16px;padding:14px 10px;text-align:center;cursor:pointer;color:#9ca3af;font-size:22px;display:flex;align-items:center;justify-content:center;flex-direction:column;gap:4px}
+.nova-mesa-btn span{font-size:11px;font-weight:600}
+/* Mesa detail */
+#screen-mesa .body{flex:1;display:flex;flex-direction:column;overflow:hidden}
+.tabs{display:flex;background:#fff;border-bottom:1.5px solid #f0f0f0}
+.tab{flex:1;padding:12px;text-align:center;font-size:13px;font-weight:600;color:#9ca3af;cursor:pointer;border-bottom:3px solid transparent;transition:all .15s}
+.tab.active{color:#6366f1;border-color:#6366f1}
+.tab-pane{display:none;flex:1;overflow-y:auto}
+.tab-pane.active{display:block}
+/* Pedido atual */
+.pedido-itens{padding:12px}
+.item-row{display:flex;align-items:center;gap:10px;padding:10px 12px;background:#fff;border-radius:12px;margin-bottom:8px;border:1.5px solid #f0f0f0;box-shadow:0 1px 4px rgba(0,0,0,.04)}
+.item-qty{min-width:28px;height:28px;background:#f3f4f6;border-radius:8px;display:flex;align-items:center;justify-content:center;font-size:13px;font-weight:800;color:#1a202c;flex-shrink:0}
+.item-nome{flex:1;font-size:13px;font-weight:600;color:#1a202c;line-height:1.3}
+.item-preco{font-size:12px;font-weight:700;color:#6b7280;white-space:nowrap}
+.total-bar{background:#fff;border-top:1.5px solid #f0f0f0;padding:12px 16px;display:flex;align-items:center;justify-content:space-between}
+.total-bar span{font-size:14px;font-weight:700;color:#1a202c}
+.btn-fechar{background:#ef4444;color:#fff;border:none;padding:10px 18px;border-radius:10px;font-size:13px;font-weight:700;cursor:pointer}
+/* Cardápio mini-app */
+#garcon-cats-grid{display:grid;grid-template-columns:repeat(2,1fr);gap:10px;padding:12px}
+.garcon-lista-items{padding:12px}
+.garcon-lista-item{display:flex;align-items:center;gap:12px;padding:12px;background:#fff;border-radius:14px;margin-bottom:8px;border:1.5px solid #f0f0f0;box-shadow:0 1px 5px rgba(0,0,0,.05)}
+.garcon-lista-item img,.garcon-lista-item .img-ph{width:52px;height:52px;border-radius:10px;object-fit:cover;flex-shrink:0}
+.garcon-lista-item .img-ph{background:#f3f4f6;display:flex;align-items:center;justify-content:center;font-size:22px}
+.garcon-prod-info{flex:1;min-width:0}
+.garcon-prod-nome{font-size:13px;font-weight:700;color:#1a202c;line-height:1.3}
+.garcon-prod-desc{font-size:11px;color:#9ca3af;margin-top:2px}
+.garcon-prod-preco{font-size:12px;font-weight:700;color:#ea580c;margin-top:3px}
+.add-btn{width:34px;height:34px;border-radius:50%;background:#6366f1;color:#fff;border:none;font-size:22px;cursor:pointer;display:flex;align-items:center;justify-content:center;flex-shrink:0;font-weight:300}
+/* Builder pizza */
+#garcon-bld-content{padding:12px}
+.garcon-bld-footer{background:#fff;border-top:1.5px solid #f0f0f0;padding:12px;position:sticky;bottom:0}
+.garcon-bld-footer button{width:100%;padding:13px;background:#6366f1;color:#fff;font-size:15px;font-weight:700;border:none;border-radius:12px;cursor:pointer}
+/* Carrinho flutuante */
+#cart-fab{position:fixed;bottom:24px;right:20px;background:#6366f1;color:#fff;border:none;border-radius:50px;padding:12px 20px;font-size:14px;font-weight:700;cursor:pointer;box-shadow:0 4px 20px rgba(99,102,241,.45);display:none;align-items:center;gap:8px;z-index:100}
+/* Toast */
+#garcon-toast{position:fixed;top:80px;left:50%;transform:translateX(-50%) translateY(-12px);background:#1a202c;color:#fff;padding:10px 20px;border-radius:20px;font-size:13px;font-weight:600;opacity:0;transition:all .25s;pointer-events:none;z-index:999;white-space:nowrap}
+#garcon-toast.show{opacity:1;transform:translateX(-50%) translateY(0)}
+/* Modal nova mesa */
+.modal-overlay{position:fixed;inset:0;background:rgba(0,0,0,.45);z-index:200;display:none;align-items:flex-end;justify-content:center}
+.modal-overlay.open{display:flex}
+.modal-sheet{background:#fff;border-radius:24px 24px 0 0;padding:24px;width:100%;max-width:420px}
+.modal-sheet h3{font-size:16px;font-weight:800;color:#1a202c;margin-bottom:16px}
+.modal-sheet input{width:100%;padding:12px 14px;border:2px solid #e5e7eb;border-radius:12px;font-size:16px;color:#1a202c;outline:none;margin-bottom:12px}
+.modal-sheet input:focus{border-color:#6366f1}
+.modal-btns{display:flex;gap:10px}
+.modal-btns button{flex:1;padding:12px;border:none;border-radius:12px;font-size:14px;font-weight:700;cursor:pointer}
+.btn-cancel{background:#f3f4f6;color:#4b5563}
+.btn-confirm{background:#6366f1;color:#fff}
+</style>
+</head>
+<body>
+
+<!-- ── Notificação: pedidos prontos ───────────────────────────────────────── -->
+<div id="garcon-prontos-overlay" style="display:none;position:fixed;inset:0;background:rgba(0,0,0,.55);z-index:9000" onclick="fecharProntoOverlay()"></div>
+<div id="garcon-prontos-sheet" style="display:none;position:fixed;bottom:0;left:0;right:0;z-index:9001;padding:16px;max-height:70vh;overflow-y:auto;background:#fff;border-radius:24px 24px 0 0;box-shadow:0 -8px 40px rgba(0,0,0,.25)">
+  <div style="width:40px;height:4px;background:#e5e7eb;border-radius:99px;margin:0 auto 16px"></div>
+  <div style="display:flex;align-items:center;gap:10px;margin-bottom:16px">
+    <span style="font-size:28px">🍽️</span>
+    <div>
+      <p style="font-size:17px;font-weight:800;color:#1a202c;margin:0">Pedido(s) prontos!</p>
+      <p style="font-size:12px;color:#6b7280;margin:2px 0 0">Buscar na cozinha e entregar</p>
+    </div>
+  </div>
+  <div id="garcon-prontos-lista"></div>
+</div>
+
+<!-- Badge flutuante para pedidos prontos -->
+<button id="garcon-prontos-fab" onclick="abrirProntoSheet()" style="display:none;position:fixed;top:14px;right:16px;z-index:8999;background:#10b981;color:#fff;border:none;border-radius:99px;padding:8px 16px;font-size:13px;font-weight:800;cursor:pointer;box-shadow:0 4px 16px rgba(16,185,129,.5);animation:pulse-green 1.5s infinite">
+  🍽️ <span id="garcon-prontos-count">0</span> pronto(s)
+</button>
+<style>
+@keyframes pulse-green { 0%,100%{box-shadow:0 4px 16px rgba(16,185,129,.5)} 50%{box-shadow:0 4px 28px rgba(16,185,129,.8)} }
+</style>
+
+<!-- ── Toast ─────────────────────────────────────────────────────────────────── -->
+<div id="garcon-toast"></div>
+
+<!-- ── Modal: nova mesa ──────────────────────────────────────────────────────── -->
+<div id="modal-nova-mesa" class="modal-overlay">
+  <div class="modal-sheet">
+    <h3>🪑 Abrir mesa</h3>
+    <input id="inp-mesa-num" type="number" min="1" max="99" placeholder="Número da mesa" inputmode="numeric">
+    <div class="modal-btns">
+      <button class="btn-cancel" onclick="fecharModalMesa()">Cancelar</button>
+      <button class="btn-confirm" onclick="confirmarNovaMesa()">Abrir</button>
+    </div>
+  </div>
+</div>
+
+<!-- ── Screen: Login ─────────────────────────────────────────────────────────── -->
+<div id="screen-login" class="screen active">
+  <div class="login-card">
+    <div class="login-logo">🧑‍🍳</div>
+    <h1 class="login-title">Painel Garçom</h1>
+    <p class="login-sub">Acesse com suas credenciais</p>
+    <div class="form-group">
+      <label>Seu nome</label>
+      <select id="sel-garcon"><option value="">Carregando...</option></select>
+    </div>
+    <div class="form-group">
+      <label>Senha</label>
+      <input id="inp-senha" type="password" placeholder="••••••" autocomplete="current-password">
+    </div>
+    <button class="btn-primary" onclick="fazerLogin()">Entrar</button>
+    <p id="login-err" class="login-err"></p>
+  </div>
+</div>
+
+<!-- ── Screen: Home (mesas) ─────────────────────────────────────────────────── -->
+<div id="screen-home" class="screen">
+  <div class="app-header">
+    <div class="garcon-dot" id="home-dot"></div>
+    <span class="header-title" id="home-title">Mesas</span>
+    <button onclick="logout()" style="background:#f3f4f6;border:none;padding:6px 12px;border-radius:20px;font-size:12px;font-weight:600;color:#4b5563;cursor:pointer">Sair</button>
+  </div>
+  <div class="body">
+    <div class="mesas-grid" id="mesas-grid"></div>
+  </div>
+</div>
+
+<!-- ── Screen: Mesa (detalhe) ───────────────────────────────────────────────── -->
+<div id="screen-mesa" class="screen">
+  <div class="app-header">
+    <button class="back-btn" onclick="voltarHome()">←</button>
+    <span class="header-title" id="mesa-titulo">Mesa</span>
+    <button class="header-badge" onclick="solicitarFechamento()" id="btn-fechar-mesa">Fechar Conta</button>
+  </div>
+  <div class="body">
+    <div class="tabs">
+      <div class="tab active" onclick="mudarTab('pedido')">📋 Pedido</div>
+      <div class="tab" onclick="mudarTab('cardapio')">➕ Adicionar</div>
+    </div>
+    <!-- Tab: pedido -->
+    <div id="tab-pedido" class="tab-pane active">
+      <div class="pedido-itens" id="lista-itens-mesa"></div>
+      <div class="total-bar">
+        <span>Total</span>
+        <span id="mesa-total">Gs 0</span>
+      </div>
+    </div>
+    <!-- Tab: cardápio mini-app -->
+    <div id="tab-cardapio" class="tab-pane" style="display:none;flex-direction:column">
+      <!-- Header interno: back + título + progresso -->
+      <div id="garcon-app-header" style="background:#fff;border-bottom:1.5px solid #f0f0f0;padding:10px 12px;display:flex;align-items:center;gap:8px">
+        <button id="garcon-back-btn" onclick="garconAppBack()" style="display:none;width:30px;height:30px;border-radius:50%;background:#f3f4f6;border:none;cursor:pointer;font-size:16px">←</button>
+        <span id="garcon-app-titulo" style="flex:1;font-size:14px;font-weight:700;color:#1a202c">Cardápio</span>
+        <div id="garcon-prg" style="display:none;font-size:11px;font-weight:700;color:#9ca3af;display:flex;align-items:center;gap:4px">
+          <span id="g-prg-1" style="width:20px;height:20px;border-radius:50%;background:#6366f1;color:#fff;display:flex;align-items:center;justify-content:center;font-size:10px">1</span>
+          <span id="g-prg-sep1">→</span>
+          <span id="g-prg-2" style="width:20px;height:20px;border-radius:50%;background:#e5e7eb;color:#9ca3af;display:flex;align-items:center;justify-content:center;font-size:10px">2</span>
+          <span id="g-prg-sep2" style="display:none">→</span>
+          <span id="g-prg-3" style="display:none;width:20px;height:20px;border-radius:50%;background:#e5e7eb;color:#9ca3af;display:flex;align-items:center;justify-content:center;font-size:10px">3</span>
+        </div>
+      </div>
+      <!-- Telas do mini-app -->
+      <div id="garcon-screen-home" style="flex:1;overflow-y:auto">
+        <div id="garcon-cats-grid"></div>
+      </div>
+      <div id="garcon-screen-lista" style="display:none;flex:1;overflow-y:auto">
+        <div id="garcon-lista-items" class="garcon-lista-items"></div>
+      </div>
+      <div id="garcon-screen-builder" style="display:none;flex-direction:column;flex:1;min-height:0">
+        <div id="garcon-bld-content" style="flex:1;overflow-y:auto;padding:12px"></div>
+        <div class="garcon-bld-footer">
+          <button id="garcon-bld-btn" onclick="garconAppAvancar()">Próximo →</button>
+        </div>
+      </div>
+    </div>
+  </div>
+  <!-- Carrinho flutuante -->
+  <button id="cart-fab" onclick="confirmarCarrinho()">
+    🛒 <span id="cart-count">0</span> iten(s) · Adicionar
+  </button>
+</div>
+
+<script>
+// ── Estado ────────────────────────────────────────────────────────────────────
+const params = new URLSearchParams(location.search);
+const SLUG   = params.get('slug') || '';
+const TOKEN  = params.get('t')    || '';
+const BASE   = `/painel?slug=${SLUG}&t=${TOKEN}`;
+
+let garconLogado = JSON.parse(sessionStorage.getItem('garcon_session') || 'null');
+let moeda = 'Gs';
+let cardapio = [];
+let mesasAbertas = [];
+let mesaAtual = null; // { id, mesa, itens, total, ... }
+let tabAtiva = 'pedido';
+
+// Mini-app state
+let gAppTela = 'home';
+let gAppCat = null;
+let gAppPasso = 1;
+let gAppTemBorda = false;
+let gAppPizza = { tamanho:null, sabores:[], borda:false, saborBorda:null, precoBorda:0, maxSabores:2, bordaMista:false, bordaMistaSabores:[], saborPrincipal:null };
+let gCarrinho = []; // [{nome, preco, quantidade}]
+
+// ── Init ──────────────────────────────────────────────────────────────────────
+(async () => {
+  if (!SLUG || !TOKEN) { document.body.innerHTML = '<p style="padding:32px;text-align:center;color:#ef4444">Link inválido. Solicite um novo link ao administrador.</p>'; return; }
+  await carregarGarcons();
+  if (garconLogado) { conectarGarconSocket(); entrarHome(); }
+})();
+
+// ── Utils ─────────────────────────────────────────────────────────────────────
+function toast(msg, dur=2400) {
+  const el = document.getElementById('garcon-toast');
+  el.textContent = msg; el.classList.add('show');
+  setTimeout(() => el.classList.remove('show'), dur);
+}
+
+function api(path, opts={}) {
+  return fetch(`/painel/${path}?slug=${SLUG}&t=${TOKEN}`, {
+    headers: { 'Content-Type': 'application/json', ...(opts.headers||{}) },
+    ...opts,
+  }).then(r => r.json());
+}
+
+function fmtPreco(v) {
+  if (!v && v !== 0) return '';
+  return `${moeda} ${Math.round(v).toLocaleString('pt-BR')}`;
+}
+
+function showScreen(id) {
+  document.querySelectorAll('.screen').forEach(s => s.classList.remove('active'));
+  document.getElementById(id).classList.add('active');
+}
+
+// ── Login ─────────────────────────────────────────────────────────────────────
+async function carregarGarcons() {
+  const res = await api('garcon/lista');
+  const sel = document.getElementById('sel-garcon');
+  if (!res.data?.length) { sel.innerHTML = '<option value="">Nenhum garçom cadastrado</option>'; return; }
+  sel.innerHTML = '<option value="">Selecione...</option>' + res.data.map(g => `<option value="${g.id}" data-cor="${g.cor}">${g.nome}</option>`).join('');
+}
+
+async function fazerLogin() {
+  const garconId = document.getElementById('sel-garcon').value;
+  const senha    = document.getElementById('inp-senha').value;
+  const errEl    = document.getElementById('login-err');
+  errEl.textContent = '';
+  if (!garconId) { errEl.textContent = 'Selecione seu nome.'; return; }
+  if (!senha)    { errEl.textContent = 'Digite sua senha.';   return; }
+  const res = await api('garcon/auth', { method:'POST', body: JSON.stringify({ garconId, senha }) });
+  if (!res.ok) { errEl.textContent = res.error || 'Erro ao entrar.'; return; }
+  garconLogado = { id: res.id, nome: res.nome, cor: res.cor };
+  sessionStorage.setItem('garcon_session', JSON.stringify(garconLogado));
+  conectarGarconSocket();
+  entrarHome();
+}
+
+document.getElementById('inp-senha').addEventListener('keydown', e => { if (e.key === 'Enter') fazerLogin(); });
+
+function logout() {
+  sessionStorage.removeItem('garcon_session');
+  garconLogado = null;
+  showScreen('screen-login');
+}
+
+// ── Home: mesas ───────────────────────────────────────────────────────────────
+async function entrarHome() {
+  showScreen('screen-home');
+  document.getElementById('home-title').textContent = `Olá, ${garconLogado.nome}`;
+  const dot = document.getElementById('home-dot');
+  dot.style.background = garconLogado.cor;
+  await carregarCardapio();
+  await renderMesas();
+}
+
+async function carregarCardapio() {
+  const res = await api('garcon/cardapio');
+  if (res.data) { cardapio = res.data; moeda = res.moeda || 'Gs'; }
+}
+
+async function renderMesas() {
+  const res = await api('garcon/mesas');
+  mesasAbertas = res.data || [];
+  moeda = res.moeda || moeda;
+  const grid = document.getElementById('mesas-grid');
+
+  // Monta grid: todas as mesas abertas + botão nova mesa
+  const abertasNum = new Set(mesasAbertas.map(p => p.mesa));
+  const maxMesa = Math.max(30, ...mesasAbertas.map(p => p.mesa));
+  const slots = Array.from({ length: maxMesa }, (_, i) => i + 1);
+
+  grid.innerHTML = '';
+  slots.forEach(num => {
+    const ped = mesasAbertas.find(p => p.mesa === num);
+    const div = document.createElement('div');
+    if (ped) {
+      const cor = ped.garconCor || '#e5e7eb';
+      const qtd = Array.isArray(ped.itens) ? ped.itens.reduce((s,i) => s + (i.quantidade||1), 0) : 0;
+      div.className = 'mesa-card ativa';
+      div.style.setProperty('--garcon-cor', cor);
+      div.innerHTML = `
+        <div class="garcon-stripe"></div>
+        <div class="status-dot"></div>
+        <div class="num">${num}</div>
+        <div class="itens-count">${qtd} ite${qtd===1?'m':'ns'}</div>
+        ${ped.garconNome ? `<div class="garcon-name" style="background:${cor}">${ped.garconNome}</div>` : ''}
+      `;
+      div.onclick = () => abrirMesa(ped);
+    } else {
+      div.className = 'mesa-card';
+      div.style.color = '#d1d5db';
+      div.innerHTML = `<div class="num" style="color:#d1d5db">${num}</div><div class="itens-count" style="color:#e5e7eb">livre</div>`;
+      div.onclick = () => pedirAbrirMesa(num);
+    }
+    grid.appendChild(div);
+  });
+
+  // Botão nova mesa (número livre)
+  const btnNova = document.createElement('div');
+  btnNova.className = 'nova-mesa-btn';
+  btnNova.innerHTML = '+<span>Nova mesa</span>';
+  btnNova.onclick = () => abrirModalMesa();
+  grid.appendChild(btnNova);
+}
+
+function pedirAbrirMesa(num) {
+  document.getElementById('inp-mesa-num').value = num;
+  document.getElementById('modal-nova-mesa').classList.add('open');
+}
+
+function abrirModalMesa() {
+  document.getElementById('inp-mesa-num').value = '';
+  document.getElementById('modal-nova-mesa').classList.add('open');
+  setTimeout(() => document.getElementById('inp-mesa-num').focus(), 100);
+}
+
+function fecharModalMesa() {
+  document.getElementById('modal-nova-mesa').classList.remove('open');
+}
+
+async function confirmarNovaMesa() {
+  const num = parseInt(document.getElementById('inp-mesa-num').value);
+  if (!num || num < 1) { toast('Número inválido'); return; }
+  fecharModalMesa();
+  const res = await api('garcon/mesas', {
+    method: 'POST',
+    body: JSON.stringify({ mesa: num, garconId: garconLogado.id, garconNome: garconLogado.nome, garconCor: garconLogado.cor }),
+  });
+  if (res.data) { abrirMesa(res.data); }
+  else if (res.error === 'Mesa já aberta' && res.data) { abrirMesa(res.data); }
+  else toast(res.error || 'Erro ao abrir mesa');
+}
+
+// ── Mesa detalhe ──────────────────────────────────────────────────────────────
+function abrirMesa(ped) {
+  mesaAtual = ped;
+  gCarrinho = [];
+  atualizarFab();
+  document.getElementById('mesa-titulo').textContent = `🪑 Mesa ${ped.mesa}`;
+  mudarTab('pedido');
+  renderPedidoAtual();
+  resetAppCardapio();
+  showScreen('screen-mesa');
+}
+
+function voltarHome() {
+  mesaAtual = null;
+  gCarrinho = [];
+  showScreen('screen-home');
+  renderMesas();
+}
+
+function renderPedidoAtual() {
+  if (!mesaAtual) return;
+  const itens = Array.isArray(mesaAtual.itens) ? mesaAtual.itens : [];
+  const lista = document.getElementById('lista-itens-mesa');
+  if (!itens.length) {
+    lista.innerHTML = '<p style="text-align:center;color:#9ca3af;padding:32px 16px;font-size:14px">Mesa sem itens ainda.<br>Adicione pelo cardápio →</p>';
+  } else {
+    lista.innerHTML = itens.map(i => `
+      <div class="item-row">
+        <div class="item-qty">${i.quantidade||1}</div>
+        <div class="item-nome">${i.nome}</div>
+        <div class="item-preco">${fmtPreco(i.preco * (i.quantidade||1))}</div>
+      </div>`).join('');
+  }
+  document.getElementById('mesa-total').textContent = fmtPreco(mesaAtual.total || 0);
+}
+
+function mudarTab(tab) {
+  tabAtiva = tab;
+  document.querySelectorAll('.tab').forEach((t, i) => t.classList.toggle('active', (i === 0 && tab === 'pedido') || (i === 1 && tab === 'cardapio')));
+  document.getElementById('tab-pedido').style.display = tab === 'pedido' ? 'block' : 'none';
+  const tabCard = document.getElementById('tab-cardapio');
+  tabCard.style.display = tab === 'cardapio' ? 'flex' : 'none';
+  if (tab === 'cardapio') tabCard.style.flexDirection = 'column';
+}
+
+async function solicitarFechamento() {
+  if (!mesaAtual) return;
+  const itens = Array.isArray(mesaAtual.itens) ? mesaAtual.itens : [];
+  if (!itens.length && !gCarrinho.length) { toast('Mesa sem itens'); return; }
+  if (!confirm(`Solicitar fechamento da Mesa ${mesaAtual.mesa}?`)) return;
+  await confirmarCarrinho(true); // garante que itens do carrinho sejam enviados primeiro
+  const res = await api(`garcon/mesas/${mesaAtual.id}/solicitar-fechamento`, {
+    method: 'POST',
+    body: JSON.stringify({ garconId: garconLogado.id, garconNome: garconLogado.nome, garconCor: garconLogado.cor }),
+  });
+  if (res.ok) { toast('✅ Solicitação enviada ao caixa!', 3000); voltarHome(); }
+  else toast(res.error || 'Erro ao solicitar fechamento');
+}
+
+// ── Carrinho flutuante ────────────────────────────────────────────────────────
+function atualizarFab() {
+  const fab = document.getElementById('cart-fab');
+  const total = gCarrinho.reduce((s, i) => s + i.quantidade, 0);
+  if (total > 0) { fab.style.display = 'flex'; document.getElementById('cart-count').textContent = total; }
+  else fab.style.display = 'none';
+}
+
+async function confirmarCarrinho(silencioso=false) {
+  if (!gCarrinho.length) return;
+  if (!mesaAtual) return;
+  const res = await api(`garcon/mesas/${mesaAtual.id}/itens`, {
+    method: 'POST',
+    body: JSON.stringify({ itens: gCarrinho, garconId: garconLogado.id, garconNome: garconLogado.nome, garconCor: garconLogado.cor }),
+  });
+  if (res.ok) {
+    mesaAtual = res.data;
+    gCarrinho = [];
+    atualizarFab();
+    if (!silencioso) { toast(`✅ ${gCarrinho.length || 'Itens'} adicionado(s)!`); mudarTab('pedido'); renderPedidoAtual(); }
+  } else {
+    if (!silencioso) toast(res.error || 'Erro ao adicionar itens');
+  }
+}
+
+// ── Mini-app cardápio ─────────────────────────────────────────────────────────
+function resetAppCardapio() {
+  gAppTela = 'home';
+  gAppCat = null;
+  gAppPasso = 1;
+  gAppTemBorda = false;
+  gAppPizza = { tamanho:null, sabores:[], borda:false, saborBorda:null, precoBorda:0, maxSabores:2, bordaMista:false, bordaMistaSabores:[], saborPrincipal:null };
+  garconAppShow('home');
+}
+
+function gNorm(s) { return (s||'').toLowerCase().normalize('NFD').replace(/[̀-ͯ]/g,''); }
+
+function gCatEmoji(nome) {
+  const n = gNorm(nome);
+  if (n.includes('pizza') && n.includes('doce')) return '🎂';
+  if (n.includes('pizza')) return '🍕';
+  if (n.includes('helad') || n.includes('sorvete')) return '🍦';
+  if (n.includes('hamburgue') || n.includes('burguer') || n.includes('lanche')) return '🍔';
+  if (n.includes('destilado') || n.includes('whisky') || n.includes('vodka')) return '🥃';
+  if (n.includes('drink')) return '🍹';
+  if (n.includes('cerveja') || n.includes('cerveza')) return '🍺';
+  if (n.includes('bebida') || n.includes('refriger') || n.includes('suco') || n.includes('jugo')) return '🥤';
+  if (n.includes('combo') || n.includes('promo')) return '🎁';
+  if (n.includes('porcao') || n.includes('porcion') || n.includes('porcão')) return '🍟';
+  if (n.includes('sobremesa') || n.includes('postre')) return '🍰';
+  if (n.includes('salad') || n.includes('acompan')) return '🥗';
+  if (n.includes('rodizio') || n.includes('churrasco')) return '🥩';
+  if (n.includes('frango')) return '🍗';
+  if (n.includes('carne') || n.includes('asado')) return '🥩';
+  if (n.includes('balcon') || n.includes('balcao') || n.includes('produto')) return '🛒';
+  return '🍽️';
+}
+
+function garconAppShow(tela) {
+  gAppTela = tela;
+  ['home','lista','builder'].forEach(s => {
+    const el = document.getElementById(`garcon-screen-${s}`);
+    if (!el) return;
+    el.style.display = s === tela ? (s === 'home' ? 'block' : 'flex') : 'none';
+    if (s === tela && s !== 'home') el.style.flexDirection = 'column';
+  });
+  const back = document.getElementById('garcon-back-btn');
+  const prg  = document.getElementById('garcon-prg');
+  if (back) back.style.display = tela === 'home' ? 'none' : 'flex';
+  if (prg)  prg.style.display  = tela === 'builder' ? 'flex' : 'none';
+  if (tela === 'home') {
+    document.getElementById('garcon-app-titulo').textContent = 'Cardápio';
+    garconRenderHome();
+  }
+}
+
+function garconRenderHome() {
+  const grid = document.getElementById('garcon-cats-grid');
+  if (!cardapio.length) { grid.innerHTML = '<p style="text-align:center;color:#9ca3af;padding:32px">Carregando...</p>'; return; }
+  grid.innerHTML = '';
+  cardapio.forEach(cat => {
+    const emoji = gCatEmoji(cat.nome);
+    const hasImg = !!cat.imagemUrl;
+    const div = document.createElement('div');
+    div.style.cssText = `cursor:pointer;border-radius:14px;overflow:hidden;height:90px;display:flex;flex-direction:column;align-items:center;justify-content:center;text-align:center;${hasImg ? '' : 'background:#fff;border:1.5px solid #f0f0f0;box-shadow:0 2px 8px rgba(0,0,0,.06)'};transition:transform .1s;position:relative`;
+    if (hasImg) {
+      div.innerHTML = `<img src="${cat.imagemUrl}" style="position:absolute;inset:0;width:100%;height:100%;object-fit:cover"><div style="position:absolute;inset:0;background:rgba(0,0,0,.35)"></div><div style="position:relative;z-index:1;padding:0 6px"><div style="font-size:11px;font-weight:800;color:#fff;text-shadow:0 1px 3px rgba(0,0,0,.6)">${cat.nome}</div></div>`;
+    } else {
+      div.innerHTML = `<div style="font-size:34px;line-height:1;margin-bottom:5px">${emoji}</div><div style="font-size:11px;font-weight:700;color:#1a202c;padding:0 4px">${cat.nome}</div>`;
+    }
+    div.addEventListener('touchstart', () => div.style.transform='scale(.96)', {passive:true});
+    div.addEventListener('touchend', () => div.style.transform='', {passive:true});
+    div.onclick = () => garconAbrirCat(cat.id);
+    grid.appendChild(div);
+  });
+}
+
+function garconAbrirCat(catId) {
+  gAppCat = cardapio.find(c => c.id === catId);
+  if (!gAppCat) return;
+  if (gAppCat.tipoTamanhos === 'pizza') {
+    garconIniciarBuilder();
+  } else {
+    document.getElementById('garcon-app-titulo').textContent = gAppCat.nome;
+    garconAppShow('lista');
+    garconRenderLista();
+  }
+}
+
+function garconRenderLista() {
+  const lista = document.getElementById('garcon-lista-items');
+  if (!lista || !gAppCat?.produtos?.length) { lista.innerHTML = '<p style="text-align:center;color:#9ca3af;padding:24px">Sem produtos</p>'; return; }
+  lista.innerHTML = '';
+  gAppCat.produtos.filter(p => p.ativo !== false).forEach(prod => {
+    const minPreco = prod.tamanhos?.length ? Math.min(...prod.tamanhos.map(t => t.preco)) : (prod.preco || 0);
+    const precoTxt = prod.tamanhos?.length ? `A partir de ${fmtPreco(minPreco)}` : fmtPreco(minPreco);
+    const div = document.createElement('div');
+    div.className = 'garcon-lista-item';
+    div.innerHTML = `
+      ${prod.imagemUrl ? `<img src="${prod.imagemUrl}" class="img-ph">` : `<div class="img-ph">${gCatEmoji(gAppCat.nome)}</div>`}
+      <div class="garcon-prod-info">
+        <div class="garcon-prod-nome">${prod.nome}</div>
+        ${prod.descricao ? `<div class="garcon-prod-desc">${prod.descricao}</div>` : ''}
+        <div class="garcon-prod-preco">${precoTxt}</div>
+      </div>
+      <button class="add-btn" onclick="garconAddProd('${prod.id}')">+</button>`;
+    lista.appendChild(div);
+  });
+}
+
+function garconAddProd(prodId) {
+  const prod = gAppCat?.produtos?.find(p => p.id === prodId);
+  if (!prod) return;
+  if (prod.tamanhos?.length) {
+    // produto com tamanhos: inicia builder simples
+    garconIniciarBuilderSimples(prod);
+    return;
+  }
+  const existing = gCarrinho.find(i => i.nome === prod.nome);
+  if (existing) existing.quantidade++;
+  else gCarrinho.push({ nome: prod.nome, preco: prod.preco || 0, quantidade: 1 });
+  atualizarFab();
+  toast(`✅ ${prod.nome} adicionado`);
+}
+
+// Builder simples (produto com tamanhos, não pizza)
+function garconIniciarBuilderSimples(prod) {
+  gAppPasso = 1;
+  gAppProdAtual = prod;
+  gAppPizza = { tamanho:null, sabores:[], borda:false, saborBorda:null, precoBorda:0, maxSabores:1, bordaMista:false, bordaMistaSabores:[], saborPrincipal:null };
+  document.getElementById('garcon-app-titulo').textContent = prod.nome;
+  garconSetPrg(1, true, false);
+  const btn = document.getElementById('garcon-bld-btn');
+  btn.textContent = 'Adicionar ✓';
+  btn.onclick = () => {
+    if (!gAppPizza.tamanho) { toast('Escolha um tamanho'); return; }
+    const tam = gAppPizza.tamanho;
+    gCarrinho.push({ nome: `${prod.nome} — ${tam.nome}`, preco: tam.preco, quantidade: 1 });
+    atualizarFab();
+    toast(`✅ ${prod.nome} — ${tam.nome}`);
+    garconAppShow('lista');
+  };
+  garconAppShow('builder');
+  garconRenderTamStep(false);
+}
+
+let gAppProdAtual = null;
+
+// Builder pizza (3 passos)
+function garconIniciarBuilder() {
+  gAppPasso = 1;
+  gAppTemBorda = (gAppCat.bordas || []).length > 0;
+  gAppPizza = { tamanho:null, sabores:[], borda:false, saborBorda:null, precoBorda:0, maxSabores:2, bordaMista:false, bordaMistaSabores:[], saborPrincipal:null };
+  document.getElementById('garcon-app-titulo').textContent = `🍕 ${gAppCat.nome}`;
+  const btn = document.getElementById('garcon-bld-btn');
+  btn.textContent = 'Próximo →';
+  btn.onclick = garconAppAvancar;
+  garconSetPrg(1, true, gAppTemBorda);
+  garconAppShow('builder');
+  garconRenderTamStep(true);
+}
+
+function garconSetPrg(passo, show, temBorda) {
+  const prg = document.getElementById('garcon-prg');
+  if (!prg) return;
+  prg.style.display = show ? 'flex' : 'none';
+  [1,2,3].forEach(n => {
+    const el = document.getElementById(`g-prg-${n}`);
+    if (!el) return;
+    const ativo = n === passo;
+    const visivel = n <= (temBorda ? 3 : 2);
+    el.style.display = visivel ? 'flex' : 'none';
+    el.style.background = ativo ? '#6366f1' : '#e5e7eb';
+    el.style.color = ativo ? '#fff' : '#9ca3af';
+    const sep = document.getElementById(`g-prg-sep${n}`);
+    if (sep) sep.style.display = n < (temBorda ? 3 : 2) ? '' : 'none';
+  });
+}
+
+function garconRenderTamStep(ehPizza) {
+  const content = document.getElementById('garcon-bld-content');
+  if (!content) return;
+  content.innerHTML = `<p style="font-size:13px;font-weight:700;color:#4b5563;margin-bottom:12px">📏 Escolha o tamanho</p>`;
+  const tamanhos = ehPizza ? (gAppCat?.tamanhos || []) : (gAppProdAtual?.tamanhos || []);
+  tamanhos.forEach((tam, idx) => {
+    const isSel = gAppPizza.tamanho?.nome === tam.nome;
+    const div = document.createElement('div');
+    div.style.cssText = `display:flex;align-items:center;justify-content:space-between;padding:14px;background:${isSel ? '#eef2ff' : '#fff'};border:2px solid ${isSel ? '#6366f1' : '#e5e7eb'};border-radius:14px;margin-bottom:8px;cursor:pointer;transition:all .12s`;
+    const maxMExib = (tam.nome || '').match(/[aá]t[eé]\s*(\d+)/i);
+    const maxSExib = tam.maxSabores || (maxMExib ? parseInt(maxMExib[1]) : null);
+    div.innerHTML = `<div><p style="font-size:14px;font-weight:800;color:${isSel ? '#4338ca' : '#1a202c'}">${tam.nome}</p>${ehPizza && maxSExib ? `<p style="font-size:11px;color:#9ca3af">até ${maxSExib} sabores</p>` : ''}</div><p style="font-size:14px;font-weight:700;color:#ea580c">${fmtPreco(tam.preco)}</p>`;
+    div.onclick = () => {
+      if (ehPizza) {
+        const maxM = (tam.nome || '').match(/[aá]t[eé]\s*(\d+)/i);
+        gAppPizza.maxSabores = tam.maxSabores || (maxM ? parseInt(maxM[1]) : 2);
+      }
+      gAppPizza.tamanho = tam;
+      garconRenderTamStep(ehPizza);
+    };
+    content.appendChild(div);
+  });
+}
+
+const _PIZZA_CORES = ['#F59E0B','#EF4444','#10B981','#6366F1','#EC4899','#0EA5E9','#F97316','#84CC16'];
+
+function _pizzaSvgPreview(selArr, tamanho, principalNome) {
+  const n = selArr.length;
+  if (n === 0) return '';
+  const s = tamanho || 148, cx = s/2, cy = s/2, r = s/2 - 9;
+  const pIdx = principalNome ? selArr.findIndex(x => x.nome === principalNome) : -1;
+  let angles;
+  if (pIdx >= 0 && n >= 2) {
+    const other = Math.PI / (n - 1);
+    angles = selArr.map((_, i) => i === pIdx ? Math.PI : other);
+  } else {
+    const a = (2 * Math.PI) / n;
+    angles = selArr.map(() => a);
+  }
+  let paths = '', curA = -Math.PI / 2;
+  for (let i = 0; i < n; i++) {
+    const a0 = curA, a1 = curA + angles[i]; curA = a1;
+    const cor = _PIZZA_CORES[i % _PIZZA_CORES.length];
+    if (n === 1) {
+      paths += `<circle cx="${cx}" cy="${cy}" r="${r}" fill="${cor}"/>`;
+    } else {
+      const x1 = (cx + r * Math.cos(a0)).toFixed(1), y1 = (cy + r * Math.sin(a0)).toFixed(1);
+      const x2 = (cx + r * Math.cos(a1)).toFixed(1), y2 = (cy + r * Math.sin(a1)).toFixed(1);
+      paths += `<path d="M${cx},${cy} L${x1},${y1} A${r},${r} 0 ${angles[i] > Math.PI ? 1 : 0},1 ${x2},${y2} Z" fill="${cor}" stroke="#fff" stroke-width="2.5"/>`;
+    }
+    const am = (a0 + a1) / 2, isPrin = i === pIdx;
+    const dist = n === 1 ? 0 : r * (isPrin ? 0.60 : 0.55);
+    const tx = (cx + dist * Math.cos(am)).toFixed(1), ty = (cy + dist * Math.sin(am)).toFixed(1);
+    const label = selArr[i].nome.length > 10 ? selArr[i].nome.substring(0, 9) + '…' : selArr[i].nome;
+    paths += `<text x="${tx}" y="${ty}" text-anchor="middle" dominant-baseline="middle" font-size="${isPrin ? 9 : 8}" font-weight="bold" fill="#fff" paint-order="stroke" stroke="#0004" stroke-width="2.5">${label}</text>`;
+    if (isPrin) {
+      const sx = (cx + r * 0.87 * Math.cos(am)).toFixed(1), sy = (cy + r * 0.87 * Math.sin(am)).toFixed(1);
+      paths += `<text x="${sx}" y="${sy}" text-anchor="middle" dominant-baseline="middle" font-size="10" fill="#fff" opacity="0.9">★</text>`;
+    }
+  }
+  paths += `<circle cx="${cx}" cy="${cy}" r="${r}" fill="none" stroke="#D97706" stroke-width="${Math.max(4, s/38)}" opacity="0.55"/>`;
+  paths += `<circle cx="${cx}" cy="${cy}" r="${s/14}" fill="#fff" stroke="#e5e7eb" stroke-width="1.5"/>`;
+  const legend = selArr.map((sab, i) => {
+    const cor = _PIZZA_CORES[i % _PIZZA_CORES.length], isPrin = sab.nome === principalNome;
+    return `<span style="display:inline-flex;align-items:center;gap:4px;font-size:11px;font-weight:${isPrin?'800':'600'};color:#1a202c;padding:3px 7px;border-radius:99px;background:${cor}22;border:1.5px solid ${isPrin?cor:'transparent'}"><span style="width:7px;height:7px;border-radius:50%;background:${cor};flex-shrink:0"></span>${isPrin?'★ ':''}${sab.nome}</span>`;
+  }).join('');
+  return `<div style="display:flex;flex-direction:column;align-items:center">
+    <svg width="${s}" height="${s}" viewBox="0 0 ${s} ${s}">${paths}</svg>
+    <div style="display:flex;flex-wrap:wrap;justify-content:center;gap:4px 5px;margin-top:7px">${legend}</div>
+  </div>`;
+}
+
+function _gSetPrincipalGarcon(nome) {
+  gAppPizza.saborPrincipal = gAppPizza.saborPrincipal === nome ? null : nome;
+  garconRenderSabStep();
+}
+
+function garconRenderSabStep() {
+  const content = document.getElementById('garcon-bld-content');
+  if (!content || !gAppCat) return;
+  const max = gAppPizza.maxSabores || 2;
+  const sel = gAppPizza.sabores;
+  const prods = gAppCat.produtos?.filter(p => p.ativo !== false) || [];
+  const showChart = max > 2 && sel.length >= 3;
+
+  content.innerHTML = '';
+
+  if (showChart) {
+    const chartDiv = document.createElement('div');
+    chartDiv.style.cssText = 'display:flex;flex-direction:column;align-items:center;margin-bottom:12px';
+    chartDiv.innerHTML = _pizzaSvgPreview(sel, 148, gAppPizza.saborPrincipal);
+    const prinDiv = document.createElement('div');
+    prinDiv.style.cssText = 'width:100%;margin-top:10px';
+    prinDiv.innerHTML = `<p style="font-size:12px;font-weight:700;color:#374151;margin:0 0 6px">🌟 Sabor principal (50%)</p>
+      <div style="display:flex;flex-wrap:wrap;gap:5px">${sel.map((sab, i) => {
+        const cor = _PIZZA_CORES[i % _PIZZA_CORES.length];
+        const isPrin = sab.nome === gAppPizza.saborPrincipal;
+        return `<button onclick="_gSetPrincipalGarcon('${sab.nome.replace(/'/g,"\\'")}')" style="padding:5px 12px;border-radius:99px;border:2px solid ${isPrin?cor:'#e5e7eb'};background:${isPrin?cor+'22':'#fff'};font-size:12px;font-weight:${isPrin?'800':'500'};color:${isPrin?'#1a202c':'#6b7280'};cursor:pointer">${isPrin?'★ ':''}${sab.nome}</button>`;
+      }).join('')}</div>`;
+    chartDiv.appendChild(prinDiv);
+    content.appendChild(chartDiv);
+    const sep = document.createElement('div');
+    sep.style.cssText = 'border-top:1px dashed #e5e7eb;margin:10px 0';
+    content.appendChild(sep);
+  }
+
+  const hdr = document.createElement('div');
+  hdr.style.cssText = 'display:flex;align-items:center;justify-content:space-between;margin-bottom:10px';
+  hdr.innerHTML = `<p style="font-size:13px;font-weight:700;color:#4b5563;margin:0">🍕 Escolha ${max === 1 ? 'o sabor' : `até ${max} sabores`}</p><span style="font-size:11px;font-weight:700;background:#eef2ff;color:#4338ca;border-radius:99px;padding:2px 8px">${sel.length}/${max}</span>`;
+  content.appendChild(hdr);
+
+  prods.forEach(prod => {
+    const idx = sel.findIndex(s => s.nome === prod.nome);
+    const isSelected = idx >= 0;
+    const lotado = !isSelected && sel.length >= max;
+    const cor = isSelected ? _PIZZA_CORES[idx % _PIZZA_CORES.length] : null;
+    const div = document.createElement('div');
+    div.style.cssText = `display:flex;align-items:center;gap:10px;padding:10px 12px;background:${isSelected?(cor+'18'):'#fff'};border:2px solid ${isSelected?cor:'#e5e7eb'};border-radius:12px;margin-bottom:8px;cursor:${lotado?'not-allowed':'pointer'};opacity:${lotado?'.42':'1'};transition:all .12s`;
+    div.innerHTML = `
+      <div style="width:26px;height:26px;border-radius:50%;background:${isSelected?cor:'#f3f4f6'};display:flex;align-items:center;justify-content:center;flex-shrink:0;font-size:12px;font-weight:800;color:#fff">${isSelected?(idx+1):''}</div>
+      ${prod.imagemUrl ? `<img src="${prod.imagemUrl}" style="width:36px;height:36px;border-radius:7px;object-fit:cover;flex-shrink:0">` : ''}
+      <div style="flex:1"><p style="font-size:13px;font-weight:700;color:${isSelected?'#1a202c':'#374151'}">${prod.nome}</p></div>`;
+    if (!lotado) div.onclick = () => {
+      const i = gAppPizza.sabores.findIndex(s => s.nome === prod.nome);
+      if (i >= 0) {
+        gAppPizza.sabores.splice(i, 1);
+        if (gAppPizza.saborPrincipal === prod.nome) gAppPizza.saborPrincipal = null;
+      } else if (gAppPizza.sabores.length < max) {
+        gAppPizza.sabores.push({ nome: prod.nome });
+      }
+      garconRenderSabStep();
+    };
+    content.appendChild(div);
+  });
+}
+
+function garconRenderBordaStep() {
+  const cat = gAppCat;
+  const bordas = cat?.bordas || [];
+  const tam = gAppPizza.tamanho;
+  const tamIdx = (cat?.tamanhos || []).findIndex(t => t.nome === tam?.nome);
+  const content = document.getElementById('garcon-bld-content');
+  if (!content) return;
+
+  if (gAppPizza.bordaMista) {
+    const sel = gAppPizza.bordaMistaSabores;
+    content.innerHTML = `<p style="font-size:13px;font-weight:700;color:#4b5563;margin-bottom:4px">🎨 Borda Mista</p><p style="font-size:11px;color:#9ca3af;margin-bottom:12px">Escolha até 2 sabores de borda</p>`;
+    const vBtn = document.createElement('div');
+    vBtn.style.cssText = 'display:flex;align-items:center;gap:10px;padding:10px 14px;background:#f9fafb;border:2px solid #e5e7eb;border-radius:12px;margin-bottom:12px;cursor:pointer';
+    vBtn.innerHTML = '<span style="font-size:14px">◀</span><p style="font-size:13px;font-weight:600;color:#4b5563">Escolher outra borda</p>';
+    vBtn.onclick = () => { gAppPizza.bordaMista=false; gAppPizza.bordaMistaSabores=[]; gAppPizza.borda=false; gAppPizza.saborBorda=null; gAppPizza.precoBorda=0; garconRenderBordaStep(); };
+    content.appendChild(vBtn);
+    bordas.filter(b => !/mista/i.test(b.nome)).forEach(b => {
+      const isSel = sel.includes(b.nome);
+      const lotado = !isSel && sel.length >= 2;
+      const div = document.createElement('div');
+      div.style.cssText = `display:flex;align-items:center;gap:12px;padding:14px;background:${isSel ? '#eef2ff' : '#fff'};border:2px solid ${isSel ? '#6366f1' : '#e5e7eb'};border-radius:14px;margin-bottom:8px;cursor:${lotado ? 'not-allowed' : 'pointer'};opacity:${lotado ? '.4' : '1'}`;
+      div.innerHTML = `<div style="width:24px;height:24px;border-radius:50%;border:2px solid ${isSel ? '#6366f1' : '#d1d5db'};background:${isSel ? '#6366f1' : 'transparent'};display:flex;align-items:center;justify-content:center;font-size:12px;color:#fff;font-weight:800">${isSel ? '✓' : ''}</div><div style="flex:1"><p style="font-size:14px;font-weight:800;color:${isSel ? '#4338ca' : '#1a202c'}">${b.nome}</p></div>`;
+      if (!lotado) div.onclick = () => { const i=sel.indexOf(b.nome); if(i>=0) sel.splice(i,1); else sel.push(b.nome); garconRenderBordaStep(); };
+      content.appendChild(div);
+    });
+    return;
+  }
+
+  content.innerHTML = `<p style="font-size:13px;font-weight:700;color:#4b5563;margin-bottom:12px">🧀 Quer borda recheada?</p>`;
+  const semDiv = document.createElement('div');
+  semDiv.style.cssText = `display:flex;align-items:center;gap:12px;padding:14px;background:${!gAppPizza.borda ? '#eef2ff' : '#fff'};border:2px solid ${!gAppPizza.borda ? '#6366f1' : '#e5e7eb'};border-radius:14px;margin-bottom:10px;cursor:pointer`;
+  semDiv.innerHTML = `<span style="font-size:26px">⭕</span><div><p style="font-size:14px;font-weight:800;color:${!gAppPizza.borda ? '#4338ca' : '#1a202c'}">Sem Borda</p></div>`;
+  semDiv.onclick = () => { gAppPizza.borda=false; gAppPizza.saborBorda=null; gAppPizza.precoBorda=0; gAppPizza.bordaMista=false; gAppPizza.bordaMistaSabores=[]; garconRenderBordaStep(); };
+  content.appendChild(semDiv);
+  bordas.forEach(b => {
+    const extra = (tamIdx >= 0 && b.precos?.[tamIdx]) ? b.precos[tamIdx] : 0;
+    const isMista = /mista/i.test(b.nome);
+    const isSel = gAppPizza.borda && gAppPizza.saborBorda === b.nome;
+    const div = document.createElement('div');
+    div.style.cssText = `display:flex;align-items:center;gap:12px;padding:14px;background:${isSel ? '#eef2ff' : '#fff'};border:2px solid ${isSel ? '#6366f1' : '#e5e7eb'};border-radius:14px;margin-bottom:8px;cursor:pointer`;
+    div.innerHTML = `<span style="font-size:26px">${isMista ? '🎨' : '🧀'}</span><div style="flex:1"><p style="font-size:14px;font-weight:800;color:${isSel ? '#4338ca' : '#1a202c'}">${b.nome}</p><p style="font-size:11px;${extra > 0 ? 'color:#ea580c;font-weight:700' : 'color:#9ca3af'}">${extra > 0 ? '+ ' + fmtPreco(extra) : 'Incluído'}${isMista ? ' · escolha 2 sabores →' : ''}</p></div>`;
+    div.onclick = () => {
+      gAppPizza.borda=true; gAppPizza.saborBorda=b.nome; gAppPizza.precoBorda=extra;
+      if (isMista) { gAppPizza.bordaMista=true; gAppPizza.bordaMistaSabores=[]; }
+      else { gAppPizza.bordaMista=false; gAppPizza.bordaMistaSabores=[]; }
+      garconRenderBordaStep();
+    };
+    content.appendChild(div);
+  });
+}
+
+function garconAppAvancar() {
+  const p = gAppPasso;
+  const btn = document.getElementById('garcon-bld-btn');
+  btn.onclick = garconAppAvancar;
+  if (p === 1) {
+    if (!gAppPizza.tamanho) { toast('Escolha um tamanho'); return; }
+    if (gAppCat?.tipoTamanhos === 'pizza') {
+      gAppPasso = 2;
+      garconSetPrg(2, true, gAppTemBorda);
+      garconRenderSabStep();
+      btn.textContent = gAppTemBorda ? 'Próximo →' : 'Adicionar ✓';
+    }
+  } else if (p === 2) {
+    if (!gAppPizza.sabores.length) { toast('Escolha pelo menos 1 sabor 🍕'); return; }
+    if (gAppTemBorda) {
+      gAppPasso = 3;
+      garconSetPrg(3, true, true);
+      garconRenderBordaStep();
+      btn.textContent = 'Adicionar ✓';
+    } else {
+      garconFinalizarPizza();
+    }
+  } else if (p === 3) {
+    if (gAppPizza.borda && !gAppPizza.saborBorda) { toast('Escolha o sabor da borda 🧀'); return; }
+    if (gAppPizza.bordaMista && gAppPizza.bordaMistaSabores.length < 1) { toast('Escolha pelo menos 1 sabor de borda mista'); return; }
+    garconFinalizarPizza();
+  }
+}
+
+function garconFinalizarPizza() {
+  const tam = gAppPizza.tamanho;
+  let saboresArr = [...gAppPizza.sabores];
+  if (gAppPizza.saborPrincipal) {
+    const pIdx = saboresArr.findIndex(s => s.nome === gAppPizza.saborPrincipal);
+    if (pIdx > 0) saboresArr = [saboresArr[pIdx], ...saboresArr.slice(0, pIdx), ...saboresArr.slice(pIdx + 1)];
+  }
+  const sabores = saboresArr.map(s => s.nome).join(' / ');
+  let bordaTxt = '';
+  if (gAppPizza.borda) {
+    if (gAppPizza.bordaMista && gAppPizza.bordaMistaSabores.length > 0) {
+      bordaTxt = ` c/ Borda ${gAppPizza.saborBorda}: ${gAppPizza.bordaMistaSabores.join(' + ')}`;
+    } else {
+      bordaTxt = ` c/ Borda ${gAppPizza.saborBorda || 'Recheada'}`;
+    }
+  }
+  const nome = `Pizza ${tam.nome}: ${sabores}${bordaTxt}`;
+  let preco = tam.preco;
+  if (gAppPizza.borda && gAppPizza.precoBorda) preco += gAppPizza.precoBorda;
+  gCarrinho.push({ nome, preco, quantidade: 1 });
+  atualizarFab();
+  toast(`🍕 ${sabores} adicionado`);
+  gAppPizza = { tamanho:null, sabores:[], borda:false, saborBorda:null, precoBorda:0, maxSabores:2, bordaMista:false, bordaMistaSabores:[], saborPrincipal:null };
+  gAppPasso = 1;
+  garconAppShow('home');
+}
+
+function garconAppBack() {
+  if (gAppTela === 'lista') { garconAppShow('home'); return; }
+  if (gAppTela === 'builder') {
+    if (gAppPasso === 1) {
+      if (gAppCat?.tipoTamanhos === 'pizza') garconAppShow('home');
+      else garconAppShow('lista');
+      return;
+    }
+    gAppPasso--;
+    garconSetPrg(gAppPasso, true, gAppTemBorda);
+    const btn = document.getElementById('garcon-bld-btn');
+    btn.onclick = garconAppAvancar;
+    btn.textContent = gAppPasso === 1 ? 'Próximo →' : (gAppTemBorda && gAppPasso === 2 ? 'Próximo →' : 'Adicionar ✓');
+    if (gAppPasso === 1) garconRenderTamStep(gAppCat?.tipoTamanhos === 'pizza');
+    else if (gAppPasso === 2) garconRenderSabStep();
+  }
+}
+
+// ── Notificações de pedido pronto ────────────────────────────────────────────
+
+let garconSocket = null;
+let pedidosProntos = [];
+
+function conectarGarconSocket() {
+  if (garconSocket) { garconSocket.disconnect(); garconSocket = null; }
+  garconSocket = io();
+  garconSocket.on('connect', () => {
+    garconSocket.emit('assinar:garcon', { garconId: garconLogado.id, slug: SLUG });
+    carregarPedidosProntos();
+  });
+  garconSocket.on('pedido:pronto', (ped) => {
+    if (ped.garconId !== garconLogado?.id) return;
+    if (!pedidosProntos.find(p => p.id === ped.id)) {
+      pedidosProntos.push(ped);
+      renderPedidosProntos();
+      abrirProntoSheet();
+      if (navigator.vibrate) navigator.vibrate([300, 100, 300, 100, 500]);
+      toast(`🍽️ Mesa ${ped.mesa} — pedido pronto!`, 5000);
+    }
+  });
+  garconSocket.on('pedido:atualizado', (ped) => {
+    if (pedidosProntos.find(p => p.id === ped.id) && ped.status !== 'PRONTO_PARA_RETIRADA') {
+      pedidosProntos = pedidosProntos.filter(p => p.id !== ped.id);
+      renderPedidosProntos();
+    }
+  });
+}
+
+async function carregarPedidosProntos() {
+  if (!garconLogado?.id) return;
+  const r = await api(`garcon/prontos?garconId=${garconLogado.id}`);
+  if (r.data?.length) {
+    pedidosProntos = r.data;
+    renderPedidosProntos();
+  }
+}
+
+function renderPedidosProntos() {
+  const fab = document.getElementById('garcon-prontos-fab');
+  const lista = document.getElementById('garcon-prontos-lista');
+  const count = document.getElementById('garcon-prontos-count');
+  if (fab) { fab.style.display = pedidosProntos.length ? 'flex' : 'none'; }
+  if (count) count.textContent = pedidosProntos.length;
+  if (!lista) return;
+  lista.innerHTML = pedidosProntos.map(ped => {
+    const itens = Array.isArray(ped.itens) ? ped.itens : [];
+    const num = ped.numeroDia ? `#${ped.numeroDia}` : '';
+    return `<div style="background:#f0fdf4;border:2px solid #10b981;border-radius:16px;padding:14px 16px;margin-bottom:12px">
+      <div style="display:flex;align-items:center;gap:8px;margin-bottom:12px">
+        <span style="font-size:22px">🍽️</span>
+        <div>
+          <p style="font-size:16px;font-weight:800;color:#065f46;margin:0">Mesa ${ped.mesa} ${num ? '<span style="font-size:12px;font-weight:600;color:#6b7280">' + num + '</span>' : ''}</p>
+          <p style="font-size:12px;color:#6b7280;margin:0">${itens.length} item${itens.length!==1?'s':''}</p>
+        </div>
+      </div>
+      <div style="margin-bottom:12px;padding:10px;background:#fff;border-radius:10px">
+        ${itens.map(i => `<p style="font-size:13px;font-weight:600;color:#1a202c;margin:2px 0"><span style="color:#10b981;font-weight:800">${i.quantidade||1}×</span> ${i.nome}</p>`).join('')}
+      </div>
+      <button onclick="garconServirMesa('${ped.id}', this)" style="width:100%;padding:13px;background:#10b981;color:#fff;border:none;border-radius:12px;font-size:15px;font-weight:800;cursor:pointer;font-family:inherit">
+        ✅ Servir à Mesa ${ped.mesa}
+      </button>
+    </div>`;
+  }).join('');
+}
+
+async function garconServirMesa(pedidoId, btn) {
+  if (btn) { btn.disabled = true; btn.textContent = '⏳ Marcando...'; }
+  const r = await api(`pedidos/${pedidoId}/servir`, { method: 'PUT' });
+  if (r.ok) {
+    pedidosProntos = pedidosProntos.filter(p => p.id !== pedidoId);
+    renderPedidosProntos();
+    if (!pedidosProntos.length) fecharProntoOverlay();
+    toast('✅ Mesa servida!', 3000);
+    renderMesas();
+  } else {
+    if (btn) { btn.disabled = false; btn.textContent = `✅ Servir à Mesa`; }
+    toast(r.error || 'Erro ao marcar como servido.', 3000);
+  }
+}
+
+function abrirProntoSheet() {
+  document.getElementById('garcon-prontos-overlay').style.display = 'block';
+  document.getElementById('garcon-prontos-sheet').style.display = 'block';
+}
+
+function fecharProntoOverlay() {
+  document.getElementById('garcon-prontos-overlay').style.display = 'none';
+  document.getElementById('garcon-prontos-sheet').style.display = 'none';
+}
+
+// ── PWA — manifest dinâmico + service worker ─────────────────────────────────
+
+if (SLUG && TOKEN) {
+  const manifestEl = document.getElementById('pwa-manifest');
+  if (manifestEl) manifestEl.href = `/painel/garcon/manifest?slug=${SLUG}&t=${TOKEN}`;
+}
+
+if ('serviceWorker' in navigator) {
+  navigator.serviceWorker.register('/sw-garcon.js').catch(() => {});
+}
+</script>
+</body>
+</html>

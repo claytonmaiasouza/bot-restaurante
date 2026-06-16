@@ -2,6 +2,7 @@ const express = require("express");
 const router = express.Router();
 const { PrismaClient } = require("@prisma/client");
 const { enviarPedidoParaDono, proximoNumeroDia, formatNumPedido } = require("../services/pedidoService");
+const { enviarMensagem } = require("../services/evolutionService");
 
 const prisma = new PrismaClient();
 
@@ -69,7 +70,7 @@ router.get("/:slug", async (req, res) => {
 // POST /loja/:slug/pedido — criar pedido via site
 router.post("/:slug/pedido", async (req, res) => {
   try {
-    const { clienteNome, clienteNumero, itens, tipoEntrega, endereco, metodoPagamento } = req.body;
+    const { clienteNome, clienteNumero, itens, tipoEntrega, endereco, metodoPagamento, trocoPara } = req.body;
 
     if (!clienteNome || !clienteNumero || !Array.isArray(itens) || !itens.length) {
       return res.status(400).json({ erro: "Dados incompletos" });
@@ -88,6 +89,11 @@ router.post("/:slug/pedido", async (req, res) => {
     const total = subtotal + taxa;
     const localizacao = tipoEntrega === "retirada" ? "Retirada no balcão" : (endereco || "Não informado");
     const numeroDia = await proximoNumeroDia(restaurante.id);
+    const moedaLocal = restaurante.moeda || "G$";
+    const fmtV = (v) => `${moedaLocal} ${Number(v).toLocaleString("es-PY")}`;
+    const metodoPagamentoFmt = metodoPagamento === "dinheiro" && trocoPara
+      ? `Dinheiro - troco p/ ${fmtV(trocoPara)}`
+      : metodoPagamento || null;
 
     // Cria sessão virtual + pedido
     const sessao = await prisma.sessao.create({
@@ -109,7 +115,7 @@ router.post("/:slug/pedido", async (req, res) => {
         itens,
         total,
         localizacao,
-        metodoPagamento: metodoPagamento || null,
+        metodoPagamento: metodoPagamentoFmt,
         origem: "SITE",
         numeroDia,
         status: "NOVO",
@@ -117,6 +123,8 @@ router.post("/:slug/pedido", async (req, res) => {
     });
 
     const pedidoCompleto = { ...pedido, itens, total, subtotal, taxaEntrega: taxa };
+
+    const instanceName = restaurante.instanceEvolution || restaurante.slugWhatsapp;
 
     // Notificar dono via WhatsApp (falha silenciosa — pedido já está salvo)
     enviarPedidoParaDono(pedidoCompleto, restaurante, tipoEntrega).catch(err =>
@@ -133,6 +141,37 @@ router.post("/:slug/pedido", async (req, res) => {
 
     const numeroPedido = formatNumPedido({ ...pedido, localizacao, origem: "SITE" });
     console.log(`[loja] pedido ${numeroPedido} criado — ${restaurante.nome} — ${clienteNome}`);
+
+    // Confirmar ao cliente via WhatsApp (falha silenciosa)
+    const fmtTotal = (v) => `${moedaLocal} ${Number(v).toLocaleString("es-PY")}`;
+    const msgEntrega = tipoEntrega === "retirada"
+      ? "🏃 *Retiro en el local*"
+      : `🛵 *Delivery* — ${localizacao}`;
+    const trocoMsg = metodoPagamento === "dinheiro" && trocoPara
+      ? `💵 *Pagamento em dinheiro* — troco para ${fmtTotal(trocoPara)}\n`
+      : "";
+    const msgCliente =
+      `✅ *¡Pedido #${numeroPedido} recibido!*\n\n` +
+      `Hola *${clienteNome}*! 👋 Recibimos tu pedido en *${restaurante.nome}* y ya estamos notificando al restaurante.\n\n` +
+      `🛒 *${itens.length} item(s)*\n` +
+      `💰 *Total: ${fmtTotal(total)}*\n` +
+      `${msgEntrega}\n` +
+      trocoMsg +
+      "\n" +
+      (metodoPagamento === "transferencia"
+        ? `📸 *Por favor envía el comprobante de pago para confirmar tu pedido.*\n\n`
+        : "") +
+      `Pronto recibirás más actualizaciones. ¡Gracias por tu preferencia! 😊`;
+    enviarMensagem(clienteNumero, msgCliente, instanceName).catch(err =>
+      console.error("[loja] erro ao confirmar cliente:", err.message)
+    );
+
+    // Salvar contato / fidelidade do cliente
+    prisma.clienteFidelidade.upsert({
+      where: { numero_restauranteId: { numero: clienteNumero, restauranteId: restaurante.id } },
+      create: { numero: clienteNumero, restauranteId: restaurante.id, nome: clienteNome || null, totalPedidos: 1, totalGasto: total, ultimoPedido: new Date() },
+      update: { nome: clienteNome || undefined, totalPedidos: { increment: 1 }, totalGasto: { increment: total }, ultimoPedido: new Date() },
+    }).catch(err => console.error("[loja] erro ao salvar fidelidade:", err.message));
 
     res.json({ pedidoId: pedido.id, numeroPedido });
   } catch (e) {

@@ -545,6 +545,11 @@
       font-size: 15px; cursor: pointer; font-family: inherit;
     }
 
+    /* ── Troco ── */
+    .troco-grid { display: grid; grid-template-columns: repeat(3, 1fr); gap: 8px; margin-top: 10px; }
+    .troco-btn { border: 2px solid var(--border); background: #fff; border-radius: 13px; padding: 12px 6px; font-size: 13px; font-weight: 700; cursor: pointer; text-align: center; transition: all .15s; font-family: inherit; color: var(--text); line-height: 1.3; }
+    .troco-btn.on { border-color: var(--prim); background: var(--prim-bg); color: var(--prim); }
+
     /* ── Pizza description wrap ── */
     .sab-desc-wrap {
       font-size: 12px;
@@ -682,6 +687,14 @@
         <label>Pagamento</label>
         <div class="pag-grid" id="pag-grid"></div>
         <div class="pix-box" id="pix-box" style="display:none"></div>
+        <div id="troco-box" style="display:none;margin-top:14px">
+          <p style="font-size:13px;font-weight:700;color:var(--muted);margin-bottom:2px">Precisa de troco?</p>
+          <p id="troco-lbl" style="font-size:12px;color:var(--muted);margin-bottom:0"></p>
+          <div class="troco-grid" id="troco-opts"></div>
+          <div id="troco-custom" style="display:none;margin-top:10px">
+            <input class="inp" type="number" inputmode="numeric" id="troco-inp" placeholder="Valor que vai pagar">
+          </div>
+        </div>
       </div>
     </div>
     <div class="bot-action">
@@ -723,7 +736,7 @@ const G = {
   // carrinho
   cart: [],
   // checkout
-  entrega: 'delivery', pagamento: '', geoLink: null, geoAddr: null,
+  entrega: 'delivery', pagamento: '', geoLink: null, geoAddr: null, troco: null,
 };
 
 // ── Utilitários ──────────────────────────────────────────────────────────────
@@ -1476,16 +1489,59 @@ function setEntrega(v) {
   document.getElementById('fg-end').style.display = v === 'delivery' ? 'block' : 'none';
 }
 
+function calcularOpcoesTroco(total) {
+  const opts = new Set();
+  opts.add(Math.ceil((total + 1) / 50000) * 50000);
+  opts.add(Math.ceil((total + 1) / 100000) * 100000);
+  const arr = [...opts].sort((a, b) => a - b);
+  if (arr.length < 2) arr.push(arr[arr.length - 1] + 100000);
+  return arr.slice(0, 2);
+}
+
+function renderTroco() {
+  const sub = G.cart.reduce((a, i) => a + i.preco * i.qt, 0);
+  const taxa = G.entrega === 'delivery' ? (G.rest.taxaEntrega || 0) : 0;
+  const total = sub + taxa;
+  const opcoes = calcularOpcoesTroco(total);
+  const lbl = document.getElementById('troco-lbl');
+  if (lbl) lbl.textContent = `Total do pedido: ${fmt(total)}`;
+  document.getElementById('troco-opts').innerHTML = [
+    ...opcoes.map(v => `<button class="troco-btn${G.troco === v ? ' on' : ''}" onclick="setTroco(${v})">${fmt(v)}</button>`),
+    `<button class="troco-btn${G.troco === 'custom' ? ' on' : ''}" onclick="setTroco('custom')">✏️ Personalizado</button>`,
+  ].join('');
+}
+
+function setTroco(v) {
+  G.troco = v;
+  renderTroco();
+  const customDiv = document.getElementById('troco-custom');
+  if (v === 'custom') {
+    customDiv.style.display = 'block';
+    document.getElementById('troco-inp').focus();
+  } else {
+    customDiv.style.display = 'none';
+  }
+}
+
 function setPag(v) {
   G.pagamento = v;
   document.querySelectorAll('.pag-btn').forEach(b => b.classList.remove('on'));
   document.getElementById(`pag-${v}`)?.classList.add('on');
   const pix = document.getElementById('pix-box');
+  const trocoBox = document.getElementById('troco-box');
   if (v === 'transferencia' && G.rest.dadosTransferencia) {
     pix.textContent = G.rest.dadosTransferencia;
     pix.style.display = 'block';
   } else {
     pix.style.display = 'none';
+  }
+  if (v === 'dinheiro') {
+    G.troco = null;
+    renderTroco();
+    trocoBox.style.display = 'block';
+  } else {
+    trocoBox.style.display = 'none';
+    G.troco = null;
   }
 }
 
@@ -1498,6 +1554,16 @@ async function finalizar() {
   if (tel.length < 8) { toast('Informe seu WhatsApp 📱'); return; }
   if (G.entrega === 'delivery' && !end && !G.geoLink) { toast('Informe o endereço 📍'); return; }
   if (!G.pagamento) { toast('Escolha como vai pagar 💳'); return; }
+
+  let trocoPara = null;
+  if (G.pagamento === 'dinheiro' && G.troco != null) {
+    if (G.troco === 'custom') {
+      const v = parseInt((document.getElementById('troco-inp').value || '').replace(/\D/g, ''), 10);
+      if (!isNaN(v) && v > 0) trocoPara = v;
+    } else {
+      trocoPara = G.troco;
+    }
+  }
 
   const btn = document.getElementById('btn-fin');
   btn.disabled = true; btn.textContent = 'Enviando...';
@@ -1518,6 +1584,7 @@ async function finalizar() {
           ? [end || G.geoAddr || '', G.geoLink ? `📍 ${G.geoLink}` : ''].filter(Boolean).join('\n')
           : '',
         metodoPagamento: G.pagamento,
+        trocoPara,
       }),
     });
     if (!res.ok) {
@@ -1543,7 +1610,8 @@ async function finalizar() {
 }
 
 function recomecar() {
-  G.pagamento = ''; G.entrega = 'delivery'; G.geoLink = null; G.geoAddr = null;
+  G.pagamento = ''; G.entrega = 'delivery'; G.geoLink = null; G.geoAddr = null; G.troco = null;
+  document.getElementById('troco-box').style.display = 'none';
   document.getElementById('geo-preview').style.display = 'none';
   const gBtn = document.getElementById('btn-geo');
   if (gBtn) { gBtn.className = 'btn-geo'; document.getElementById('geo-ico').textContent = '📍'; document.getElementById('geo-txt').textContent = 'Compartilhar localização exata'; }

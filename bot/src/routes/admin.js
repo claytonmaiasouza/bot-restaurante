@@ -5,6 +5,7 @@ const pdfParse = require("pdf-parse");
 const axios = require("axios");
 const fs = require("fs");
 const path = require("path");
+const crypto = require("crypto");
 const { confirmarPedido, proximoNumeroDia, formatNumPedido } = require("../services/pedidoService");
 const { enviarMensagem, listarInstancias, obterQRCode, verificarConexao, criarInstancia, configurarWebhook, excluirInstancia } = require("../services/evolutionService");
 const { authMiddleware } = require("../middleware/authMiddleware");
@@ -148,7 +149,8 @@ router.get("/restaurantes", async (req, res) => {
     const where = req.user.role === "restaurante" ? { id: req.user.restauranteId } : {};
     const restaurantes = await prisma.restaurante.findMany({
       where,
-      select: { id: true, nome: true, slugWhatsapp: true, donoWhatsapp: true, moeda: true, taxaEntrega: true, ativo: true, email: true, horarioAtendimento: true, cardapioPdfUrl: true, dadosTransferencia: true, instrucoes: true },
+      select: { id: true, nome: true, slugWhatsapp: true, donoWhatsapp: true, moeda: true, taxaEntrega: true, ativo: true, email: true, horarioAtendimento: true, cardapioPdfUrl: true, dadosTransferencia: true, instrucoes: true,
+                faturaRuc: true, faturaRazaoSocial: true, faturaEndereco: true, faturaCiudad: true, faturaTelefone: true, faturaTimbrado: true, faturaVencTimbrado: true, faturaSerie: true, faturaProximoNum: true },
       orderBy: { nome: "asc" },
     });
     res.json({ data: restaurantes });
@@ -176,9 +178,11 @@ router.get("/pedidos", async (req, res) => {
     }
   }
   if (inicio || fim) {
-    where.createdAt = {};
-    if (inicio) where.createdAt.gte = new Date(inicio);
-    if (fim) where.createdAt.lte = new Date(fim + "T23:59:59.999Z");
+    // Pedidos pagos: filtra por updatedAt (quando o pagamento foi confirmado, não quando o pedido foi criado)
+    const campoData = where.pago ? "updatedAt" : "createdAt";
+    where[campoData] = {};
+    if (inicio) where[campoData].gte = new Date(inicio);
+    if (fim) where[campoData].lte = new Date(fim + "T23:59:59.999Z");
   }
 
   try {
@@ -189,7 +193,7 @@ router.get("/pedidos", async (req, res) => {
         skip: offset,
         take: limite,
         include: {
-          restaurante: { select: { nome: true, slugWhatsapp: true, moeda: true, taxaEntrega: true } },
+          restaurante: { select: { nome: true, slugWhatsapp: true, instanceEvolution: true, moeda: true, taxaEntrega: true } },
         },
       }),
       prisma.pedido.count({ where }),
@@ -255,7 +259,7 @@ router.patch("/pedidos/:id/status", async (req, res) => {
     const pedido = await prisma.pedido.update({
       where: { id },
       data: { status, ...extraData },
-      include: { restaurante: { select: { nome: true, slugWhatsapp: true, moeda: true, taxaEntrega: true } } },
+      include: { restaurante: { select: { nome: true, slugWhatsapp: true, instanceEvolution: true, moeda: true, taxaEntrega: true } } },
     });
 
     const numFmt = formatNumPedido(pedido);
@@ -263,7 +267,7 @@ router.patch("/pedidos/:id/status", async (req, res) => {
     // Notifica o cliente via WhatsApp (bilíngue: detecta idioma da sessão)
     const mensagem = await getNotificacao(status, numFmt, pedido.sessaoId);
     if (mensagem) {
-      await enviarMensagem(pedido.clienteNumero, mensagem, pedido.restaurante.slugWhatsapp).catch(() => {});
+      await enviarMensagem(pedido.clienteNumero, mensagem, pedido.restaurante.instanceEvolution || pedido.restaurante.slugWhatsapp).catch(() => {});
     }
 
     // Transferência sem comprovante: pede comprovante ao sair para entrega ou ao entregar
@@ -279,12 +283,23 @@ router.patch("/pedidos/:id/status", async (req, res) => {
       const msgComp = idiomaCliente === "es"
         ? `🧾 Para confirmar el pago del pedido *#${numFmt}*, por favor envíanos el comprobante de transferencia por aquí. ¡Gracias!`
         : `🧾 Para confirmarmos o pagamento do pedido *#${numFmt}*, por favor envie o comprovante de transferência aqui. Obrigado!`;
-      await enviarMensagem(pedido.clienteNumero, msgComp, pedido.restaurante.slugWhatsapp).catch(() => {});
+      await enviarMensagem(pedido.clienteNumero, msgComp, pedido.restaurante.instanceEvolution || pedido.restaurante.slugWhatsapp).catch(() => {});
     }
 
     // Emite para o painel em tempo real
     io?.to("admin").emit("pedido:atualizado", pedido);
     io?.to(`restaurante:${pedido.restaurante.slugWhatsapp}`).emit("pedido:atualizado", pedido);
+
+    // Notifica o garçom pessoalmente quando pedido de mesa fica pronto
+    if (status === "PRONTO_PARA_RETIRADA" && pedido.garconId) {
+      io?.to(`garcon:${pedido.garconId}`).emit("pedido:pronto", {
+        id: pedido.id,
+        mesa: pedido.mesa,
+        itens: pedido.itens,
+        garconId: pedido.garconId,
+        numeroDia: pedido.numeroDia,
+      });
+    }
 
     res.json({ data: pedido });
   } catch (err) {
@@ -305,6 +320,14 @@ router.patch("/pedidos/:id/pago", async (req, res) => {
     });
     if (!atual) return res.status(404).json({ error: "Pedido não encontrado" });
 
+    // Exige caixa aberto para confirmar pagamento (garante que updatedAt >= turno.abertoEm)
+    const caixaAbertoPago = await prisma.turnoCaixa.findFirst({
+      where: { restauranteId: atual.restauranteId, status: "ABERTO" },
+    });
+    if (!caixaAbertoPago) {
+      return res.status(400).json({ error: "Abra o caixa antes de confirmar pagamentos" });
+    }
+
     // Marca como pago sem regredir o status — só avança para PAGO se ainda não chegou lá
     const statusAntesDePago = ["NOVO", "CONFIRMADO"];
     const novoStatus = statusAntesDePago.includes(atual.status) ? "PAGO" : atual.status;
@@ -312,7 +335,7 @@ router.patch("/pedidos/:id/pago", async (req, res) => {
     const pedido = await prisma.pedido.update({
       where: { id },
       data: { pago: true, status: novoStatus },
-      include: { restaurante: { select: { nome: true, slugWhatsapp: true, moeda: true, taxaEntrega: true } } },
+      include: { restaurante: { select: { nome: true, slugWhatsapp: true, instanceEvolution: true, moeda: true, taxaEntrega: true } } },
     });
 
     // Retorno de troco ao caixa: motoboy retornou com pedido dinheiro com troco
@@ -341,7 +364,7 @@ router.patch("/pedidos/:id/pago", async (req, res) => {
     if (novoStatus === "PAGO") {
       const mensagem = await getNotificacao("PAGO", formatNumPedido(pedido), pedido.sessaoId);
       if (mensagem) {
-        await enviarMensagem(pedido.clienteNumero, mensagem, pedido.restaurante.slugWhatsapp).catch(() => {});
+        await enviarMensagem(pedido.clienteNumero, mensagem, pedido.restaurante.instanceEvolution || pedido.restaurante.slugWhatsapp).catch(() => {});
       }
     } else if (atual.status === "ENTREGUE" && /transf/i.test(atual.metodoPagamento || "") && atual.origem !== "MESA") {
       // Pedido entregue com transferência confirmada — notifica o cliente
@@ -357,7 +380,7 @@ router.patch("/pedidos/:id/pago", async (req, res) => {
       const msgConfirmado = idioma === "es"
         ? `✅ ¡Pago del pedido *#${numFmt}* confirmado! Muchas gracias. 😊\n\nSi deseas hacer otro pedido, escríbenos cuando quieras.`
         : `✅ Pagamento do pedido *#${numFmt}* confirmado! Muito obrigado. 😊\n\nSe quiser fazer outro pedido, é só nos chamar!`;
-      await enviarMensagem(atual.clienteNumero, msgConfirmado, pedido.restaurante.slugWhatsapp).catch(() => {});
+      await enviarMensagem(atual.clienteNumero, msgConfirmado, pedido.restaurante.instanceEvolution || pedido.restaurante.slugWhatsapp).catch(() => {});
     }
 
     io?.to("admin").emit("pedido:atualizado", pedido);
@@ -486,7 +509,7 @@ router.post("/pedidos/:id/despachar", async (req, res) => {
 
     let avisoWa = null;
     try {
-      await enviarMensagem(motoboy.telefone, mensagem, pedido.restaurante.slugWhatsapp);
+      await enviarMensagem(motoboy.telefone, mensagem, pedido.restaurante.instanceEvolution || pedido.restaurante.slugWhatsapp);
     } catch (errWa) {
       console.error("[despachar] falha ao notificar motoboy via WA:", errWa.response?.data || errWa.message);
       avisoWa = "Motoboy atribuído, mas a mensagem WhatsApp não foi enviada.";
@@ -507,7 +530,7 @@ router.post("/pedidos/:id/liberar-troco", async (req, res) => {
   try {
     const pedido = await prisma.pedido.findUnique({
       where: { id },
-      include: { restaurante: { select: { slugWhatsapp: true } } },
+      include: { restaurante: { select: { slugWhatsapp: true, instanceEvolution: true } } },
     });
     if (!pedido) return res.status(404).json({ error: "Pedido não encontrado" });
 
@@ -1367,7 +1390,8 @@ router.patch("/restaurantes/:id", async (req, res) => {
     return res.status(403).json({ error: "Acesso negado" });
   }
 
-  const { nome, donoWhatsapp, moeda, taxaEntrega, email, senha, ativo, horarioAtendimento, dadosTransferencia, instrucoes } = req.body;
+  const { nome, donoWhatsapp, moeda, taxaEntrega, email, senha, ativo, horarioAtendimento, dadosTransferencia, instrucoes,
+          faturaRuc, faturaRazaoSocial, faturaEndereco, faturaCiudad, faturaTelefone, faturaTimbrado, faturaVencTimbrado, faturaSerie } = req.body;
 
   try {
     const dados = {};
@@ -1380,13 +1404,22 @@ router.patch("/restaurantes/:id", async (req, res) => {
     if (horarioAtendimento !== undefined)  dados.horarioAtendimento = horarioAtendimento ? JSON.stringify(horarioAtendimento) : null;
     if (dadosTransferencia !== undefined)  dados.dadosTransferencia = dadosTransferencia || null;
     if (instrucoes !== undefined)          dados.instrucoes = instrucoes || null;
+    if (faturaRuc !== undefined)           dados.faturaRuc = faturaRuc || null;
+    if (faturaRazaoSocial !== undefined)   dados.faturaRazaoSocial = faturaRazaoSocial || null;
+    if (faturaEndereco !== undefined)      dados.faturaEndereco = faturaEndereco || null;
+    if (faturaCiudad !== undefined)        dados.faturaCiudad = faturaCiudad || null;
+    if (faturaTelefone !== undefined)      dados.faturaTelefone = faturaTelefone || null;
+    if (faturaTimbrado !== undefined)      dados.faturaTimbrado = faturaTimbrado || null;
+    if (faturaVencTimbrado !== undefined)  dados.faturaVencTimbrado = faturaVencTimbrado || null;
+    if (faturaSerie !== undefined)         dados.faturaSerie = faturaSerie || "001-001";
     // Só admin pode ativar/desativar
     if (ativo !== undefined && req.user.role === "admin") dados.ativo = ativo;
 
     const restaurante = await prisma.restaurante.update({
       where: { id },
       data: dados,
-      select: { id: true, nome: true, slugWhatsapp: true, donoWhatsapp: true, moeda: true, taxaEntrega: true, ativo: true, email: true, horarioAtendimento: true, cardapioPdfUrl: true, dadosTransferencia: true, instrucoes: true },
+      select: { id: true, nome: true, slugWhatsapp: true, donoWhatsapp: true, moeda: true, taxaEntrega: true, ativo: true, email: true, horarioAtendimento: true, cardapioPdfUrl: true, dadosTransferencia: true, instrucoes: true,
+                faturaRuc: true, faturaRazaoSocial: true, faturaEndereco: true, faturaCiudad: true, faturaTelefone: true, faturaTimbrado: true, faturaVencTimbrado: true, faturaSerie: true, faturaProximoNum: true },
     });
 
     // Invalida cache para refletir mudanças imediatamente
@@ -2348,7 +2381,7 @@ router.post("/mesas/:num/fechar", async (req, res) => {
     if (slug) io?.to(`restaurante:${slug}`).emit("pedido:status", { pedidoId: p.id, status: "ENTREGUE" });
   });
 
-  res.json({ total: totalCombinado, itens: todosItens, pedidosEncerrados: pedidosAtivos.length });
+  res.json({ total: totalCombinado, itens: todosItens, pedidosEncerrados: pedidosAtivos.length, pedidoIds: pedidosAtivos.map(p => p.id) });
 });
 
 router.patch("/pedidos/:id/mesa", async (req, res) => {
@@ -2431,8 +2464,16 @@ router.post("/caixa/:id/fechar", async (req, res) => {
     const turno = await prisma.turnoCaixa.findUnique({ where: { id } });
     if (!turno || turno.status !== "ABERTO") return res.status(400).json({ error: "Turno não encontrado ou já fechado" });
 
+    // Usa o fechadoEm do turno anterior como corte (cobre pedidos pagos no intervalo
+    // entre o fechamento do caixa anterior e a abertura deste)
+    const turnoAnterior = await prisma.turnoCaixa.findFirst({
+      where: { restauranteId: turno.restauranteId, status: "FECHADO", id: { not: id } },
+      orderBy: { fechadoEm: "desc" },
+    });
+    const dataCorte = turnoAnterior?.fechadoEm ?? new Date(0);
+
     const pedidosPagos = await prisma.pedido.findMany({
-      where: { restauranteId: turno.restauranteId, pago: true, updatedAt: { gte: turno.abertoEm } },
+      where: { restauranteId: turno.restauranteId, pago: true, updatedAt: { gte: dataCorte } },
       select: { total: true, metodoPagamento: true },
     });
 
@@ -2552,6 +2593,136 @@ router.delete("/promocoes/:id", async (req, res) => {
     await prisma.promocao.delete({ where: { id } });
     res.json({ ok: true });
   } catch (err) { res.status(500).json({ error: err.message }); }
+});
+
+// ── Garçons ───────────────────────────────────────────────────────────────────
+const bcryptAdmin = require("bcryptjs");
+
+router.get("/garcons/:restauranteId", authMiddleware, async (req, res) => {
+  const garcons = await prisma.garcon.findMany({
+    where: { restauranteId: req.params.restauranteId, ativo: true },
+    select: { id: true, nome: true, telefone: true, cedula: true, cor: true, senhaHash: true, createdAt: true },
+    orderBy: { nome: "asc" },
+  });
+  res.json({ data: garcons });
+});
+
+router.post("/garcons", authMiddleware, async (req, res) => {
+  const { nome, telefone, cedula, cor, senha, restauranteId } = req.body;
+  if (!nome || !senha || !restauranteId) return res.status(400).json({ error: "nome, senha e restauranteId são obrigatórios" });
+  const senhaHash = await bcryptAdmin.hash(senha, 10);
+  const garcon = await prisma.garcon.create({
+    data: { nome: nome.trim(), telefone: telefone?.trim() || null, cedula: cedula?.trim() || null, cor: cor || "#6366f1", senhaHash, restauranteId },
+  });
+  res.json({ data: { id: garcon.id, nome: garcon.nome, telefone: garcon.telefone, cedula: garcon.cedula, cor: garcon.cor } });
+});
+
+router.put("/garcons/:id", authMiddleware, async (req, res) => {
+  const { nome, telefone, cedula, cor, senha } = req.body;
+  const data = {};
+  if (nome) data.nome = nome.trim();
+  if (telefone !== undefined) data.telefone = telefone?.trim() || null;
+  if (cedula !== undefined) data.cedula = cedula?.trim() || null;
+  if (cor) data.cor = cor;
+  if (senha) data.senhaHash = await bcryptAdmin.hash(senha, 10);
+  const garcon = await prisma.garcon.update({ where: { id: req.params.id }, data });
+  res.json({ data: { id: garcon.id, nome: garcon.nome, telefone: garcon.telefone, cedula: garcon.cedula, cor: garcon.cor } });
+});
+
+router.delete("/garcons/:id", authMiddleware, async (req, res) => {
+  await prisma.garcon.update({ where: { id: req.params.id }, data: { ativo: false } });
+  res.json({ ok: true });
+});
+
+// ── Balcão ────────────────────────────────────────────────────────────────────
+router.post("/pedidos/balcao", authMiddleware, async (req, res) => {
+  const { itens, clienteNome, mesa, metodoPagamento, restauranteId } = req.body;
+  const rid = restauranteId || resolverRestauranteId(req);
+  if (!rid || !itens?.length) return res.status(400).json({ error: "restauranteId e itens obrigatórios" });
+  const total = itens.reduce((s, i) => s + (i.preco * (i.quantidade || 1)), 0);
+  const sessao = await prisma.sessao.create({
+    data: { clienteNumero: `balcao-${Date.now()}`, clienteNome: clienteNome || "Balcão", restauranteId: rid, estado: "FINALIZADO" },
+  });
+  const numeroDia = await proximoNumeroDia(rid);
+  const pedido = await prisma.pedido.create({
+    data: {
+      sessaoId: sessao.id, restauranteId: rid,
+      clienteNumero: sessao.clienteNumero, clienteNome: clienteNome || "Balcão",
+      itens, total, metodoPagamento: metodoPagamento || null,
+      mesa: mesa ? Number(mesa) : null, origem: "BALCAO", numeroDia,
+    },
+    include: { restaurante: { select: { slugWhatsapp: true } } },
+  });
+  const io = req.app.get("io");
+  io?.to("admin").emit("pedido:novo", pedido);
+  if (pedido.restaurante?.slugWhatsapp) io?.to(`restaurante:${pedido.restaurante.slugWhatsapp}`).emit("pedido:novo", pedido);
+  res.json({ data: pedido });
+});
+
+// ── Ticket reimpressão ────────────────────────────────────────────────────────
+router.put("/pedidos/:id/ticket", authMiddleware, async (req, res) => {
+  const { ticketHtml } = req.body;
+  await prisma.pedido.update({ where: { id: req.params.id }, data: { ticketHtml } });
+  res.json({ ok: true });
+});
+
+// ── Factura Legal (Paraguay) ──────────────────────────────────────────────────
+router.post("/facturas/proximo-numero", authMiddleware, async (req, res) => {
+  const rid = resolverRestauranteId(req);
+  if (!rid) return res.status(400).json({ error: "restauranteId obrigatório" });
+  const rest = await prisma.restaurante.update({
+    where: { id: rid },
+    data: { faturaProximoNum: { increment: 1 } },
+    select: { faturaProximoNum: true, faturaSerie: true, faturaTimbrado: true, faturaRuc: true, faturaRazaoSocial: true, faturaEndereco: true, faturaCiudad: true, faturaTelefone: true, faturaVencTimbrado: true },
+  });
+  const num = rest.faturaProximoNum - 1; // consumed number
+  const serie = rest.faturaSerie || "001-001";
+  res.json({ numero: `${serie}-${String(num).padStart(7, "0")}`, timbrado: rest.faturaTimbrado || "", ruc: rest.faturaRuc, razaoSocial: rest.faturaRazaoSocial, endereco: rest.faturaEndereco, ciudad: rest.faturaCiudad, telefone: rest.faturaTelefone, vencTimbrado: rest.faturaVencTimbrado });
+});
+
+// ── Envio de link de acesso via WhatsApp ──────────────────────────────────────
+function _gerarTokenAcesso(slug) {
+  return crypto
+    .createHmac("sha256", process.env.ADMIN_TOKEN || "secret")
+    .update(slug)
+    .digest("hex")
+    .substring(0, 32);
+}
+
+router.post("/enviar-link-acesso", authMiddleware, async (req, res) => {
+  const { telefone, tipo, restauranteId } = req.body;
+  if (!telefone || !tipo || !restauranteId)
+    return res.status(400).json({ error: "telefone, tipo e restauranteId obrigatórios" });
+
+  const rest = await prisma.restaurante.findUnique({
+    where: { id: restauranteId },
+    select: { slugWhatsapp: true, instanceEvolution: true },
+  });
+  if (!rest) return res.status(404).json({ error: "Restaurante não encontrado" });
+
+  const slug = rest.slugWhatsapp;
+  const token = _gerarTokenAcesso(slug);
+  const base = process.env.BOT_PUBLIC_URL || `http://localhost:${process.env.PORT || 3000}`;
+  const instanceName = rest.instanceEvolution || slug;
+
+  const links = {
+    motoboy: `${base}/motoboy.html?slug=${slug}&t=${token}`,
+    garcon:  `${base}/garcon.html?slug=${slug}&t=${token}`,
+  };
+  const nomes = { motoboy: "motoboy", garcon: "garçom" };
+
+  const link = links[tipo];
+  if (!link) return res.status(400).json({ error: "tipo inválido (motoboy ou garcon)" });
+
+  const mensagem = `Olá! Aqui está o seu link de acesso ao painel de ${nomes[tipo]}:\n${link}\n\nFaça login com seu nome e senha cadastrados.`;
+
+  try {
+    await enviarMensagem(telefone, mensagem, instanceName);
+    res.json({ ok: true });
+  } catch (err) {
+    console.error("[admin] erro ao enviar link via WA:", err.message);
+    res.status(500).json({ error: "Erro ao enviar mensagem no WhatsApp" });
+  }
 });
 
 module.exports = router;

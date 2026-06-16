@@ -2,9 +2,8 @@ const express = require("express");
 const crypto = require("crypto");
 const bcrypt = require("bcryptjs");
 const { PrismaClient } = require("@prisma/client");
-const { notificarStatusPedido } = require("../services/pedidoService");
+const { notificarStatusPedido, formatNumPedido, proximoNumeroDia } = require("../services/pedidoService");
 const { enviarMensagem } = require("../services/evolutionService");
-const { formatNumPedido } = require("../services/pedidoService");
 
 const router = express.Router();
 const prisma = new PrismaClient();
@@ -48,8 +47,8 @@ function enviarPushMotoboys(slug, pedido) {
   const payload = JSON.stringify({
     title: "🛵 Nova entrega disponível!",
     body: `Pedido ${num} pronto para despacho. Toque para aceitar.`,
-    icon: "/icons/motoboy-192.png",
-    badge: "/icons/motoboy-192.png",
+    icon: "/icons/motoboy-icon.svg",
+    badge: "/icons/motoboy-icon.svg",
     tag: `entrega-${pedido.id}`,
   });
   for (const [motoboyId, { subscription, slug: s }] of motoboySubscriptions) {
@@ -102,6 +101,7 @@ router.get("/token/:slug", (req, res) => {
     token,
     cozinha: `${base}/cozinha.html?slug=${req.params.slug}&t=${token}`,
     motoboy: `${base}/motoboy.html?slug=${req.params.slug}&t=${token}`,
+    garcon:  `${base}/garcon.html?slug=${req.params.slug}&t=${token}`,
   });
 });
 
@@ -122,7 +122,7 @@ router.post("/motoboy/subscribe", validarToken, async (req, res) => {
   res.json({ ok: true });
 });
 
-// GET /painel/motoboy/manifest — manifest PWA dinâmico com start_url contendo token correto
+// GET /painel/motoboy/manifest — manifest PWA dinâmico
 router.get("/motoboy/manifest", validarToken, (req, res) => {
   const base = process.env.BOT_PUBLIC_URL || `http://localhost:${process.env.PORT || 3000}`;
   res.setHeader("Content-Type", "application/manifest+json");
@@ -136,8 +136,26 @@ router.get("/motoboy/manifest", validarToken, (req, res) => {
     background_color: "#f1f5f9",
     theme_color: "#f97316",
     icons: [
-      { src: `${base}/icons/motoboy-192.png`, sizes: "192x192", type: "image/png" },
-      { src: `${base}/icons/motoboy-512.png`, sizes: "512x512", type: "image/png", purpose: "any maskable" },
+      { src: `${base}/icons/motoboy-icon.svg`, sizes: "any", type: "image/svg+xml", purpose: "any maskable" },
+    ],
+  });
+});
+
+// GET /painel/garcon/manifest — manifest PWA dinâmico para garçom
+router.get("/garcon/manifest", validarToken, (req, res) => {
+  const base = process.env.BOT_PUBLIC_URL || `http://localhost:${process.env.PORT || 3000}`;
+  res.setHeader("Content-Type", "application/manifest+json");
+  res.json({
+    name: "Painel Garçom",
+    short_name: "Garçom",
+    description: "Painel de pedidos para garçons",
+    start_url: `/garcon.html?slug=${req.painelSlug}&t=${req.query.t}`,
+    display: "standalone",
+    orientation: "portrait",
+    background_color: "#4f46e5",
+    theme_color: "#6366f1",
+    icons: [
+      { src: `${base}/icons/garcon-icon.svg`, sizes: "any", type: "image/svg+xml", purpose: "any maskable" },
     ],
   });
 });
@@ -283,7 +301,7 @@ router.post("/pedidos/:id/iniciar", validarToken, async (req, res) => {
 router.post("/pedidos/:id/pronto", validarToken, async (req, res) => {
   const atual = await prisma.pedido.findUnique({
     where: { id: req.params.id },
-    select: { localizacao: true, origem: true },
+    select: { localizacao: true, origem: true, garconId: true },
   });
   const isRetirada =
     !atual.localizacao ||
@@ -293,12 +311,23 @@ router.post("/pedidos/:id/pronto", validarToken, async (req, res) => {
   const pedido = await prisma.pedido.update({
     where: { id: req.params.id },
     data: { status: novoStatus },
+    select: { id: true, mesa: true, itens: true, numeroDia: true, garconId: true, status: true, localizacao: true, origem: true, total: true, metodoPagamento: true },
   });
   const io = req.app.get("io");
   io?.to("admin").emit("pedido:atualizado", pedido);
   io?.to(`restaurante:${req.painelSlug}`).emit("pedido:atualizado", pedido);
   notificarStatusPedido(req.params.id, novoStatus).catch(() => {});
   if (novoStatus === "AGUARDANDO_DESPACHO") enviarPushMotoboys(req.painelSlug, pedido);
+  // Notifica o garçom pessoalmente quando pedido de mesa fica pronto
+  if (novoStatus === "PRONTO_PARA_RETIRADA" && pedido.garconId) {
+    io?.to(`garcon:${pedido.garconId}`).emit("pedido:pronto", {
+      id: pedido.id,
+      mesa: pedido.mesa,
+      itens: pedido.itens,
+      garconId: pedido.garconId,
+      numeroDia: pedido.numeroDia,
+    });
+  }
   res.json({ ok: true, status: novoStatus });
 });
 
@@ -446,6 +475,158 @@ router.post("/pedidos/:id/entregar", validarToken, async (req, res) => {
     enviarMensagem(atual.clienteNumero, msgComp, pedido.restaurante.slugWhatsapp).catch(() => {});
   }
 
+  res.json({ ok: true });
+});
+
+// ── Garçom ───────────────────────────────────────────────────────────────────
+
+// GET /painel/garcon/lista
+router.get("/garcon/lista", validarToken, async (req, res) => {
+  const rest = await prisma.restaurante.findFirst({ where: { slugWhatsapp: req.painelSlug, ativo: true }, select: { id: true } });
+  if (!rest) return res.status(404).json({ error: "Restaurante não encontrado" });
+  const garcons = await prisma.garcon.findMany({
+    where: { restauranteId: rest.id, ativo: true },
+    select: { id: true, nome: true, cor: true },
+    orderBy: { nome: "asc" },
+  });
+  res.json({ data: garcons });
+});
+
+// POST /painel/garcon/auth
+router.post("/garcon/auth", validarToken, async (req, res) => {
+  const { garconId, senha } = req.body;
+  if (!garconId || !senha) return res.status(400).json({ error: "garconId e senha obrigatórios" });
+  const rest = await prisma.restaurante.findFirst({ where: { slugWhatsapp: req.painelSlug, ativo: true }, select: { id: true } });
+  if (!rest) return res.status(404).json({ error: "Restaurante não encontrado" });
+  const garcon = await prisma.garcon.findFirst({ where: { id: garconId, restauranteId: rest.id, ativo: true } });
+  if (!garcon) return res.status(401).json({ error: "Garçom não encontrado" });
+  if (!garcon.senhaHash) return res.status(401).json({ error: "Senha não configurada. Contate o administrador." });
+  const ok = await bcrypt.compare(senha, garcon.senhaHash);
+  if (!ok) return res.status(401).json({ error: "Senha incorreta" });
+  res.json({ ok: true, id: garcon.id, nome: garcon.nome, cor: garcon.cor });
+});
+
+// GET /painel/garcon/cardapio
+router.get("/garcon/cardapio", validarToken, async (req, res) => {
+  const rest = await prisma.restaurante.findFirst({ where: { slugWhatsapp: req.painelSlug, ativo: true }, select: { id: true, moeda: true } });
+  if (!rest) return res.status(404).json({ error: "Restaurante não encontrado" });
+  const categorias = await prisma.categoria.findMany({
+    where: { restauranteId: rest.id, ativo: true },
+    include: { produtos: { where: { ativo: true }, include: { tamanhos: true }, orderBy: { nome: "asc" } } },
+    orderBy: { ordem: "asc" },
+  });
+  res.json({ data: categorias, moeda: rest.moeda });
+});
+
+// GET /painel/garcon/mesas
+router.get("/garcon/mesas", validarToken, async (req, res) => {
+  const rest = await prisma.restaurante.findFirst({ where: { slugWhatsapp: req.painelSlug, ativo: true }, select: { id: true, moeda: true } });
+  if (!rest) return res.status(404).json({ error: "Restaurante não encontrado" });
+  const pedidos = await prisma.pedido.findMany({
+    where: { restauranteId: rest.id, origem: "MESA", status: { notIn: ["ENTREGUE", "CANCELADO"] } },
+    select: { id: true, mesa: true, itens: true, total: true, status: true, garconId: true, garconNome: true, garconCor: true, createdAt: true },
+    orderBy: { mesa: "asc" },
+  });
+  res.json({ data: pedidos, moeda: rest.moeda });
+});
+
+// POST /painel/garcon/mesas — abre nova mesa
+router.post("/garcon/mesas", validarToken, async (req, res) => {
+  const { mesa, garconId, garconNome, garconCor } = req.body;
+  if (!mesa) return res.status(400).json({ error: "mesa obrigatório" });
+  const rest = await prisma.restaurante.findFirst({ where: { slugWhatsapp: req.painelSlug, ativo: true }, select: { id: true } });
+  if (!rest) return res.status(404).json({ error: "Restaurante não encontrado" });
+  const existing = await prisma.pedido.findFirst({
+    where: { restauranteId: rest.id, mesa: Number(mesa), origem: "MESA", status: { notIn: ["ENTREGUE", "CANCELADO"] } },
+    select: { id: true, mesa: true, itens: true, total: true, status: true, garconId: true, garconNome: true, garconCor: true },
+  });
+  if (existing) return res.status(409).json({ error: "Mesa já aberta", data: existing });
+  const sessao = await prisma.sessao.create({
+    data: { clienteNumero: `mesa-${mesa}`, clienteNome: `Mesa ${mesa}`, restauranteId: rest.id, estado: "FINALIZADO", carrinho: [] },
+  });
+  const numeroDia = await proximoNumeroDia(rest.id).catch(() => null);
+  const pedido = await prisma.pedido.create({
+    data: {
+      sessaoId: sessao.id, restauranteId: rest.id,
+      clienteNumero: `mesa-${mesa}`, clienteNome: `Mesa ${mesa}`,
+      itens: [], total: 0, status: "CONFIRMADO",
+      mesa: Number(mesa), origem: "MESA", numeroDia,
+      garconId: garconId || null, garconNome: garconNome || null, garconCor: garconCor || null,
+    },
+  });
+  const io = req.app.get("io");
+  io?.to("admin").emit("pedido:novo", pedido);
+  io?.to(`restaurante:${req.painelSlug}`).emit("pedido:novo", pedido);
+  res.json({ ok: true, data: pedido });
+});
+
+// POST /painel/garcon/mesas/:pedidoId/itens — adiciona itens a uma mesa aberta
+router.post("/garcon/mesas/:pedidoId/itens", validarToken, async (req, res) => {
+  const { itens, garconId, garconNome, garconCor } = req.body;
+  if (!itens?.length) return res.status(400).json({ error: "itens obrigatórios" });
+  const pedido = await prisma.pedido.findUnique({
+    where: { id: req.params.pedidoId },
+    select: { itens: true, total: true, garconId: true },
+  });
+  if (!pedido) return res.status(404).json({ error: "Pedido não encontrado" });
+  const itensAtuais = Array.isArray(pedido.itens) ? pedido.itens : [];
+  const totalExtra = itens.reduce((s, i) => s + i.preco * i.quantidade, 0);
+  const data = { itens: [...itensAtuais, ...itens], total: pedido.total + totalExtra };
+  if (!pedido.garconId && garconId) { data.garconId = garconId; data.garconNome = garconNome; data.garconCor = garconCor; }
+  const updated = await prisma.pedido.update({ where: { id: req.params.pedidoId }, data });
+  const io = req.app.get("io");
+  io?.to("admin").emit("pedido:atualizado", updated);
+  io?.to(`restaurante:${req.painelSlug}`).emit("pedido:atualizado", updated);
+  res.json({ ok: true, data: updated });
+});
+
+// POST /painel/garcon/mesas/:pedidoId/solicitar-fechamento
+router.post("/garcon/mesas/:pedidoId/solicitar-fechamento", validarToken, async (req, res) => {
+  const { garconId, garconNome, garconCor } = req.body;
+  const pedido = await prisma.pedido.findUnique({
+    where: { id: req.params.pedidoId },
+    select: { id: true, numeroDia: true, mesa: true, total: true, itens: true },
+  });
+  if (!pedido) return res.status(404).json({ error: "Pedido não encontrado" });
+  const io = req.app.get("io");
+  io?.to("admin").to(`restaurante:${req.painelSlug}`).emit("garcon:solicitar-fechamento", {
+    pedidoId: pedido.id, numeroDia: pedido.numeroDia, mesa: pedido.mesa,
+    total: pedido.total, garconId, garconNome, garconCor,
+  });
+  res.json({ ok: true });
+});
+
+// GET /painel/garcon/prontos — pedidos PRONTO_PARA_RETIRADA do garçom logado
+router.get("/garcon/prontos", validarToken, async (req, res) => {
+  const { garconId } = req.query;
+  if (!garconId) return res.json({ data: [] });
+  const rest = await prisma.restaurante.findFirst({ where: { slugWhatsapp: req.painelSlug, ativo: true }, select: { id: true } });
+  if (!rest) return res.status(404).json({ error: "Restaurante não encontrado" });
+  const pedidos = await prisma.pedido.findMany({
+    where: { restauranteId: rest.id, garconId, status: "PRONTO_PARA_RETIRADA" },
+    select: { id: true, mesa: true, itens: true, numeroDia: true, garconId: true },
+    orderBy: { createdAt: "asc" },
+  });
+  res.json({ data: pedidos });
+});
+
+// PUT /painel/pedidos/:id/servir — garçom marca pedido como entregue à mesa
+router.put("/pedidos/:id/servir", validarToken, async (req, res) => {
+  const { id } = req.params;
+  const rest = await prisma.restaurante.findFirst({ where: { slugWhatsapp: req.painelSlug, ativo: true }, select: { id: true, slugWhatsapp: true } });
+  if (!rest) return res.status(404).json({ error: "Restaurante não encontrado" });
+  const atual = await prisma.pedido.findUnique({ where: { id }, select: { restauranteId: true, status: true } });
+  if (!atual) return res.status(404).json({ error: "Pedido não encontrado" });
+  if (atual.restauranteId !== rest.id) return res.status(403).json({ error: "Sem permissão" });
+  if (atual.status !== "PRONTO_PARA_RETIRADA") return res.status(400).json({ error: "Pedido não está pronto" });
+  const pedido = await prisma.pedido.update({
+    where: { id },
+    data: { status: "ENTREGUE" },
+    include: { restaurante: { select: { slugWhatsapp: true } } },
+  });
+  const io = req.app.get("io");
+  io?.to("admin").emit("pedido:atualizado", pedido);
+  io?.to(`restaurante:${rest.slugWhatsapp}`).emit("pedido:atualizado", pedido);
   res.json({ ok: true });
 });
 

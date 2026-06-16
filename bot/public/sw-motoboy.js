@@ -39,8 +39,8 @@ self.addEventListener('push', e => {
   e.waitUntil(
     self.registration.showNotification(data.title || '🛵 Nova entrega!', {
       body: data.body || 'Acesse o painel para ver os detalhes.',
-      icon: data.icon || '/icons/motoboy-192.png',
-      badge: data.badge || '/icons/motoboy-192.png',
+      icon: data.icon || '/icons/motoboy-icon.svg',
+      badge: data.badge || '/icons/motoboy-icon.svg',
       tag: data.tag || 'entrega',
       renotify: true,
       vibrate: [200, 100, 200, 100, 200],

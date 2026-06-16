@@ -18,7 +18,34 @@ const evolutionClient = axios.create({
 
 async function resolverJid(numero, instanceName) {
   if (!numero) return numero;
-  if (numero.includes("@")) return numero; // já tem sufixo, usa direto
+
+  // Para @lid: tenta encontrar o @s.whatsapp.net equivalente via pushName no banco
+  if (numero.includes("@lid")) {
+    try {
+      const rows = await prisma.$queryRaw`
+        SELECT c2."remoteJid"
+        FROM "Contact" c2
+        JOIN "Instance" i ON c2."instanceId" = i.id
+        WHERE i.name = ${instanceName}
+          AND c2."remoteJid" LIKE '%@s.whatsapp.net'
+          AND c2."pushName" = (
+            SELECT c1."pushName" FROM "Contact" c1
+            JOIN "Instance" i1 ON c1."instanceId" = i1.id
+            WHERE i1.name = ${instanceName} AND c1."remoteJid" = ${numero}
+            LIMIT 1
+          )
+        LIMIT 1
+      `;
+      if (rows.length > 0) {
+        console.log(`[evolution] @lid ${numero} → ${rows[0].remoteJid}`);
+        return rows[0].remoteJid;
+      }
+    } catch { /* fallback: usa @lid mesmo */ }
+    return numero;
+  }
+
+  if (numero.includes("@")) return numero; // @s.whatsapp.net ou @g.us — usa direto
+
   try {
     const rows = await prisma.$queryRaw`
       SELECT c."remoteJid"
@@ -39,16 +66,25 @@ async function _enviarComRetryLid(path, payload, instanceName) {
     const { data } = await evolutionClient.post(path, payload);
     return data;
   } catch (err) {
-    // Se a primeira tentativa falhou com 400 e o JID tem @s.whatsapp.net,
-    // é possível que o contato seja @lid (iOS) — retenta com sufixo @lid.
-    if (err.response?.status === 400 && payload.number?.includes("@s.whatsapp.net")) {
-      const lidNumber = payload.number.replace("@s.whatsapp.net", "@lid");
-      try {
-        const { data } = await evolutionClient.post(path, { ...payload, number: lidNumber });
-        console.log(`[evolution] reenviado via @lid: ${lidNumber}`);
-        return data;
-      } catch (err2) {
-        throw err2;
+    if (err.response?.status === 400) {
+      // @s.whatsapp.net falhou → tenta @lid (contato iOS com privacidade)
+      if (payload.number?.includes("@s.whatsapp.net")) {
+        const lidNumber = payload.number.replace("@s.whatsapp.net", "@lid");
+        try {
+          const { data } = await evolutionClient.post(path, { ...payload, number: lidNumber });
+          console.log(`[evolution] reenviado via @lid: ${lidNumber}`);
+          return data;
+        } catch { /* cai no throw abaixo */ }
+      }
+      // @lid falhou → tenta extrair o número e reenviar como @s.whatsapp.net
+      if (payload.number?.includes("@lid")) {
+        const phone = payload.number.replace("@lid", "");
+        const netNumber = phone + "@s.whatsapp.net";
+        try {
+          const { data } = await evolutionClient.post(path, { ...payload, number: netNumber });
+          console.log(`[evolution] reenviado via @s.whatsapp.net: ${netNumber}`);
+          return data;
+        } catch { /* cai no throw abaixo */ }
       }
     }
     throw err;

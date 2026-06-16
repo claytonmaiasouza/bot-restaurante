@@ -83,6 +83,12 @@ io.on("connection", (socket) => {
     }
   });
 
+  // Garçom assina sala pessoal para receber notificação de pedido pronto
+  socket.on("assinar:garcon", ({ garconId, slug }) => {
+    if (garconId) socket.join(`garcon:${garconId}`);
+    if (slug) socket.join(`restaurante:${slug}`);
+  });
+
   // Dono do restaurante assina a sala admin para receber eventos em tempo real
   socket.on("assinar:restaurante", (jwtToken) => {
     try {

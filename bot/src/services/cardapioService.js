@@ -3,7 +3,7 @@ const { PrismaClient } = require("@prisma/client");
 const prisma = new PrismaClient();
 
 // ── Busca cardápio ativo (para o bot e app público) ──────────────────────────
-async function buscarCardapioDB(restauranteId) {
+async function buscarCardapioDB(restauranteId, canal = null) {
   const categorias = await prisma.categoria.findMany({
     where: { restauranteId, ativo: true },
     orderBy: { ordem: "asc" },
@@ -16,10 +16,18 @@ async function buscarCardapioDB(restauranteId) {
     },
   });
 
-  return categorias.map((cat) => ({
+  const filtradas = canal
+    ? categorias.filter((cat) => {
+        const canais = Array.isArray(cat.canais) ? cat.canais : ["SALAO", "DELIVERY", "WEB"];
+        return canais.includes(canal);
+      })
+    : categorias;
+
+  return filtradas.map((cat) => ({
     id: cat.id,
     nome: cat.nome,
     ordem: cat.ordem,
+    canais: Array.isArray(cat.canais) ? cat.canais : ["SALAO", "DELIVERY", "WEB"],
     tamanhos: cat.tamanhos || [],
     tipoTamanhos: cat.tipoTamanhos || "simples",
     bordas: cat.bordas || [],
@@ -62,6 +70,7 @@ async function buscarCardapioAdmin(restauranteId) {
     bordas: cat.bordas || [],
     imagemUrl: cat.imagemUrl || null,
     ocultarMobile: cat.ocultarMobile || false,
+    canais: Array.isArray(cat.canais) ? cat.canais : ["SALAO", "DELIVERY", "WEB"],
     produtos: cat.produtos.map((p) => ({
       id: p.id,
       nome: p.nome,
@@ -86,9 +95,9 @@ async function temCardapioDB(restauranteId) {
 }
 
 // ── CRUD Categorias ───────────────────────────────────────────────────────────
-async function criarCategoria(restauranteId, nome, ordem = 0, tamanhos = [], tipoTamanhos = "simples", bordas = []) {
+async function criarCategoria(restauranteId, nome, ordem = 0, tamanhos = [], tipoTamanhos = "simples", bordas = [], estacaoTipo = "GERAL", canais = ["SALAO", "DELIVERY", "WEB"]) {
   return prisma.categoria.create({
-    data: { restauranteId, nome, ordem, tamanhos, tipoTamanhos, bordas },
+    data: { restauranteId, nome, ordem, tamanhos, tipoTamanhos, bordas, estacaoTipo, canais },
     include: { produtos: true },
   });
 }

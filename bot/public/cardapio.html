@@ -362,7 +362,7 @@
       z-index: 60;
       transition: transform 0.28s cubic-bezier(0.4, 0, 0.2, 1), opacity 0.28s ease;
     }
-    #lista-bot-action.auto-hidden {
+    .bot-action.auto-hidden {
       transform: translateX(-50%) translateY(110%);
       opacity: 0;
       pointer-events: none;
@@ -559,6 +559,165 @@
       line-height: 1.4;
     }
 
+    /* ── Promo Ticker ── */
+    .promo-ticker {
+      display: flex;
+      align-items: stretch;
+      background: #1a1a1a;
+      overflow: hidden;
+      height: 40px;
+      flex-shrink: 0;
+    }
+    .promo-ticker-brand {
+      flex-shrink: 0;
+      display: flex;
+      align-items: center;
+      padding: 0 14px;
+      gap: 5px;
+      font-size: 11px;
+      font-weight: 900;
+      color: #fff;
+      letter-spacing: .8px;
+      text-transform: uppercase;
+      background: #D64000;
+      border-right: 1px solid rgba(255,255,255,.15);
+      white-space: nowrap;
+    }
+    .promo-ticker-wrap {
+      flex: 1;
+      overflow: hidden;
+      display: flex;
+      align-items: center;
+      min-width: 0;
+    }
+    .promo-ticker-track {
+      display: inline-flex;
+      white-space: nowrap;
+      animation: ticker-roll 24s linear infinite;
+      will-change: transform;
+    }
+    .promo-ticker-item {
+      display: inline-flex;
+      align-items: center;
+      gap: 6px;
+      padding: 0 28px;
+      font-size: 13px;
+      font-weight: 600;
+      color: #fff;
+      cursor: pointer;
+    }
+    .promo-ticker-sep {
+      color: rgba(255,255,255,.3);
+      font-size: 18px;
+      flex-shrink: 0;
+    }
+    .promo-ticker-cta {
+      flex-shrink: 0;
+      display: flex;
+      align-items: center;
+      padding: 0 14px;
+      font-size: 11px;
+      font-weight: 700;
+      color: #fff;
+      background: rgba(255,255,255,.08);
+      border: none;
+      border-left: 1px solid rgba(255,255,255,.15);
+      cursor: pointer;
+      white-space: nowrap;
+      letter-spacing: .3px;
+    }
+    .promo-ticker-cta:active { background: rgba(255,255,255,.18); }
+    @keyframes ticker-roll {
+      0%   { transform: translateX(0); }
+      100% { transform: translateX(-50%); }
+    }
+
+    /* ── Promo Modal ── */
+    #promo-modal {
+      display: none;
+      position: fixed; inset: 0;
+      background: rgba(0,0,0,.55);
+      z-index: 200;
+      align-items: flex-end;
+      justify-content: center;
+    }
+    #promo-modal.on { display: flex; }
+    .promo-modal-sheet {
+      background: #fff;
+      border-radius: 24px 24px 0 0;
+      width: 100%;
+      max-width: 480px;
+      max-height: 85dvh;
+      display: flex;
+      flex-direction: column;
+      animation: slideUp .28s cubic-bezier(.2,1,.3,1);
+    }
+    @keyframes slideUp { from { transform: translateY(100%); } to { transform: translateY(0); } }
+    .promo-modal-hdr {
+      padding: 16px 20px 12px;
+      display: flex;
+      align-items: flex-start;
+      gap: 12px;
+      border-bottom: 1px solid #f0f0f0;
+      position: relative;
+    }
+    .promo-modal-info { flex: 1; }
+    .promo-modal-nome { font-size: 17px; font-weight: 800; color: var(--text); margin-bottom: 3px; }
+    .promo-modal-desc { font-size: 13px; color: var(--muted); line-height: 1.4; }
+    .promo-modal-close {
+      width: 32px; height: 32px;
+      border: none; background: #f3f3f3;
+      border-radius: 50%;
+      font-size: 18px; cursor: pointer;
+      display: flex; align-items: center; justify-content: center;
+      flex-shrink: 0;
+    }
+    .promo-modal-body { overflow-y: auto; padding: 16px 20px; flex: 1; }
+    .promo-item-card {
+      display: flex;
+      align-items: center;
+      gap: 12px;
+      padding: 12px 14px;
+      border-radius: 14px;
+      background: #fafafa;
+      border: 2px solid transparent;
+      cursor: pointer;
+      transition: border-color .15s, background .15s;
+      margin-bottom: 8px;
+    }
+    .promo-item-card.sel { border-color: var(--prim); background: var(--prim-bg); }
+    .promo-item-card-name { flex: 1; font-size: 14px; font-weight: 600; color: var(--text); }
+    .promo-item-card-sub { font-size: 12px; color: var(--muted); }
+    .promo-item-card-preco { font-size: 14px; font-weight: 700; color: var(--prim); }
+    .promo-item-check {
+      width: 22px; height: 22px;
+      border-radius: 50%;
+      border: 2px solid var(--border);
+      display: flex; align-items: center; justify-content: center;
+      flex-shrink: 0;
+      font-size: 13px;
+      transition: all .15s;
+    }
+    .promo-item-card.sel .promo-item-check { background: var(--prim); border-color: var(--prim); color: #fff; }
+    .promo-modal-foot {
+      padding: 14px 20px;
+      border-top: 1px solid #f0f0f0;
+    }
+    .btn-promo-add {
+      width: 100%;
+      background: var(--prim);
+      color: #fff;
+      border: none;
+      border-radius: 16px;
+      height: 52px;
+      font-size: 16px;
+      font-weight: 800;
+      cursor: pointer;
+      transition: transform .13s;
+    }
+    .btn-promo-add:active { transform: scale(.98); }
+    .btn-promo-add:disabled { background: var(--border); color: var(--muted); cursor: default; }
+
     /* ── Toast ── */
     #toast {
       position: fixed; bottom: 90px;
@@ -584,6 +743,15 @@
     <div class="home-hero">
       <img src="/don-pedro-banner.png" alt="Don Pedro Pizzeria &amp; Heladeria">
     </div>
+
+    <!-- Ticker de promoções (preenchido via JS) -->
+    <div id="promo-band" class="promo-ticker hidden">
+      <div class="promo-ticker-wrap">
+        <div class="promo-ticker-track" id="promo-scroll"></div>
+      </div>
+      <button class="promo-ticker-cta" id="promo-ticker-ver">Ver →</button>
+    </div>
+
     <div class="cats-grid" id="cats-grid"></div>
     <div style="height:80px"></div>
     <button class="fab" id="fab" onclick="ir('sacola')">
@@ -623,8 +791,8 @@
     <div class="pb90"></div>
     <div class="bot-action" id="lista-bot-action">
       <div style="display:flex;flex-direction:column;gap:8px">
-        <button id="lista-fin-btn" class="btn-prim" onclick="verificarBebidasEFinalizar()">Finalizar pedido →</button>
         <button class="btn-sec" onclick="ir('home')">← Cardápio</button>
+        <button id="lista-fin-btn" class="btn-prim" onclick="verificarBebidasEFinalizar()">Finalizar pedido →</button>
       </div>
     </div>
   </div>
@@ -698,7 +866,10 @@
       </div>
     </div>
     <div class="bot-action">
-      <button class="btn-prim" id="btn-fin" onclick="finalizar()">Fazer pedido 🎉</button>
+      <div style="display:flex;flex-direction:column;gap:8px">
+        <button class="btn-sec" onclick="ir('sacola')">🛍️ Ver meu pedido</button>
+        <button class="btn-prim" id="btn-fin" onclick="finalizar()">Fazer pedido 🎉</button>
+      </div>
     </div>
   </div>
 
@@ -720,6 +891,23 @@
 </div>
 
 <div id="toast"></div>
+
+<!-- Modal de promoção -->
+<div id="promo-modal">
+  <div class="promo-modal-sheet">
+    <div class="promo-modal-hdr">
+      <div class="promo-modal-info">
+        <div class="promo-modal-nome" id="pm-nome"></div>
+        <div class="promo-modal-desc" id="pm-desc"></div>
+      </div>
+      <button class="promo-modal-close" onclick="fecharPromoModal()">✕</button>
+    </div>
+    <div class="promo-modal-body" id="pm-body"></div>
+    <div class="promo-modal-foot">
+      <button class="btn-promo-add" id="pm-btn-add" onclick="adicionarItensPromo()">Adicionar ao pedido</button>
+    </div>
+  </div>
+</div>
 
 <script>
 const SLUG = new URLSearchParams(location.search).get('slug');
@@ -763,27 +951,27 @@ function ir(tela) {
   sync();
   if (tela === 'sacola') renderSacola();
   window.scrollTo(0, 0);
-  if (tela === 'lista') {
-    const bar = document.getElementById('lista-bot-action');
-    const pb  = document.querySelector('#s-lista .pb90');
+  if (tela === 'lista' || tela === 'builder') {
+    const bar = tela === 'lista'
+      ? document.getElementById('lista-bot-action')
+      : document.querySelector('#s-builder .bot-action');
+    const pb = document.querySelector(`#s-${tela} .pb90`);
     bar.classList.add('auto-hidden');
-    requestAnimationFrame(() => requestAnimationFrame(() => {
-      // padding sempre igual à altura real da barra — o último item nunca fica coberto
+    requestAnimationFrame(() => {
       if (pb) pb.style.height = bar.offsetHeight + 'px';
-      if (document.body.scrollHeight <= window.innerHeight + 60) {
+    });
+    let lastY = 0;
+    function onScroll() {
+      const y = document.documentElement.scrollTop || document.body.scrollTop || window.pageYOffset || 0;
+      if (y < lastY) {
+        bar.classList.add('auto-hidden');
+      } else if (y > lastY && y > 250) {
         bar.classList.remove('auto-hidden');
-        return;
       }
-      const handler = () => {
-        const atBottom = window.scrollY + window.innerHeight >= document.body.scrollHeight - 80;
-        bar.classList.toggle('auto-hidden', !atBottom);
-      };
-      window.addEventListener('scroll', handler, { passive: true });
-      _listaScrollOff = () => {
-        window.removeEventListener('scroll', handler);
-        if (pb) pb.style.height = '';
-      };
-    }));
+      lastY = y;
+    }
+    document.addEventListener('scroll', onScroll, { passive: true, capture: true });
+    _listaScrollOff = () => document.removeEventListener('scroll', onScroll, { capture: true });
   }
 }
 
@@ -876,10 +1064,12 @@ async function init() {
     if (!r.ok) throw 0;
     const d = await r.json();
     G.rest = d.restaurante; G.cardapio = d.cardapio; G.moeda = d.restaurante.moeda || 'G$';
+    G.promocoes = d.promocoes || [];
     document.title = G.rest.nome;
     const hNome = document.getElementById('h-nome');
     if (hNome) hNome.textContent = G.rest.nome;
     renderHome();
+    renderPromoBanner(G.promocoes);
     renderCkPag();
     carregarDadosCliente();
     document.getElementById('loading').style.display = 'none';
@@ -1719,10 +1909,149 @@ function usarLocalizacao() {
   );
 }
 
+// ── Promoções ─────────────────────────────────────────────────────────────────
+const PROMO_EMOJIS = { MANUAL:'🏷️', DESCONTO:'💰', COMPRE_PAGUE:'🛒', BRINDE:'🎁' };
+
+function renderPromoBanner(promocoes) {
+  const band = document.getElementById('promo-band');
+  const track = document.getElementById('promo-scroll');
+  const btnVer = document.getElementById('promo-ticker-ver');
+  if (!promocoes || !promocoes.length) { band.classList.add('hidden'); return; }
+
+  const moeda = G.moeda || 'G$';
+  const segmentos = promocoes.map(p => {
+    const ico = PROMO_EMOJIS[p.tipo] || '🏷️';
+    let txt = p.nome;
+    if (p.descricao) txt += ' — ' + p.descricao;
+    if (p.precoPromocional != null)
+      txt += ' por ' + moeda + ' ' + Number(p.precoPromocional).toLocaleString('pt-BR');
+    return `<span class="promo-ticker-item" onclick="abrirPromoModal('${p.id}')">${ico} ${txt}</span><span class="promo-ticker-sep">✦</span>`;
+  }).join('');
+
+  // Duplicar conteúdo para loop contínuo sem pausa
+  track.innerHTML = segmentos + segmentos;
+
+  // Velocidade proporcional ao texto (px/s constante)
+  const totalChars = promocoes.reduce((a, p) => a + p.nome.length + (p.descricao || '').length, 0);
+  track.style.animationDuration = Math.max(10, totalChars * 0.35) + 's';
+
+  if (btnVer) btnVer.onclick = () => abrirPromoModal(promocoes[0].id);
+
+  band.classList.remove('hidden');
+}
+
+let _promoAtualId = null;
+let _promoItensSelec = [];
+
+function abrirPromoModal(id) {
+  const p = (G.promocoes || []).find(x => x.id === id);
+  if (!p) return;
+  _promoAtualId = id;
+  _promoItensSelec = [];
+  document.getElementById('pm-nome').textContent = p.nome;
+  document.getElementById('pm-desc').textContent = p.descricao || '';
+  const body = document.getElementById('pm-body');
+  const itens = Array.isArray(p.itens) ? p.itens : [];
+  if (!itens.length) {
+    body.innerHTML = '<p style="color:#999;font-size:14px;text-align:center;padding:24px 0">Esta promoção não tem itens específicos associados.</p>';
+  } else {
+    const moeda = G.moeda || 'G$';
+    const temPrecoPromo = p.precoPromocional != null;
+    body.innerHTML = `<p style="font-size:13px;color:#888;margin-bottom:14px;">Selecione o(s) item(ns) que deseja adicionar ao pedido${temPrecoPromo ? ` por <strong style="color:#D64000">${moeda} ${Number(p.precoPromocional).toLocaleString('pt-BR')} cada</strong>` : ''}:</p>` +
+      itens.map((it, i) => {
+        const precoBase = temPrecoPromo ? p.precoPromocional : it.preco;
+        const precoFmt = precoBase != null ? `${moeda} ${Number(precoBase).toLocaleString('pt-BR', {minimumFractionDigits:0})}` : '';
+        const precoOrigFmt = temPrecoPromo && it.preco ? `<span style="text-decoration:line-through;color:#bbb;font-size:11px;margin-right:4px">${moeda} ${Number(it.preco).toLocaleString('pt-BR', {minimumFractionDigits:0})}</span>` : '';
+        return `<div class="promo-item-card" id="pic-${i}" onclick="togglePromoItem(${i})">
+          <div style="flex:1">
+            <div class="promo-item-card-name">${esc(it.nome)}</div>
+          </div>
+          <div class="promo-item-card-preco">${precoOrigFmt}${precoFmt}</div>
+          <div class="promo-item-check" id="pic-chk-${i}"></div>
+        </div>`;
+      }).join('');
+  }
+  document.getElementById('promo-modal').classList.add('on');
+  atualizarBtnPromo();
+}
+
+function togglePromoItem(i) {
+  const idx = _promoItensSelec.indexOf(i);
+  const card = document.getElementById(`pic-${i}`);
+  const chk = document.getElementById(`pic-chk-${i}`);
+  if (idx === -1) {
+    _promoItensSelec.push(i);
+    card.classList.add('sel');
+    chk.textContent = '✓';
+  } else {
+    _promoItensSelec.splice(idx, 1);
+    card.classList.remove('sel');
+    chk.textContent = '';
+  }
+  atualizarBtnPromo();
+}
+
+function atualizarBtnPromo() {
+  const btn = document.getElementById('pm-btn-add');
+  const n = _promoItensSelec.length;
+  btn.disabled = n === 0;
+  btn.textContent = n > 0 ? `Adicionar ${n} item${n > 1 ? 's' : ''} ao pedido` : 'Adicionar ao pedido';
+}
+
+function fecharPromoModal() {
+  document.getElementById('promo-modal').classList.remove('on');
+  _promoAtualId = null;
+  _promoItensSelec = [];
+}
+
+function adicionarItensPromo() {
+  const p = (G.promocoes || []).find(x => x.id === _promoAtualId);
+  if (!p) return;
+  const itens = Array.isArray(p.itens) ? p.itens : [];
+  const n = _promoItensSelec.length;
+  _promoItensSelec.forEach(i => {
+    const it = itens[i];
+    if (!it) return;
+    const preco = p.precoPromocional != null ? Number(p.precoPromocional) : (it.preco != null ? Number(it.preco) : 0);
+    addCartItem({ nome: it.nome, preco, qt: 1, desc: `Promoção: ${p.nome}` });
+  });
+  fecharPromoModal();
+  toast(`${n === 1 ? 'Item adicionado' : `${n} itens adicionados`} ao pedido!`);
+}
+
 // ── Helpers ──────────────────────────────────────────────────────────────────
 function esc(s) { return (s||'').replace(/'/g,"\\'").replace(/"/g,'&quot;'); }
 
 init();
+
+// ── Back button (mobile) ─────────────────────────────────────────────────────
+let _allowExit = false;
+history.pushState({ app: true }, '');
+function _sairDoApp() {
+  document.getElementById('ov-sair')?.remove();
+  _allowExit = true;
+  history.back();
+}
+window.addEventListener('popstate', () => {
+  if (_allowExit) { _allowExit = false; return; }
+  if (document.getElementById('ov-sair')) return;
+  history.pushState({ app: true }, '');
+  const ov = document.createElement('div');
+  ov.className = 'overlay';
+  ov.id = 'ov-sair';
+  ov.innerHTML = `
+    <div class="modal-sheet">
+      <div class="modal-ico">👋</div>
+      <p class="modal-title">Sair do app?</p>
+      <p class="modal-sub">Seu pedido ainda está aqui se você voltar!</p>
+      <div class="modal-btns">
+        <button class="btn-prim" onclick="document.getElementById('ov-sair').remove()">Ficar no app</button>
+        <button class="btn-ghost" onclick="_sairDoApp()">Sair mesmo assim</button>
+      </div>
+    </div>
+  `;
+  document.body.appendChild(ov);
+});
 </script>
 </body>
 </html>

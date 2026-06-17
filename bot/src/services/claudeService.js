@@ -61,14 +61,38 @@ Histórico do cliente neste restaurante: ${totalPedidos} pedido(s) totais, total
 }
 
 // ── Monta system prompt dinâmico ─────────────────────────────────────────────
+function promoAtivaHoje(p) {
+  const dias = Array.isArray(p.recorrencia) ? p.recorrencia : [];
+  if (!dias.length) return true;
+  const mapa = { 0: "DOM", 1: "SEG", 2: "TER", 3: "QUA", 4: "QUI", 5: "SEX", 6: "SAB" };
+  const hoje = mapa[new Date().getDay()];
+  return dias.includes(hoje);
+}
+
 function montarSecaoPromocoes(promocoes) {
   if (!promocoes || !promocoes.length) return "";
-  const lista = promocoes.map(p => {
-    const preco = p.precoPromocional != null ? ` — Preço promocional: ${p.precoPromocional}` : "";
-    const desc = p.descricao ? `: ${p.descricao}` : "";
-    return `  • *${p.nome}*${desc}${preco}`;
+  const ativas = promocoes.filter(p => p.ativa && promoAtivaHoje(p));
+  if (!ativas.length) return "";
+  const lista = ativas.map(p => {
+    let detalhe = p.descricao ? `: ${p.descricao}` : "";
+    const r = p.regra && typeof p.regra === "object" ? p.regra : {};
+    if (p.tipo === "DESCONTO") {
+      if (r.tipoDesconto === "%") detalhe += ` — ${r.valor}% de desconto`;
+      else if (r.tipoDesconto === "fixo" && r.valor) detalhe += ` — desconto de ${r.valor}`;
+    } else if (p.tipo === "COMPRE_PAGUE") {
+      detalhe += ` — Compre ${r.comprarQtd || "?"}, pague ${r.pagarQtd || "?"}`;
+    } else if (p.tipo === "BRINDE") {
+      if (r.brindeNome) detalhe += ` — na compra, ganhe ${r.brindeQtd > 1 ? r.brindeQtd + "x " : ""}${r.brindeNome}`;
+    }
+    const itensNomes = Array.isArray(p.itens) && p.itens.length
+      ? `\n    Itens incluídos: ${p.itens.map(i => i.nome).join(", ")}`
+      : "";
+    const precoPromo = p.precoPromocional != null
+      ? `\n    ⭐ PREÇO PROMOCIONAL: ${p.precoPromocional} — OBRIGATÓRIO usar este valor no carrinho para qualquer item desta promoção`
+      : "";
+    return `  • *${p.nome}*${detalhe}${itensNomes}${precoPromo}`;
   }).join("\n");
-  return `\n## Promoções ativas\nEste restaurante possui promoções especiais. Mencione-as de forma natural quando o cliente estiver vendo o cardápio ou confirmando o pedido, mas sem forçar — ofereça uma vez se parecer relevante.\n\n${lista}\n`;
+  return `\n## Promoções ativas hoje\nMencione estas promoções de forma natural ao mostrar o cardápio, sem forçar — ofereça uma vez se parecer relevante.\nATENÇÃO: quando um cliente pedir um item que pertence a uma promoção com preço promocional, você DEVE adicionar esse item ao carrinho com o preço promocional indicado (não o preço normal do cardápio). Confirme ao cliente que o preço especial já foi aplicado.\n\n${lista}\n`;
 }
 
 function montarSystemPrompt(restaurante, cardapio, fidelidade = null, promocoes = []) {

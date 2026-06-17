@@ -157,6 +157,7 @@
         <li><button onclick="abrirLojaApp()" class="sidebar-nav-item w-full text-left">🛍️ App Mobile</button></li>
         <li><button id="nav-motoboys" onclick="mostrarSecao('motoboys')" class="sidebar-nav-item w-full text-left" data-i18n="nav.motoboys">🛵 Motoboys</button></li>
         <li><button id="nav-garcons" onclick="mostrarSecao('garcons')" class="sidebar-nav-item w-full text-left">🧑‍🍳 Garçons</button></li>
+        <li><button id="nav-estacoes" onclick="mostrarSecao('estacoes')" class="sidebar-nav-item w-full text-left">📺 Estações</button></li>
         <li><button id="nav-crm" onclick="mostrarSecao('crm')" class="sidebar-nav-item w-full text-left" data-i18n="nav.crm">🎯 CRM</button></li>
 
         <!-- ── VENTAS (accordion) ── -->
@@ -1013,6 +1014,73 @@
       </div>
     </div>
 
+    <!-- Estações -->
+    <div id="secao-estacoes" class="hidden px-6 pt-6 pb-8">
+      <div class="flex items-center justify-between mb-2">
+        <h2 class="font-bold text-gray-800">📺 Estações de Cozinha</h2>
+        <button onclick="abrirModalNovaEstacao()"
+          class="flex items-center gap-1.5 text-xs font-medium bg-purple-500 hover:bg-purple-600 text-white px-3 py-2 rounded-lg transition">
+          + Nova Estação
+        </button>
+      </div>
+      <p class="text-xs text-gray-400 mb-4">Cada estação é um monitor fixo (pizza, lanche, bar). O display exibe apenas os itens das categorias marcadas com aquela estação. Defina a estação de cada categoria em <strong>Cardápio</strong>.</p>
+      <div id="cfg-estacao-restaurante" class="mb-4 hidden">
+        <label class="text-xs text-gray-500">Restaurante</label>
+        <select id="estacao-restaurante-select" onchange="carregarEstacoes()" class="ml-2 border border-gray-200 rounded-lg px-2 py-1 text-sm"></select>
+      </div>
+      <div id="estacoes-lista" class="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 gap-4"></div>
+      <p id="estacoes-vazio" class="text-sm text-gray-400 hidden">Nenhuma estação cadastrada.</p>
+    </div>
+
+    <!-- Modal: Nova/Editar Estação -->
+    <div id="modal-estacao" class="hidden fixed inset-0 bg-black/50 z-50 flex items-center justify-center p-4">
+      <div class="bg-white rounded-2xl shadow-xl w-full max-w-sm p-6">
+        <h3 class="font-bold text-gray-800 mb-4" id="modal-estacao-titulo">Nova Estação</h3>
+        <input type="hidden" id="estacao-edit-id">
+        <div class="space-y-3">
+          <div>
+            <label class="text-xs text-gray-500 mb-1 block">Nome *</label>
+            <input id="estacao-form-nome" type="text" placeholder="Ex: Pizza 1, Bar, Cozinha Geral"
+              class="w-full border border-gray-300 rounded-lg px-3 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-purple-400">
+          </div>
+          <div>
+            <label class="text-xs text-gray-500 mb-1 block">Tipo *</label>
+            <select id="estacao-form-tipo" class="w-full border border-gray-300 rounded-lg px-3 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-purple-400">
+              <option value="GERAL">🍽 Geral / Caixa (vê todos os itens)</option>
+              <option value="PIZZA">🍕 Pizza</option>
+              <option value="LANCHE">🍔 Lanche</option>
+              <option value="BAR">🍺 Bar / Bebidas</option>
+              <option value="CAIXA">🧾 Caixa (comanda completa)</option>
+            </select>
+          </div>
+          <div>
+            <label class="text-xs text-gray-500 mb-1 block">Senha *</label>
+            <input id="estacao-form-senha" type="password" placeholder="Senha de acesso ao monitor"
+              class="w-full border border-gray-300 rounded-lg px-3 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-purple-400">
+          </div>
+          <div>
+            <label class="text-xs text-gray-500 mb-1 block">Cor de identificação</label>
+            <div class="flex items-center gap-3">
+              <input id="estacao-form-cor" type="color" value="#7c3aed" class="w-10 h-10 border-0 rounded-lg cursor-pointer">
+              <div class="flex gap-2 flex-wrap">
+                <button type="button" onclick="document.getElementById('estacao-form-cor').value='#7c3aed'" style="background:#7c3aed" class="w-7 h-7 rounded-full border-2 border-white shadow"></button>
+                <button type="button" onclick="document.getElementById('estacao-form-cor').value='#ef4444'" style="background:#ef4444" class="w-7 h-7 rounded-full border-2 border-white shadow"></button>
+                <button type="button" onclick="document.getElementById('estacao-form-cor').value='#f97316'" style="background:#f97316" class="w-7 h-7 rounded-full border-2 border-white shadow"></button>
+                <button type="button" onclick="document.getElementById('estacao-form-cor').value='#10b981'" style="background:#10b981" class="w-7 h-7 rounded-full border-2 border-white shadow"></button>
+                <button type="button" onclick="document.getElementById('estacao-form-cor').value='#3b82f6'" style="background:#3b82f6" class="w-7 h-7 rounded-full border-2 border-white shadow"></button>
+                <button type="button" onclick="document.getElementById('estacao-form-cor').value='#f59e0b'" style="background:#f59e0b" class="w-7 h-7 rounded-full border-2 border-white shadow"></button>
+              </div>
+            </div>
+          </div>
+        </div>
+        <p id="estacao-form-erro" class="text-xs text-red-500 mt-2 hidden"></p>
+        <div class="flex gap-2 mt-5">
+          <button onclick="fecharModalEstacao()" class="flex-1 bg-gray-100 hover:bg-gray-200 text-gray-700 font-semibold py-2.5 rounded-lg text-sm transition">Cancelar</button>
+          <button onclick="salvarEstacao()" class="flex-1 bg-purple-500 hover:bg-purple-600 text-white font-semibold py-2.5 rounded-lg text-sm transition">Salvar</button>
+        </div>
+      </div>
+    </div>
+
     <!-- CRM -->
     <div id="secao-crm" class="hidden px-6 pt-6 pb-8">
       <!-- Tabs -->
@@ -1501,22 +1569,37 @@
     <div id="secao-caixa" class="hidden px-6 pt-6 pb-8">
       <div class="flex items-center justify-between mb-4 flex-wrap gap-3">
         <h2 class="font-bold text-gray-800">💵 Caixa</h2>
-        <div id="caixa-btn-abrir-container" class="flex items-center gap-2">
-          <button onclick="toggleCaixaNotifPanel()" class="relative flex items-center gap-1.5 text-sm font-bold px-4 py-2 rounded-xl border-2 border-gray-200 bg-white text-gray-600 hover:border-yellow-400 hover:text-yellow-600 transition">
-            🔔 Notificações
-            <span id="caixa-notif-badge" class="hidden absolute -top-2 -right-2 bg-red-500 text-white text-[10px] font-black rounded-full min-w-[20px] h-5 flex items-center justify-center px-1">0</span>
-          </button>
+        <div id="caixa-btn-abrir-container">
           <button onclick="abrirModalAbrirCaixa()" class="bg-green-500 hover:bg-green-600 text-white text-sm font-semibold px-4 py-2 rounded-xl transition">+ Abrir Caixa</button>
         </div>
       </div>
-      <!-- Painel histórico de notificações do caixa -->
-      <div id="caixa-notif-panel" class="hidden mb-6 bg-white rounded-2xl shadow-sm border border-gray-100 overflow-hidden">
-        <div class="flex items-center justify-between px-4 py-3 border-b border-gray-100">
-          <h3 class="font-bold text-gray-800 text-sm">🔔 Histórico de Notificações</h3>
-          <button onclick="limparHistoricoResolvido()" class="text-xs text-gray-400 hover:text-red-400 transition font-medium">Limpar resolvidos</button>
-        </div>
-        <div id="caixa-notif-historico" class="divide-y divide-gray-50 max-h-96 overflow-y-auto"></div>
+
+      <!-- Tab bar -->
+      <div class="flex gap-0 mb-6 border-b border-gray-200">
+        <button id="caixa-tab-btn-caixa" onclick="setCaixaTab('caixa')"
+          class="px-5 py-2.5 text-sm font-semibold text-blue-600 border-b-2 border-blue-500 -mb-px transition">
+          💵 Caixa
+        </button>
+        <button id="caixa-tab-btn-notificacoes" onclick="setCaixaTab('notificacoes')"
+          class="relative px-5 py-2.5 text-sm font-semibold text-gray-500 border-b-2 border-transparent hover:text-gray-700 -mb-px transition">
+          🔔 Notificações
+          <span id="caixa-notif-badge" class="hidden absolute -top-1 -right-1 bg-red-500 text-white text-[10px] font-black rounded-full min-w-[18px] h-[18px] flex items-center justify-center px-1 leading-none shadow">0</span>
+        </button>
       </div>
+
+      <!-- Tab: Notificações -->
+      <div id="caixa-tab-notificacoes" class="hidden">
+        <div class="bg-white rounded-2xl shadow-sm border border-gray-100 overflow-hidden">
+          <div class="flex items-center justify-between px-4 py-3 border-b border-gray-100">
+            <h3 class="font-bold text-gray-800 text-sm">🔔 Histórico de Notificações</h3>
+            <button onclick="limparHistoricoResolvido()" class="text-xs text-gray-400 hover:text-red-400 transition font-medium">Limpar resolvidos</button>
+          </div>
+          <div id="caixa-notif-historico" class="divide-y divide-gray-50 max-h-[70vh] overflow-y-auto"></div>
+        </div>
+      </div>
+
+      <!-- Tab: Caixa -->
+      <div id="caixa-tab-caixa">
 
       <!-- Sem caixa aberto -->
       <div id="caixa-fechado" class="hidden mb-4">
@@ -1609,6 +1692,8 @@
           <p class="py-6 text-center text-xs text-gray-400">Carregando...</p>
         </div>
       </div>
+
+      </div><!-- /caixa-tab-caixa -->
     </div>
 
     <!-- Restaurantes (super admin) -->
@@ -1740,37 +1825,182 @@
 
     <!-- Modal Promoção -->
     <div id="modal-promocao" class="hidden fixed inset-0 bg-black/50 z-50 flex items-center justify-center p-4">
-      <div class="bg-white rounded-2xl shadow-xl w-full max-w-sm p-6">
-        <div class="flex items-center justify-between mb-4">
-          <h3 id="modal-promocao-titulo" class="font-bold text-gray-800">Nova Promoção</h3>
-          <button onclick="fecharModalPromocao()" class="text-gray-400 hover:text-gray-600 text-xl">✕</button>
-        </div>
-        <input type="hidden" id="promo-id">
-        <div class="space-y-3">
-          <div>
-            <label class="text-xs text-gray-500 mb-1 block">Nome da promoção *</label>
-            <input id="promo-nome" type="text" placeholder="Ex: Pizza G + Refri grátis"
-              class="w-full border border-gray-300 rounded-lg px-3 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-pink-400">
+      <div class="bg-white rounded-2xl shadow-xl w-full max-w-lg max-h-[90vh] overflow-y-auto">
+        <div class="p-6">
+          <div class="flex items-center justify-between mb-5">
+            <h3 id="modal-promocao-titulo" class="font-bold text-gray-800 text-lg">Nova Promoção</h3>
+            <button onclick="fecharModalPromocao()" class="text-gray-400 hover:text-gray-600 text-xl">✕</button>
           </div>
-          <div>
-            <label class="text-xs text-gray-500 mb-1 block">Descrição (opcional)</label>
-            <textarea id="promo-descricao" rows="2" placeholder="Ex: Leve uma pizza G e ganhe um refrigerante 600ml"
-              class="w-full border border-gray-300 rounded-lg px-3 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-pink-400 resize-none"></textarea>
+          <input type="hidden" id="promo-id">
+
+          <!-- Tipo de promoção -->
+          <div class="mb-4">
+            <label class="text-xs font-semibold text-gray-500 uppercase tracking-wide mb-2 block">Tipo de promoção</label>
+            <div class="grid grid-cols-2 gap-2">
+              <button type="button" id="promo-tipo-btn-MANUAL" onclick="setPromoTipo('MANUAL')"
+                class="promo-tipo-btn flex flex-col items-center gap-1 p-3 border-2 border-pink-400 bg-pink-50 rounded-xl text-sm font-semibold text-pink-700 transition">
+                🏷️<span>Promoção livre</span>
+              </button>
+              <button type="button" id="promo-tipo-btn-DESCONTO" onclick="setPromoTipo('DESCONTO')"
+                class="promo-tipo-btn flex flex-col items-center gap-1 p-3 border-2 border-gray-200 bg-white rounded-xl text-sm font-semibold text-gray-600 hover:border-pink-300 transition">
+                💰<span>Desconto de preço</span>
+              </button>
+              <button type="button" id="promo-tipo-btn-COMPRE_PAGUE" onclick="setPromoTipo('COMPRE_PAGUE')"
+                class="promo-tipo-btn flex flex-col items-center gap-1 p-3 border-2 border-gray-200 bg-white rounded-xl text-sm font-semibold text-gray-600 hover:border-pink-300 transition">
+                🛒<span>Compre X Pague Y</span>
+              </button>
+              <button type="button" id="promo-tipo-btn-BRINDE" onclick="setPromoTipo('BRINDE')"
+                class="promo-tipo-btn flex flex-col items-center gap-1 p-3 border-2 border-gray-200 bg-white rounded-xl text-sm font-semibold text-gray-600 hover:border-pink-300 transition">
+                🎁<span>Compre e ganhe</span>
+              </button>
+            </div>
           </div>
-          <div>
-            <label class="text-xs text-gray-500 mb-1 block">Preço promocional (opcional)</label>
-            <input id="promo-preco" type="number" min="0" step="any" placeholder="Deixe vazio se não tiver preço fixo"
-              class="w-full border border-gray-300 rounded-lg px-3 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-pink-400">
+
+          <!-- Seção IA -->
+          <div class="mb-4">
+            <button type="button" onclick="togglePromoIA()"
+              class="w-full flex items-center gap-2 bg-violet-50 hover:bg-violet-100 border border-violet-200 text-violet-700 text-sm font-semibold px-4 py-2.5 rounded-xl transition">
+              <span>🤖</span>
+              <span class="flex-1 text-left">Criar com IA</span>
+              <span id="promo-ia-toggle-ico" class="text-violet-400 text-xs">▼</span>
+            </button>
+            <div id="promo-ia-panel" class="hidden mt-2 bg-violet-50 border border-violet-200 rounded-xl p-4">
+              <p class="text-xs text-violet-600 mb-2">Descreva a promoção em linguagem natural e a IA vai montar tudo para você.</p>
+              <textarea id="promo-ia-texto" rows="2" placeholder="Ex: Na compra de 2 pizzas grandes, a segunda sai com 50% de desconto"
+                class="w-full border border-violet-300 rounded-lg px-3 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-violet-400 resize-none bg-white mb-2"></textarea>
+              <button type="button" onclick="gerarPromoComIA()"
+                class="w-full bg-violet-600 hover:bg-violet-700 text-white text-sm font-semibold py-2 rounded-lg transition flex items-center justify-center gap-2">
+                <span id="promo-ia-spinner" class="hidden">⏳</span>
+                <span id="promo-ia-btn-label">✨ Gerar com IA</span>
+              </button>
+            </div>
           </div>
-          <div class="flex items-center gap-2 pt-1">
-            <input id="promo-ativa" type="checkbox" checked class="w-4 h-4 accent-pink-500">
-            <label for="promo-ativa" class="text-sm text-gray-700">Promoção ativa</label>
+
+          <!-- Seleção de itens do cardápio -->
+          <div id="promo-itens-section" class="mb-4 hidden">
+            <label class="text-xs font-semibold text-gray-500 uppercase tracking-wide mb-2 block">Itens do cardápio envolvidos</label>
+            <div id="promo-itens-lista" style="max-height:256px;overflow-y:auto;border:1px solid #e5e7eb;border-radius:12px;padding:8px;background:#f9fafb">
+              <p class="text-xs text-gray-400 text-center py-2">Carregando cardápio...</p>
+            </div>
           </div>
-        </div>
-        <p id="promo-erro" class="text-red-500 text-sm mt-3 hidden"></p>
-        <div class="flex gap-2 mt-5">
-          <button onclick="salvarPromocao()" class="flex-1 bg-pink-500 hover:bg-pink-600 text-white font-semibold py-2.5 rounded-lg text-sm transition">Salvar</button>
-          <button onclick="fecharModalPromocao()" class="flex-1 bg-gray-100 hover:bg-gray-200 text-gray-700 font-semibold py-2.5 rounded-lg text-sm transition">Cancelar</button>
+
+          <!-- Config: DESCONTO -->
+          <div id="promo-config-DESCONTO" class="mb-4 hidden">
+            <label class="text-xs font-semibold text-gray-500 uppercase tracking-wide mb-2 block">Configuração do desconto</label>
+            <div class="flex gap-3 items-center">
+              <div class="flex gap-2">
+                <label class="flex items-center gap-1.5 text-sm text-gray-700 cursor-pointer">
+                  <input type="radio" name="promo-desconto-tipo" value="%" checked class="accent-pink-500"> % Percentual
+                </label>
+                <label class="flex items-center gap-1.5 text-sm text-gray-700 cursor-pointer">
+                  <input type="radio" name="promo-desconto-tipo" value="fixo" class="accent-pink-500"> Valor fixo
+                </label>
+              </div>
+              <input id="promo-desconto-valor" type="number" min="0" step="any" placeholder="Ex: 10"
+                class="flex-1 border border-gray-300 rounded-lg px-3 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-pink-400">
+            </div>
+          </div>
+
+          <!-- Config: COMPRE_PAGUE -->
+          <div id="promo-config-COMPRE_PAGUE" class="mb-4 hidden">
+            <label class="text-xs font-semibold text-gray-500 uppercase tracking-wide mb-2 block">Regra compre / pague</label>
+            <div class="flex items-center gap-3 mb-2">
+              <div class="flex-1">
+                <label class="text-xs text-gray-400 mb-1 block">Compre</label>
+                <input id="promo-comprar-qtd" type="number" min="1" value="2"
+                  class="w-full border border-gray-300 rounded-lg px-3 py-2 text-sm text-center font-bold focus:outline-none focus:ring-2 focus:ring-pink-400">
+              </div>
+              <span class="text-gray-400 font-semibold mt-4">pague</span>
+              <div class="flex-1">
+                <label class="text-xs text-gray-400 mb-1 block">Pague</label>
+                <input id="promo-pagar-qtd" type="number" min="0" value="1"
+                  class="w-full border border-gray-300 rounded-lg px-3 py-2 text-sm text-center font-bold focus:outline-none focus:ring-2 focus:ring-pink-400">
+              </div>
+            </div>
+            <div class="flex gap-2">
+              <button type="button" onclick="document.getElementById('promo-comprar-qtd').value=2;document.getElementById('promo-pagar-qtd').value=1"
+                class="flex-1 text-xs bg-gray-100 hover:bg-pink-50 text-gray-700 hover:text-pink-700 font-semibold py-1.5 rounded-lg transition">2×1</button>
+              <button type="button" onclick="document.getElementById('promo-comprar-qtd').value=3;document.getElementById('promo-pagar-qtd').value=2"
+                class="flex-1 text-xs bg-gray-100 hover:bg-pink-50 text-gray-700 hover:text-pink-700 font-semibold py-1.5 rounded-lg transition">3×2</button>
+              <button type="button" onclick="document.getElementById('promo-comprar-qtd').value=3;document.getElementById('promo-pagar-qtd').value=1"
+                class="flex-1 text-xs bg-gray-100 hover:bg-pink-50 text-gray-700 hover:text-pink-700 font-semibold py-1.5 rounded-lg transition">3×1</button>
+              <button type="button" onclick="document.getElementById('promo-comprar-qtd').value=1;document.getElementById('promo-pagar-qtd').value=0"
+                class="flex-1 text-xs bg-gray-100 hover:bg-pink-50 text-gray-700 hover:text-pink-700 font-semibold py-1.5 rounded-lg transition">Leve +1</button>
+            </div>
+          </div>
+
+          <!-- Config: BRINDE -->
+          <div id="promo-config-BRINDE" class="mb-4 hidden">
+            <label class="text-xs font-semibold text-gray-500 uppercase tracking-wide mb-2 block">Brinde que o cliente ganha</label>
+            <div class="flex gap-2 items-center">
+              <input id="promo-brinde-qtd" type="number" min="1" value="1" placeholder="Qtd"
+                class="w-20 border border-gray-300 rounded-lg px-3 py-2 text-sm text-center font-bold focus:outline-none focus:ring-2 focus:ring-pink-400">
+              <input id="promo-brinde-nome" type="text" placeholder="Ex: Refrigerante 600ml"
+                class="flex-1 border border-gray-300 rounded-lg px-3 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-pink-400">
+            </div>
+          </div>
+
+          <!-- Campos comuns -->
+          <div class="space-y-3">
+            <div>
+              <label class="text-xs text-gray-500 mb-1 block">Nome da promoção *</label>
+              <input id="promo-nome" type="text" placeholder="Ex: Pizza G + Refri grátis"
+                class="w-full border border-gray-300 rounded-lg px-3 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-pink-400">
+            </div>
+            <div>
+              <label class="text-xs text-gray-500 mb-1 block">Descrição (opcional)</label>
+              <textarea id="promo-descricao" rows="2" placeholder="Ex: Leve uma pizza G e ganhe um refrigerante 600ml"
+                class="w-full border border-gray-300 rounded-lg px-3 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-pink-400 resize-none"></textarea>
+            </div>
+            <div>
+              <label class="text-xs text-gray-500 mb-1 block">Preço promocional (opcional)</label>
+              <input id="promo-preco" type="number" min="0" step="any" placeholder="Deixe vazio se não tiver preço fixo"
+                class="w-full border border-gray-300 rounded-lg px-3 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-pink-400">
+            </div>
+            <div class="flex items-center gap-2 pt-1">
+              <input id="promo-ativa" type="checkbox" checked class="w-4 h-4 accent-pink-500">
+              <label for="promo-ativa" class="text-sm text-gray-700">Promoção ativa</label>
+            </div>
+            <div class="flex items-center gap-2">
+              <input id="promo-mostrar-delivery" type="checkbox" checked class="w-4 h-4 accent-pink-500">
+              <label for="promo-mostrar-delivery" class="text-sm text-gray-700">Mostrar no app de delivery</label>
+            </div>
+
+            <!-- Recorrência -->
+            <div class="pt-1">
+              <label class="text-xs font-semibold text-gray-500 uppercase tracking-wide mb-2 block">Recorrência</label>
+              <p class="text-xs text-gray-400 mb-2">Selecione os dias em que esta promoção estará ativa. Deixe vazio para ser sempre ativa.</p>
+              <div class="flex gap-1.5 flex-wrap">
+                <label class="promo-dia-label flex items-center gap-1 px-2.5 py-1.5 rounded-lg border-2 border-gray-200 bg-white cursor-pointer text-xs font-semibold text-gray-600 hover:border-pink-300 transition has-[:checked]:border-pink-400 has-[:checked]:bg-pink-50 has-[:checked]:text-pink-700">
+                  <input type="checkbox" class="promo-dia-check hidden" value="SEG"> Seg
+                </label>
+                <label class="promo-dia-label flex items-center gap-1 px-2.5 py-1.5 rounded-lg border-2 border-gray-200 bg-white cursor-pointer text-xs font-semibold text-gray-600 hover:border-pink-300 transition has-[:checked]:border-pink-400 has-[:checked]:bg-pink-50 has-[:checked]:text-pink-700">
+                  <input type="checkbox" class="promo-dia-check hidden" value="TER"> Ter
+                </label>
+                <label class="promo-dia-label flex items-center gap-1 px-2.5 py-1.5 rounded-lg border-2 border-gray-200 bg-white cursor-pointer text-xs font-semibold text-gray-600 hover:border-pink-300 transition has-[:checked]:border-pink-400 has-[:checked]:bg-pink-50 has-[:checked]:text-pink-700">
+                  <input type="checkbox" class="promo-dia-check hidden" value="QUA"> Qua
+                </label>
+                <label class="promo-dia-label flex items-center gap-1 px-2.5 py-1.5 rounded-lg border-2 border-gray-200 bg-white cursor-pointer text-xs font-semibold text-gray-600 hover:border-pink-300 transition has-[:checked]:border-pink-400 has-[:checked]:bg-pink-50 has-[:checked]:text-pink-700">
+                  <input type="checkbox" class="promo-dia-check hidden" value="QUI"> Qui
+                </label>
+                <label class="promo-dia-label flex items-center gap-1 px-2.5 py-1.5 rounded-lg border-2 border-gray-200 bg-white cursor-pointer text-xs font-semibold text-gray-600 hover:border-pink-300 transition has-[:checked]:border-pink-400 has-[:checked]:bg-pink-50 has-[:checked]:text-pink-700">
+                  <input type="checkbox" class="promo-dia-check hidden" value="SEX"> Sex
+                </label>
+                <label class="promo-dia-label flex items-center gap-1 px-2.5 py-1.5 rounded-lg border-2 border-gray-200 bg-white cursor-pointer text-xs font-semibold text-gray-600 hover:border-pink-300 transition has-[:checked]:border-pink-400 has-[:checked]:bg-pink-50 has-[:checked]:text-pink-700">
+                  <input type="checkbox" class="promo-dia-check hidden" value="SAB"> Sáb
+                </label>
+                <label class="promo-dia-label flex items-center gap-1 px-2.5 py-1.5 rounded-lg border-2 border-gray-200 bg-white cursor-pointer text-xs font-semibold text-gray-600 hover:border-pink-300 transition has-[:checked]:border-pink-400 has-[:checked]:bg-pink-50 has-[:checked]:text-pink-700">
+                  <input type="checkbox" class="promo-dia-check hidden" value="DOM"> Dom
+                </label>
+              </div>
+            </div>
+          </div>
+
+          <p id="promo-erro" class="text-red-500 text-sm mt-3 hidden"></p>
+          <div class="flex gap-2 mt-5">
+            <button onclick="salvarPromocao()" class="flex-1 bg-pink-500 hover:bg-pink-600 text-white font-semibold py-2.5 rounded-lg text-sm transition">Salvar</button>
+            <button onclick="fecharModalPromocao()" class="flex-1 bg-gray-100 hover:bg-gray-200 text-gray-700 font-semibold py-2.5 rounded-lg text-sm transition">Cancelar</button>
+          </div>
         </div>
       </div>
     </div>
@@ -2211,7 +2441,7 @@
         <div id="promocoes-lista" class="flex flex-col gap-2"></div>
       </div>
 
-      <div class="flex items-center justify-between mb-4">
+      <div class="flex items-center justify-between mb-3">
         <h2 class="font-bold text-gray-800" data-i18n="card.titulo">Cardápio</h2>
         <div class="flex gap-2">
           <button onclick="abrirModalImportarPDF()"
@@ -2223,6 +2453,21 @@
             + Categoria
           </button>
         </div>
+      </div>
+      <!-- Tabs Salão / Delivery -->
+      <div class="flex gap-1 mb-4 p-1 bg-gray-100 rounded-xl w-fit">
+        <button id="tab-card-todos" onclick="setCardapioFiltro('todos')"
+          class="tab-card-btn px-4 py-1.5 rounded-lg text-sm font-semibold transition bg-white shadow text-gray-800">
+          Todos
+        </button>
+        <button id="tab-card-SALAO" onclick="setCardapioFiltro('SALAO')"
+          class="tab-card-btn px-4 py-1.5 rounded-lg text-sm font-semibold transition text-gray-500 hover:text-gray-700">
+          🪑 Salão
+        </button>
+        <button id="tab-card-DELIVERY" onclick="setCardapioFiltro('DELIVERY')"
+          class="tab-card-btn px-4 py-1.5 rounded-lg text-sm font-semibold transition text-gray-500 hover:text-gray-700">
+          🛵 Delivery
+        </button>
       </div>
       <div id="cardapio-lista" class="flex flex-col gap-4"></div>
     </div>
@@ -2392,6 +2637,32 @@
         <div id="cat-tamanhos-lista" class="flex flex-col gap-2"></div>
         <button onclick="adicionarLinhaTamanhoCat()" type="button"
           class="text-xs text-orange-500 hover:text-orange-700 text-left font-medium transition">+ Adicionar variante</button>
+      </div>
+
+      <div>
+        <label class="text-xs font-semibold text-gray-500 uppercase tracking-wide mb-2 block">Estação de Produção</label>
+        <select id="cat-estacao-tipo" class="w-full border border-gray-300 rounded-lg px-3 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-orange-400">
+          <option value="GERAL">🍽 Geral (aparece em todos os monitores)</option>
+          <option value="PIZZA">🍕 Pizza</option>
+          <option value="LANCHE">🍔 Lanche</option>
+          <option value="BAR">🍺 Bar / Bebidas</option>
+          <option value="CAIXA">🧾 Caixa</option>
+        </select>
+      </div>
+
+      <div>
+        <label class="text-xs font-semibold text-gray-500 uppercase tracking-wide mb-2 block">Canais de venda</label>
+        <div class="flex gap-4">
+          <label class="flex items-center gap-2 text-sm text-gray-700 cursor-pointer">
+            <input type="checkbox" id="cat-canal-salao" class="rounded accent-orange-500"> 🪑 Salão
+          </label>
+          <label class="flex items-center gap-2 text-sm text-gray-700 cursor-pointer">
+            <input type="checkbox" id="cat-canal-delivery" class="rounded accent-orange-500"> 🛵 Delivery
+          </label>
+          <label class="flex items-center gap-2 text-sm text-gray-700 cursor-pointer">
+            <input type="checkbox" id="cat-canal-web" class="rounded accent-orange-500"> 🌐 Web
+          </label>
+        </div>
       </div>
 
       <button onclick="salvarCategoria()"
@@ -3634,7 +3905,10 @@ async function carregarMesaCardapio() {
   const res = await fetch(`/admin/cardapio/${rid}`, { headers: getHeaders() });
   if (!res.ok) return;
   const data = await res.json();
-  mesaCardapio = (data.data || []).filter(c => c.produtos?.length);
+  mesaCardapio = (data.data || []).filter(c => {
+    const canais = Array.isArray(c.canais) ? c.canais : ['SALAO', 'DELIVERY', 'WEB'];
+    return canais.includes('SALAO') && c.produtos?.length;
+  });
   mesaInstrucoes = data.instrucoes || null;
   mesaAppShow('home');
 }
@@ -4478,7 +4752,7 @@ async function carregarBalcao() {
     if (!rid) return;
     try {
       const r = await fetch(`/admin/cardapio/${rid}`, { headers: getHeaders() });
-      if (r.ok) { const d = await r.json(); mesaCardapio = (d.data || []).filter(c => c.produtos?.length); mesaInstrucoes = d.instrucoes || null; }
+      if (r.ok) { const d = await r.json(); mesaCardapio = (d.data || []).filter(c => { const canais = Array.isArray(c.canais) ? c.canais : ['SALAO','DELIVERY','WEB']; return canais.includes('SALAO') && c.produtos?.length; }); mesaInstrucoes = d.instrucoes || null; }
     } catch {}
   }
   balcaoRenderCarrinho();
@@ -5533,15 +5807,35 @@ function _marcarHistoricoResolvido(id) {
   const entry = historicoNotificacoes.find(n => n.id === id);
   if (entry && !entry.resolvidoEm) entry.resolvidoEm = Date.now();
   _salvarHistorico();
-  const panel = document.getElementById('caixa-notif-panel');
-  if (panel && !panel.classList.contains('hidden')) renderHistoricoNotif();
+  const tab = document.getElementById('caixa-tab-notificacoes');
+  if (tab && !tab.classList.contains('hidden')) renderHistoricoNotif();
+}
+
+function fecharNotifFlutuante(divId) {
+  document.getElementById(divId)?.remove();
+}
+
+let caixaTabAtual = 'caixa';
+function setCaixaTab(tab) {
+  caixaTabAtual = tab;
+  ['caixa', 'notificacoes'].forEach(t => {
+    const btn = document.getElementById(`caixa-tab-btn-${t}`);
+    const content = document.getElementById(`caixa-tab-${t}`);
+    const active = t === tab;
+    if (btn) {
+      btn.classList.toggle('text-blue-600', active);
+      btn.classList.toggle('border-blue-500', active);
+      btn.classList.toggle('text-gray-500', !active);
+      btn.classList.toggle('border-transparent', !active);
+    }
+    if (content) content.classList.toggle('hidden', !active);
+  });
+  if (tab === 'notificacoes') renderHistoricoNotif();
 }
 
 function toggleCaixaNotifPanel() {
-  const panel = document.getElementById('caixa-notif-panel');
-  if (!panel) return;
-  const isHidden = panel.classList.toggle('hidden');
-  if (!isHidden) renderHistoricoNotif();
+  setCaixaTab(caixaTabAtual === 'notificacoes' ? 'caixa' : 'notificacoes');
+  mostrarSecao('caixa');
 }
 
 function limparHistoricoResolvido() {
@@ -5864,10 +6158,14 @@ function iniciarSocket() {
           <p class="text-amber-800 text-sm">${(metodoPagamento || '').replace(/dinheiro\s*[-–]\s*troco\s+para\s+/i, 'Troco para: ')}</p>
         </div>
       </div>
-      <button onclick="liberarTroco('${pedidoId}','${motoboyId || ''}','${(motoboyNome || '').replace(/'/g, '')}')"
-        class="pointer-events-auto bg-amber-500 hover:bg-amber-600 text-white font-bold px-4 py-2.5 rounded-xl text-sm whitespace-nowrap transition active:scale-95">
-        💵 Liberar Troco
-      </button>`;
+      <div class="flex flex-col items-end gap-1.5 flex-shrink-0">
+        <button onclick="fecharNotifFlutuante('troco-notif-${pedidoId}')"
+          class="pointer-events-auto text-gray-400 hover:text-gray-600 text-xs font-semibold transition leading-none self-end" title="Fechar notificação">✕ fechar</button>
+        <button onclick="liberarTroco('${pedidoId}','${motoboyId || ''}','${(motoboyNome || '').replace(/'/g, '')}')"
+          class="pointer-events-auto bg-amber-500 hover:bg-amber-600 text-white font-bold px-4 py-2.5 rounded-xl text-sm whitespace-nowrap transition active:scale-95">
+          💵 Liberar Troco
+        </button>
+      </div>`;
     container.appendChild(div);
     // Adiciona à lista persistente de notificações
     painelNotificacoes = painelNotificacoes.filter(n => n.id !== pedidoId);
@@ -5908,10 +6206,14 @@ function iniciarSocket() {
           <p class="text-green-800 text-sm">${mp}</p>
         </div>
       </div>
-      <button onclick="confirmarDevolucao('${pedidoId}')"
-        class="pointer-events-auto bg-green-600 hover:bg-green-700 text-white font-bold px-4 py-2.5 rounded-xl text-sm whitespace-nowrap transition active:scale-95">
-        ✅ Confirmar Recebimento
-      </button>`;
+      <div class="flex flex-col items-end gap-1.5 flex-shrink-0">
+        <button onclick="fecharNotifFlutuante('devolucao-notif-${pedidoId}')"
+          class="pointer-events-auto text-gray-400 hover:text-gray-600 text-xs font-semibold transition leading-none self-end" title="Fechar notificação">✕ fechar</button>
+        <button onclick="confirmarDevolucao('${pedidoId}')"
+          class="pointer-events-auto bg-green-600 hover:bg-green-700 text-white font-bold px-4 py-2.5 rounded-xl text-sm whitespace-nowrap transition active:scale-95">
+          ✅ Confirmar Recebimento
+        </button>
+      </div>`;
     container.appendChild(div);
     painelNotificacoes = painelNotificacoes.filter(n => n.id !== pedidoId);
     painelNotificacoes.unshift({ id: pedidoId, tipo: 'devolucao', numFmt, motoboyNome: motoboyNome || 'Motoboy', mp, total: total || 0, ts: Date.now() });
@@ -5953,10 +6255,14 @@ function iniciarSocket() {
           <p class="text-indigo-800 text-sm font-semibold">Total: ${formatarPreco(total || 0, getMoeda())}</p>
         </div>
       </div>
-      <button onclick="resolverFechamento('${pedidoId}')"
-        class="pointer-events-auto bg-indigo-500 hover:bg-indigo-600 text-white font-bold px-4 py-2.5 rounded-xl text-sm whitespace-nowrap transition active:scale-95">
-        ✅ Ciente
-      </button>`;
+      <div class="flex flex-col items-end gap-1.5 flex-shrink-0">
+        <button onclick="fecharNotifFlutuante('fechamento-notif-${pedidoId}')"
+          class="pointer-events-auto text-gray-400 hover:text-gray-600 text-xs font-semibold transition leading-none self-end" title="Fechar notificação">✕ fechar</button>
+        <button onclick="resolverFechamento('${pedidoId}')"
+          class="pointer-events-auto bg-indigo-500 hover:bg-indigo-600 text-white font-bold px-4 py-2.5 rounded-xl text-sm whitespace-nowrap transition active:scale-95">
+          ✅ Ciente
+        </button>
+      </div>`;
     container.appendChild(div);
     // Persistir notificação + marcar mesa com badge
     mesasFechamentoPendente[pedidoId] = { mesa, garconNome: garconNome || 'Garçom', garconCor: cor, numeroDia, total: total || 0, numFmt };
@@ -6048,7 +6354,7 @@ function mostrarSecao(secao) {
   secaoAtual = secao;
   const mainScroll = document.getElementById('main-scroll');
   if (mainScroll) mainScroll.scrollTop = 0;
-  ['pedidos', 'conversas', 'clientes', 'cardapio', 'configuracoes', 'motoboys', 'garcons', 'crm', 'metricas', 'estoque', 'financeiro', 'caixa', 'comprovantes', 'links', 'cozinha-painel', 'motoboy-painel', 'ventas-historial', 'ventas-reportes'].forEach(s => {
+  ['pedidos', 'conversas', 'clientes', 'cardapio', 'configuracoes', 'motoboys', 'garcons', 'estacoes', 'crm', 'metricas', 'estoque', 'financeiro', 'caixa', 'comprovantes', 'links', 'cozinha-painel', 'motoboy-painel', 'ventas-historial', 'ventas-reportes'].forEach(s => {
     document.getElementById(`secao-${s}`).classList.toggle('hidden', secao !== s);
   });
   // mesas, balcão e notificações estão dentro do contexto pedidos — garante estado correto ao navegar
@@ -6068,7 +6374,7 @@ function mostrarSecao(secao) {
   if (statsBar) statsBar.classList.toggle('hidden', secao !== 'pedidos');
 
   // Sidebar active state
-  ['pedidos', 'conversas', 'clientes', 'cardapio', 'configuracoes', 'motoboys', 'garcons', 'crm', 'metricas', 'estoque', 'financeiro', 'caixa', 'comprovantes', 'links', 'cozinha-painel', 'motoboy-painel', 'ventas-historial', 'ventas-reportes'].forEach(s => {
+  ['pedidos', 'conversas', 'clientes', 'cardapio', 'configuracoes', 'motoboys', 'garcons', 'estacoes', 'crm', 'metricas', 'estoque', 'financeiro', 'caixa', 'comprovantes', 'links', 'cozinha-painel', 'motoboy-painel', 'ventas-historial', 'ventas-reportes'].forEach(s => {
     const el = document.getElementById(`nav-${s}`);
     if (!el) return;
     el.classList.remove('sidebar-nav-active');
@@ -6098,11 +6404,12 @@ function mostrarSecao(secao) {
   if (secao === 'configuracoes') iniciarConfiguracoes();
   if (secao === 'motoboys') iniciarMotoboys();
   if (secao === 'garcons') carregarGarcons();
+  if (secao === 'estacoes') carregarEstacoes();
   if (secao === 'crm') iniciarCRM();
   if (secao === 'metricas') iniciarMetricas();
   if (secao === 'estoque') carregarEstoque();
   if (secao === 'financeiro') iniciarFinanceiro();
-  if (secao === 'caixa') carregarCaixa();
+  if (secao === 'caixa') { carregarCaixa(); if (caixaTabAtual === 'notificacoes') renderHistoricoNotif(); }
   if (secao === 'comprovantes') carregarComprovantes();
   if (secao === 'links') carregarLinks();
   if (secao === 'cozinha-painel') carregarIframePainel('cozinha');
@@ -6659,7 +6966,21 @@ async function criarRestaurante() {
 let cardapioRestauranteId = '';
 let cardapioModalCatId = null;
 let cardapioData = [];
+let cardapioFiltroCanal = 'todos';
 const categoriasExpandidas = new Set();
+
+function setCardapioFiltro(canal) {
+  cardapioFiltroCanal = canal;
+  document.querySelectorAll('.tab-card-btn').forEach(btn => {
+    const active = btn.id === `tab-card-${canal}`;
+    btn.classList.toggle('bg-white', active);
+    btn.classList.toggle('shadow', active);
+    btn.classList.toggle('text-gray-800', active);
+    btn.classList.toggle('text-gray-500', !active);
+    btn.classList.toggle('hover:text-gray-700', !active);
+  });
+  renderizarCardapio(cardapioData);
+}
 
 async function carregarCardapio() {
   const rid = restauranteAtual || (restaurantes[0]?.id || '');
@@ -6691,13 +7012,20 @@ function renderizarPromocoes(promos) {
     lista.innerHTML = '<p class="text-sm text-gray-400">Nenhuma promoção cadastrada.</p>';
     return;
   }
-  lista.innerHTML = promos.map(p => `
+  const diasNomes = { SEG:'Seg', TER:'Ter', QUA:'Qua', QUI:'Qui', SEX:'Sex', SAB:'Sáb', DOM:'Dom' };
+  lista.innerHTML = promos.map(p => {
+    const dias = Array.isArray(p.recorrencia) ? p.recorrencia : [];
+    const diasBadge = dias.length ? `<span class="text-xs bg-blue-50 text-blue-700 border border-blue-200 rounded-full px-2 py-0.5 font-semibold">🗓 ${dias.map(d => diasNomes[d] || d).join(', ')}</span>` : '';
+    const deliveryBadge = p.mostrarDelivery !== false ? `<span class="text-xs bg-orange-50 text-orange-700 border border-orange-200 rounded-full px-2 py-0.5 font-semibold">🛵 Delivery</span>` : '';
+    return `
     <div class="bg-white rounded-xl shadow-sm border border-gray-100 px-4 py-3 flex items-start gap-3">
       <div class="flex-1 min-w-0">
         <div class="flex items-center gap-2 flex-wrap">
           <span class="font-semibold text-gray-800 text-sm">${p.nome}</span>
           ${p.precoPromocional != null ? `<span class="text-xs bg-pink-50 text-pink-700 border border-pink-200 rounded-full px-2 py-0.5 font-semibold">${p.precoPromocional.toLocaleString('pt-BR', {minimumFractionDigits: 0})}</span>` : ''}
           <span class="text-xs rounded-full px-2 py-0.5 font-semibold ${p.ativa ? 'bg-green-100 text-green-700' : 'bg-gray-100 text-gray-500'}">${p.ativa ? 'Ativa' : 'Inativa'}</span>
+          ${diasBadge}
+          ${deliveryBadge}
         </div>
         ${p.descricao ? `<p class="text-xs text-gray-500 mt-0.5">${p.descricao}</p>` : ''}
       </div>
@@ -6712,19 +7040,121 @@ function renderizarPromocoes(promos) {
           class="bg-red-50 hover:bg-red-100 text-red-600 text-xs font-semibold px-2.5 py-1.5 rounded-lg transition" title="Excluir">🗑</button>
       </div>
     </div>
-  `).join('');
+  `; }).join('');
 }
 
 let _promocoesCache = [];
+let _promoTipoAtual = 'MANUAL';
+let _promoItensEscolhidos = []; // [{produtoId, nome, tamanhoId?, tamanhoNome?, preco?}]
+
+function setPromoTipo(tipo) {
+  _promoTipoAtual = tipo;
+  // atualiza visual dos botões
+  document.querySelectorAll('.promo-tipo-btn').forEach(btn => {
+    const ativo = btn.id === `promo-tipo-btn-${tipo}`;
+    btn.classList.toggle('border-pink-400', ativo);
+    btn.classList.toggle('bg-pink-50', ativo);
+    btn.classList.toggle('text-pink-700', ativo);
+    btn.classList.toggle('border-gray-200', !ativo);
+    btn.classList.toggle('bg-white', !ativo);
+    btn.classList.toggle('text-gray-600', !ativo);
+  });
+  // mostra/oculta seção de itens (sempre visível exceto MANUAL)
+  const itensSection = document.getElementById('promo-itens-section');
+  itensSection.classList.toggle('hidden', tipo === 'MANUAL');
+  // mostra config específica
+  ['DESCONTO','COMPRE_PAGUE','BRINDE'].forEach(t => {
+    document.getElementById(`promo-config-${t}`).classList.toggle('hidden', t !== tipo);
+  });
+}
+
+function _renderizarItensPromoModal() {
+  const lista = document.getElementById('promo-itens-lista');
+  if (!cardapioData || !cardapioData.length) {
+    lista.innerHTML = '<p style="font-size:12px;color:#9ca3af;text-align:center;padding:8px 0">Nenhum item no cardápio.</p>';
+    return;
+  }
+  let html = '';
+  cardapioData.forEach((cat, catIdx) => {
+    if (!cat.produtos?.length) return;
+    const catId = `promo-cat-${catIdx}`;
+    let itemsHtml = '';
+    cat.produtos.forEach(p => {
+      const tamanhos = p.tamanhos || [];
+      if (tamanhos.length) {
+        tamanhos.forEach(tam => {
+          const checked = _promoItensEscolhidos.some(x => x.produtoId === p.id && x.tamanhoId === tam.id) ? 'checked' : '';
+          itemsHtml += `<label style="display:flex;align-items:center;gap:8px;padding:6px 8px;border-radius:6px;cursor:pointer;font-size:13px;color:#374151">` +
+            `<input type="checkbox" class="promo-item-check" style="accent-color:#ec4899;flex-shrink:0" data-pid="${p.id}" data-tid="${tam.id}" data-nome="${p.nome} — ${tam.nome}" data-preco="${tam.preco}" ${checked}>` +
+            `<span style="flex:1">${p.nome} <span style="color:#9ca3af">— ${tam.nome}</span></span>` +
+            `<span style="font-size:11px;color:#9ca3af">${tam.preco}</span>` +
+            `</label>`;
+        });
+      } else {
+        const checked = _promoItensEscolhidos.some(x => x.produtoId === p.id && !x.tamanhoId) ? 'checked' : '';
+        itemsHtml += `<label style="display:flex;align-items:center;gap:8px;padding:6px 8px;border-radius:6px;cursor:pointer;font-size:13px;color:#374151">` +
+          `<input type="checkbox" class="promo-item-check" style="accent-color:#ec4899;flex-shrink:0" data-pid="${p.id}" data-tid="" data-nome="${p.nome}" data-preco="${p.preco || ''}" ${checked}>` +
+          `<span style="flex:1">${p.nome}</span>` +
+          `<span style="font-size:11px;color:#9ca3af">${p.preco || ''}</span>` +
+          `</label>`;
+      }
+    });
+    html += `<div style="border:1px solid #e5e7eb;border-radius:8px;margin-bottom:6px;overflow:hidden">` +
+      `<button type="button" onclick="togglePromoCategoria('${catId}')" style="width:100%;display:flex;align-items:center;gap:8px;padding:9px 12px;background:#f3f4f6;border:none;cursor:pointer;text-align:left;font-size:11px;font-weight:700;color:#374151;text-transform:uppercase;letter-spacing:.05em">` +
+        `<span id="${catId}-ico" style="font-size:10px;color:#9ca3af">▶</span>` +
+        `<span style="flex:1">${cat.nome}</span>` +
+        `<span style="font-size:11px;color:#9ca3af;font-weight:400;text-transform:none;letter-spacing:0">${cat.produtos.length} item${cat.produtos.length !== 1 ? 's' : ''}</span>` +
+      `</button>` +
+      `<div id="${catId}-items" style="display:none;padding:4px">${itemsHtml}</div>` +
+    `</div>`;
+  });
+  lista.innerHTML = html;
+}
+
+function togglePromoCategoria(catId) {
+  const items = document.getElementById(`${catId}-items`);
+  const ico = document.getElementById(`${catId}-ico`);
+  if (!items) return;
+  const abrir = items.style.display === 'none';
+  items.style.display = abrir ? 'block' : 'none';
+  ico.textContent = abrir ? '▼' : '▶';
+}
+
+function togglePromoIA() {
+  const panel = document.getElementById('promo-ia-panel');
+  const ico = document.getElementById('promo-ia-toggle-ico');
+  const hidden = panel.classList.toggle('hidden');
+  ico.textContent = hidden ? '▼' : '▲';
+  if (!hidden) setTimeout(() => document.getElementById('promo-ia-texto').focus(), 80);
+}
+
+function _coletarItensPromoModal() {
+  const checks = document.querySelectorAll('.promo-item-check:checked');
+  return Array.from(checks).map(cb => ({
+    produtoId: cb.dataset.pid,
+    nome: cb.dataset.nome,
+    ...(cb.dataset.tid ? { tamanhoId: cb.dataset.tid } : {}),
+    preco: cb.dataset.preco ? parseFloat(cb.dataset.preco) : undefined,
+  }));
+}
 
 async function abrirModalPromocao(id = null) {
+  _promoTipoAtual = 'MANUAL';
+  _promoItensEscolhidos = [];
   document.getElementById('promo-id').value = id || '';
   document.getElementById('promo-nome').value = '';
   document.getElementById('promo-descricao').value = '';
   document.getElementById('promo-preco').value = '';
   document.getElementById('promo-ativa').checked = true;
+  document.getElementById('promo-mostrar-delivery').checked = true;
+  document.querySelectorAll('.promo-dia-check').forEach(cb => { cb.checked = false; });
   document.getElementById('promo-erro').classList.add('hidden');
+  document.getElementById('promo-ia-texto').value = '';
+  document.getElementById('promo-ia-panel').classList.add('hidden');
+  document.getElementById('promo-ia-toggle-ico').textContent = '▼';
   document.getElementById('modal-promocao-titulo').textContent = id ? 'Editar Promoção' : 'Nova Promoção';
+  // reseta tipo para MANUAL
+  setPromoTipo('MANUAL');
 
   if (id) {
     const rid = restauranteAtual || (restaurantes[0]?.id || '');
@@ -6737,14 +7167,83 @@ async function abrirModalPromocao(id = null) {
         document.getElementById('promo-descricao').value = p.descricao || '';
         document.getElementById('promo-preco').value = p.precoPromocional != null ? p.precoPromocional : '';
         document.getElementById('promo-ativa').checked = p.ativa;
+        document.getElementById('promo-mostrar-delivery').checked = p.mostrarDelivery !== false;
+        const diasSalvos = Array.isArray(p.recorrencia) ? p.recorrencia : [];
+        document.querySelectorAll('.promo-dia-check').forEach(cb => { cb.checked = diasSalvos.includes(cb.value); });
+        _promoItensEscolhidos = Array.isArray(p.itens) ? p.itens : [];
+        const tipo = p.tipo || 'MANUAL';
+        setPromoTipo(tipo);
+        // preencher campos específicos
+        const r = (typeof p.regra === 'object' && p.regra) ? p.regra : {};
+        if (tipo === 'DESCONTO') {
+          document.querySelector(`input[name="promo-desconto-tipo"][value="${r.tipoDesconto || '%'}"]`).checked = true;
+          document.getElementById('promo-desconto-valor').value = r.valor || '';
+        } else if (tipo === 'COMPRE_PAGUE') {
+          document.getElementById('promo-comprar-qtd').value = r.comprarQtd || 2;
+          document.getElementById('promo-pagar-qtd').value = r.pagarQtd != null ? r.pagarQtd : 1;
+        } else if (tipo === 'BRINDE') {
+          document.getElementById('promo-brinde-qtd').value = r.brindeQtd || 1;
+          document.getElementById('promo-brinde-nome').value = r.brindeNome || '';
+        }
       }
     }
   }
+  _renderizarItensPromoModal();
   document.getElementById('modal-promocao').classList.remove('hidden');
 }
 
 function fecharModalPromocao() {
   document.getElementById('modal-promocao').classList.add('hidden');
+}
+
+async function gerarPromoComIA() {
+  const descricao = document.getElementById('promo-ia-texto').value.trim();
+  if (!descricao) { mostrarToast('Descreva a promoção antes de gerar.'); return; }
+  const spinner = document.getElementById('promo-ia-spinner');
+  const btnLabel = document.getElementById('promo-ia-btn-label');
+  spinner.classList.remove('hidden');
+  btnLabel.textContent = 'Gerando...';
+  try {
+    const rid = restauranteAtual || (restaurantes[0]?.id || '');
+    const res = await fetch('/admin/promocoes/gerar-ia', {
+      method: 'POST',
+      headers: getHeaders({ 'Content-Type': 'application/json' }),
+      body: JSON.stringify({ descricao, restauranteId: rid, cardapio: cardapioData }),
+    });
+    const json = await res.json();
+    if (!res.ok) { mostrarToast(json.error || 'Erro ao gerar com IA.'); return; }
+    const p = json.data;
+    if (p.nome) document.getElementById('promo-nome').value = p.nome;
+    if (p.descricao) document.getElementById('promo-descricao').value = p.descricao;
+    if (p.precoPromocional != null) document.getElementById('promo-preco').value = p.precoPromocional;
+    const tipo = p.tipo || 'MANUAL';
+    setPromoTipo(tipo);
+    const r = p.regra || {};
+    if (tipo === 'DESCONTO') {
+      document.querySelector(`input[name="promo-desconto-tipo"][value="${r.tipoDesconto || '%'}"]`).checked = true;
+      document.getElementById('promo-desconto-valor').value = r.valor || '';
+    } else if (tipo === 'COMPRE_PAGUE') {
+      document.getElementById('promo-comprar-qtd').value = r.comprarQtd || 2;
+      document.getElementById('promo-pagar-qtd').value = r.pagarQtd != null ? r.pagarQtd : 1;
+    } else if (tipo === 'BRINDE') {
+      document.getElementById('promo-brinde-qtd').value = r.brindeQtd || 1;
+      document.getElementById('promo-brinde-nome').value = r.brindeNome || '';
+    }
+    // tenta marcar itens sugeridos
+    if (p.sugestaoItens?.length) {
+      const sugestoes = p.sugestaoItens.map(s => s.toLowerCase());
+      document.querySelectorAll('.promo-item-check').forEach(cb => {
+        const nome = cb.dataset.nome?.toLowerCase() || '';
+        if (sugestoes.some(s => nome.includes(s) || s.includes(nome.split(' ')[0]))) cb.checked = true;
+      });
+    }
+    mostrarToast('✨ Promoção gerada! Revise e salve.');
+  } catch (e) {
+    mostrarToast('Erro ao chamar IA: ' + e.message);
+  } finally {
+    spinner.classList.add('hidden');
+    btnLabel.textContent = '✨ Gerar com IA';
+  }
 }
 
 async function salvarPromocao() {
@@ -6753,12 +7252,42 @@ async function salvarPromocao() {
   const descricao = document.getElementById('promo-descricao').value.trim();
   const precoRaw = document.getElementById('promo-preco').value;
   const ativa = document.getElementById('promo-ativa').checked;
+  const mostrarDelivery = document.getElementById('promo-mostrar-delivery').checked;
+  const recorrencia = Array.from(document.querySelectorAll('.promo-dia-check:checked')).map(cb => cb.value);
   const erroEl = document.getElementById('promo-erro');
 
   if (!nome) { erroEl.textContent = 'Nome obrigatório.'; erroEl.classList.remove('hidden'); return; }
   erroEl.classList.add('hidden');
 
-  const body = { nome, descricao: descricao || null, precoPromocional: precoRaw !== '' ? parseFloat(precoRaw) : null, ativa };
+  const itens = _coletarItensPromoModal();
+  let regra = {};
+  if (_promoTipoAtual === 'DESCONTO') {
+    const tipoDesconto = document.querySelector('input[name="promo-desconto-tipo"]:checked')?.value || '%';
+    const valor = parseFloat(document.getElementById('promo-desconto-valor').value) || 0;
+    regra = { tipoDesconto, valor };
+  } else if (_promoTipoAtual === 'COMPRE_PAGUE') {
+    regra = {
+      comprarQtd: parseInt(document.getElementById('promo-comprar-qtd').value) || 2,
+      pagarQtd: parseInt(document.getElementById('promo-pagar-qtd').value) || 1,
+    };
+  } else if (_promoTipoAtual === 'BRINDE') {
+    regra = {
+      brindeQtd: parseInt(document.getElementById('promo-brinde-qtd').value) || 1,
+      brindeNome: document.getElementById('promo-brinde-nome').value.trim(),
+    };
+  }
+
+  const body = {
+    nome,
+    descricao: descricao || null,
+    precoPromocional: precoRaw !== '' ? parseFloat(precoRaw) : null,
+    ativa,
+    mostrarDelivery,
+    recorrencia,
+    tipo: _promoTipoAtual,
+    itens,
+    regra,
+  };
   if (!id) body.restauranteId = restauranteAtual || (restaurantes[0]?.id || '');
 
   const url = id ? `/admin/promocoes/${id}` : '/admin/promocoes';
@@ -6787,13 +7316,22 @@ async function excluirPromocao(id) {
   carregarCardapio();
 }
 
-function renderizarCardapio(categorias) {
+function renderizarCardapio(categoriasRaw) {
   const lista = document.getElementById('cardapio-lista');
   lista.innerHTML = '';
   const moeda = getMoeda() || 'R$';
 
+  // filtro de canal (Salão / Delivery / todos)
+  const categorias = cardapioFiltroCanal === 'todos' ? categoriasRaw : categoriasRaw.filter(c => {
+    const canais = Array.isArray(c.canais) ? c.canais : ['SALAO','DELIVERY','WEB'];
+    return canais.includes(cardapioFiltroCanal);
+  });
+
   if (!categorias.length) {
-    lista.innerHTML = `<p class="text-sm text-gray-400 text-center py-8">${t('card.vazio')}</p>`;
+    const msg = cardapioFiltroCanal !== 'todos'
+      ? `<p class="text-sm text-gray-400 text-center py-8">Nenhuma categoria no canal <strong>${cardapioFiltroCanal === 'SALAO' ? '🪑 Salão' : '🛵 Delivery'}</strong>.<br><span class="text-xs">Configure os canais de cada categoria clicando em ✏️.</span></p>`
+      : `<p class="text-sm text-gray-400 text-center py-8">${t('card.vazio')}</p>`;
+    lista.innerHTML = msg;
     return;
   }
 
@@ -6825,18 +7363,12 @@ function renderizarCardapio(categorias) {
           <span class="text-xs bg-gray-100 text-gray-500 px-2 py-0.5 rounded-full shrink-0">${numProdutos} ${numProdutos === 1 ? 'produto' : 'produtos'}</span>
           ${cat.tipoTamanhos && cat.tipoTamanhos !== 'simples' ? `<span class="text-xs bg-gray-100 text-gray-500 px-2 py-0.5 rounded-full shrink-0">${{pizza:'🍕 Pizza',porcao:'🍽️ Porção',custom:'⚙️ Custom'}[cat.tipoTamanhos]||''}</span>` : ''}
           ${inativa ? '<span class="text-xs bg-gray-200 text-gray-500 px-2 py-0.5 rounded-full shrink-0">Oculta</span>' : ''}
-          ${cat.ocultarMobile ? '<span class="text-xs bg-blue-100 text-blue-600 px-2 py-0.5 rounded-full shrink-0">📵 App</span>' : ''}
         </div>
         <div class="flex gap-1.5 shrink-0 ml-2" onclick="event.stopPropagation()">
           <button onclick="toggleCategoria('${cat.id}', ${cat.ativo !== false})"
             title="${inativa ? 'Mostrar categoria' : 'Ocultar categoria'}"
             class="text-xs px-2.5 py-1.5 rounded-lg transition font-semibold ${inativa ? 'bg-green-100 hover:bg-green-200 text-green-700' : 'bg-yellow-100 hover:bg-yellow-200 text-yellow-700'}">
             ${inativa ? '👁 Mostrar' : '🙈 Ocultar'}
-          </button>
-          <button onclick="toggleCategoriaMobile('${cat.id}', ${!!cat.ocultarMobile})"
-            title="${cat.ocultarMobile ? 'Mostrar no app mobile' : 'Ocultar no app mobile'}"
-            class="text-xs px-2.5 py-1.5 rounded-lg transition font-semibold ${cat.ocultarMobile ? 'bg-blue-100 hover:bg-blue-200 text-blue-700' : 'bg-gray-100 hover:bg-gray-200 text-gray-500'}">
-            ${cat.ocultarMobile ? '📱 Mostrar app' : '📵 Ocultar app'}
           </button>
           <button onclick="abrirModalProduto('${cat.id}')"
             class="text-xs bg-orange-100 hover:bg-orange-200 text-orange-700 px-2.5 py-1.5 rounded-lg transition">${t('card.add-prod')}</button>
@@ -6880,15 +7412,6 @@ async function toggleCategoria(id, ativoAtual) {
     method: 'PATCH',
     headers: getHeaders({ 'Content-Type': 'application/json' }),
     body: JSON.stringify({ ativo: !ativoAtual }),
-  });
-  carregarCardapio();
-}
-
-async function toggleCategoriaMobile(id, ocultarAtual) {
-  await fetch(`/admin/cardapio/categorias/${id}`, {
-    method: 'PATCH',
-    headers: getHeaders({ 'Content-Type': 'application/json' }),
-    body: JSON.stringify({ ocultarMobile: !ocultarAtual }),
   });
   carregarCardapio();
 }
@@ -7029,6 +7552,10 @@ function abrirModalCategoria() {
   document.getElementById('modal-categoria-titulo').textContent = t('card.nova-cat-modal');
   document.getElementById('cat-nome').value = '';
   document.getElementById('cat-id').value = '';
+  document.getElementById('cat-estacao-tipo').value = 'GERAL';
+  document.getElementById('cat-canal-salao').checked = true;
+  document.getElementById('cat-canal-delivery').checked = true;
+  document.getElementById('cat-canal-web').checked = true;
   document.getElementById('cat-pizza-lista').innerHTML = '';
   document.getElementById('cat-porcao-lista').innerHTML = '';
   document.getElementById('cat-tamanhos-lista').innerHTML = '';
@@ -7087,6 +7614,11 @@ function editarCategoria(id) {
   document.getElementById('modal-categoria-titulo').textContent = t('card.editar-cat');
   document.getElementById('cat-nome').value = cat.nome;
   document.getElementById('cat-id').value = id;
+  document.getElementById('cat-estacao-tipo').value = cat.estacaoTipo || 'GERAL';
+  const canaisAtivos = Array.isArray(cat.canais) ? cat.canais : ['SALAO', 'DELIVERY', 'WEB'];
+  document.getElementById('cat-canal-salao').checked = canaisAtivos.includes('SALAO');
+  document.getElementById('cat-canal-delivery').checked = canaisAtivos.includes('DELIVERY');
+  document.getElementById('cat-canal-web').checked = canaisAtivos.includes('WEB');
   document.getElementById('cat-pizza-lista').innerHTML = '';
   document.getElementById('cat-porcao-lista').innerHTML = '';
   document.getElementById('cat-tamanhos-lista').innerHTML = '';
@@ -7166,7 +7698,9 @@ async function salvarCategoria() {
       }
     }
 
-    const body = JSON.stringify({ nome, tamanhos, tipoTamanhos, bordas });
+    const estacaoTipo = document.getElementById('cat-estacao-tipo').value || 'GERAL';
+    const canais = ['SALAO', 'DELIVERY', 'WEB'].filter(c => document.getElementById(`cat-canal-${c.toLowerCase()}`).checked);
+    const body = JSON.stringify({ nome, tamanhos, tipoTamanhos, bordas, estacaoTipo, canais });
     let res;
     if (id) {
       res = await fetch(`/admin/cardapio/categorias/${id}`, { method: 'PATCH', headers: getHeaders({ 'Content-Type': 'application/json' }), body });
@@ -8755,6 +9289,98 @@ async function excluirGarcon(id) {
   await fetch(`/admin/garcons/${id}`, { method: 'DELETE', headers: getHeaders() });
   carregarGarcons();
   mostrarToast('Garçom removido.');
+}
+
+// ── Estações de Cozinha ───────────────────────────────────────────────────────
+let estacaoRestauranteId = null;
+const ESTACAO_TIPO_LABEL = { GERAL: '🍽 Geral', PIZZA: '🍕 Pizza', LANCHE: '🍔 Lanche', BAR: '🍺 Bar', CAIXA: '🧾 Caixa' };
+
+async function carregarEstacoes() {
+  const sel = document.getElementById('estacao-restaurante-select');
+  if (sel && sel.value) estacaoRestauranteId = sel.value;
+  if (!estacaoRestauranteId) estacaoRestauranteId = restauranteAtual;
+  if (!estacaoRestauranteId) return;
+  const res = await fetch(`/admin/estacoes/${estacaoRestauranteId}`, { headers: getHeaders() });
+  const { data } = await res.json();
+  const lista = document.getElementById('estacoes-lista');
+  const vazio = document.getElementById('estacoes-vazio');
+  if (!data?.length) { lista.innerHTML = ''; if (vazio) vazio.classList.remove('hidden'); return; }
+  if (vazio) vazio.classList.add('hidden');
+  lista.innerHTML = data.map(e => {
+    const nomeEsc = e.nome.replace(/'/g, "\\'");
+    const tipoEsc = e.tipo.replace(/'/g, "\\'");
+    const corEsc  = e.cor.replace(/'/g, "\\'");
+    return `
+    <div class="bg-white rounded-2xl shadow-sm p-4 flex items-start gap-3 border-l-4" style="border-color:${e.cor}">
+      <div style="width:42px;height:42px;border-radius:50%;background:${e.cor};display:flex;align-items:center;justify-content:center;font-size:18px;color:#fff;font-weight:800;flex-shrink:0">${e.nome[0].toUpperCase()}</div>
+      <div class="flex-1 min-w-0">
+        <p class="font-semibold text-gray-800 text-sm truncate">${e.nome}</p>
+        <p class="text-xs text-purple-600 mt-0.5">${ESTACAO_TIPO_LABEL[e.tipo] || e.tipo}</p>
+        <p class="text-xs text-green-600 mt-1">🔑 Senha configurada</p>
+      </div>
+      <div class="flex flex-col gap-1.5 shrink-0">
+        <button onclick="abrirModalEditarEstacao('${e.id}','${nomeEsc}','${tipoEsc}','${corEsc}')"
+          class="text-xs bg-gray-100 hover:bg-gray-200 text-gray-600 px-2.5 py-1.5 rounded-lg transition">✏️ Editar</button>
+        <button onclick="excluirEstacao('${e.id}')"
+          class="text-xs bg-red-50 hover:bg-red-100 text-red-500 px-2.5 py-1.5 rounded-lg transition">🗑️ Remover</button>
+      </div>
+    </div>`;
+  }).join('');
+}
+
+function abrirModalNovaEstacao() {
+  document.getElementById('estacao-edit-id').value = '';
+  document.getElementById('estacao-form-nome').value = '';
+  document.getElementById('estacao-form-tipo').value = 'GERAL';
+  document.getElementById('estacao-form-senha').value = '';
+  document.getElementById('estacao-form-cor').value = '#7c3aed';
+  document.getElementById('modal-estacao-titulo').textContent = 'Nova Estação';
+  document.getElementById('estacao-form-erro').classList.add('hidden');
+  document.getElementById('modal-estacao').classList.remove('hidden');
+}
+
+function abrirModalEditarEstacao(id, nome, tipo, cor) {
+  document.getElementById('estacao-edit-id').value = id;
+  document.getElementById('estacao-form-nome').value = nome;
+  document.getElementById('estacao-form-tipo').value = tipo;
+  document.getElementById('estacao-form-senha').value = '';
+  document.getElementById('estacao-form-cor').value = cor;
+  document.getElementById('modal-estacao-titulo').textContent = 'Editar Estação';
+  document.getElementById('estacao-form-erro').classList.add('hidden');
+  document.getElementById('modal-estacao').classList.remove('hidden');
+}
+
+function fecharModalEstacao() {
+  document.getElementById('modal-estacao').classList.add('hidden');
+}
+
+async function salvarEstacao() {
+  const id    = document.getElementById('estacao-edit-id').value;
+  const nome  = document.getElementById('estacao-form-nome').value.trim();
+  const tipo  = document.getElementById('estacao-form-tipo').value;
+  const senha = document.getElementById('estacao-form-senha').value;
+  const cor   = document.getElementById('estacao-form-cor').value;
+  const errEl = document.getElementById('estacao-form-erro');
+  errEl.classList.add('hidden');
+  if (!nome) { errEl.textContent = 'Nome obrigatório.'; errEl.classList.remove('hidden'); return; }
+  if (!id && !senha) { errEl.textContent = 'Senha obrigatória para nova estação.'; errEl.classList.remove('hidden'); return; }
+  const body = { nome, tipo, cor };
+  if (senha) body.senha = senha;
+  if (!id) body.restauranteId = estacaoRestauranteId || restauranteAtual;
+  const url = id ? `/admin/estacoes/${id}` : '/admin/estacoes';
+  const method = id ? 'PUT' : 'POST';
+  const res = await fetch(url, { method, headers: getHeaders({ 'Content-Type': 'application/json' }), body: JSON.stringify(body) });
+  if (!res.ok) { const { error } = await res.json(); errEl.textContent = error || 'Erro ao salvar.'; errEl.classList.remove('hidden'); return; }
+  fecharModalEstacao();
+  carregarEstacoes();
+  mostrarToast(id ? 'Estação atualizada!' : 'Estação criada!');
+}
+
+async function excluirEstacao(id) {
+  if (!confirm('Remover esta estação?')) return;
+  await fetch(`/admin/estacoes/${id}`, { method: 'DELETE', headers: getHeaders() });
+  carregarEstacoes();
+  mostrarToast('Estação removida.');
 }
 
 // ── Motoboys ─────────────────────────────────────────────────────────────────

@@ -16,6 +16,40 @@
 </head>
 <body class="min-h-screen text-white">
 
+  <!-- Login Overlay -->
+  <div id="login-overlay" class="fixed inset-0 bg-slate-900 z-50 flex items-center justify-center p-4">
+    <div class="bg-slate-800 border border-slate-700 rounded-2xl shadow-2xl w-full max-w-sm p-6">
+      <div class="text-center mb-5">
+        <div class="text-4xl mb-2">📺</div>
+        <h2 class="text-lg font-bold text-white">Identificar Estação</h2>
+        <p class="text-slate-400 text-xs mt-1">Selecione a estação e informe a senha</p>
+      </div>
+      <div class="space-y-3">
+        <div>
+          <label class="text-xs text-slate-400 mb-1 block">Estação</label>
+          <select id="login-estacao-select" class="w-full bg-slate-700 border border-slate-600 text-white rounded-lg px-3 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-purple-500">
+            <option value="">Carregando...</option>
+          </select>
+        </div>
+        <div>
+          <label class="text-xs text-slate-400 mb-1 block">Senha</label>
+          <input id="login-senha" type="password" placeholder="Senha da estação"
+            class="w-full bg-slate-700 border border-slate-600 text-white rounded-lg px-3 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-purple-500"
+            onkeydown="if(event.key==='Enter') fazerLoginEstacao()">
+        </div>
+        <p id="login-erro" class="text-red-400 text-xs hidden"></p>
+        <button onclick="fazerLoginEstacao()" id="login-btn"
+          class="w-full bg-purple-600 hover:bg-purple-500 text-white font-bold py-2.5 rounded-xl text-sm transition">
+          Entrar
+        </button>
+        <button onclick="entrarSemEstacao()"
+          class="w-full text-slate-500 hover:text-slate-300 text-xs py-1 transition">
+          Entrar como Cozinha Geral (sem filtro)
+        </button>
+      </div>
+    </div>
+  </div>
+
   <!-- Header -->
   <header class="bg-slate-800 border-b border-slate-700 px-4 py-3 flex items-center justify-between sticky top-0 z-10">
     <div class="flex items-center gap-3">
@@ -26,6 +60,12 @@
       </div>
     </div>
     <div class="flex items-center gap-3">
+      <!-- Badge da estação logada -->
+      <div id="estacao-badge" class="hidden items-center gap-2 bg-slate-700 rounded-xl px-3 py-1.5">
+        <div id="estacao-cor-dot" class="w-2.5 h-2.5 rounded-full flex-shrink-0" style="background:#7c3aed"></div>
+        <span id="estacao-nome-badge" class="text-xs font-semibold text-white"></span>
+        <button onclick="logoutEstacao()" class="text-slate-400 hover:text-red-400 text-xs ml-1 transition" title="Trocar estação">✕</button>
+      </div>
       <button onclick="abrirHistorico()" class="text-xs bg-slate-700 hover:bg-slate-600 active:bg-slate-800 px-3 py-1.5 rounded-lg font-medium text-slate-300 transition">📋 Histórico</button>
       <div class="flex items-center gap-1.5">
         <span id="indicador-socket" class="w-2 h-2 rounded-full bg-red-500 transition-colors"></span>
@@ -96,6 +136,11 @@ let pedidos = [];
 let prevCount = 0;
 let nomeRestaurante = 'Cozinha';
 
+// ── Estação ───────────────────────────────────────────────────────────────────
+const ESTACAO_KEY = `cozinha_estacao_${slug}`;
+let estacao = null;   // { id, nome, tipo, cor }
+let itemMap = [];     // [{ nome: string (lowercase), estacaoTipo: string }]
+
 function beep() {
   try {
     const ctx = new AudioContext();
@@ -138,8 +183,55 @@ function origemTag(p) {
   return `<span class="text-xs bg-blue-500/25 text-blue-300 px-2 py-0.5 rounded-full font-medium">🛵 Delivery</span>`;
 }
 
-function imprimirPedido(p) {
-  const itens = Array.isArray(p.itens) ? p.itens : [];
+// ── Filtro de itens por estação ────────────────────────────────────────────────
+function resolverEstacaoItem(itemNome) {
+  if (!itemMap.length) return 'GERAL';
+  const n = itemNome.toLowerCase().trim();
+  let best = null;
+  let bestLen = 0;
+  for (const entry of itemMap) {
+    if (n.includes(entry.nome) || n.startsWith(entry.nome)) {
+      if (entry.nome.length > bestLen) {
+        best = entry.estacaoTipo;
+        bestLen = entry.nome.length;
+      }
+    }
+  }
+  return best || 'GERAL';
+}
+
+function isDelivery(p) {
+  return p && p.origem !== 'MESA' && p.localizacao && p.localizacao !== 'Retirada no balcão';
+}
+
+function filtrarItensEstacao(itens, pedido) {
+  if (!estacao || estacao.tipo === 'GERAL' || estacao.tipo === 'CAIXA') return itens;
+  return itens.filter(i => {
+    const tipo = resolverEstacaoItem(i.nome);
+    // Bebidas de delivery não vão para o bar — só para cozinha geral/caixa
+    if (estacao.tipo === 'BAR' && tipo === 'BAR' && isDelivery(pedido)) return false;
+    return tipo === estacao.tipo || tipo === 'GERAL';
+  });
+}
+
+async function carregarItemMap() {
+  try {
+    const res = await fetch(`/painel/estacao/cardapio?slug=${slug}&t=${token}`);
+    if (!res.ok) return;
+    const { data } = await res.json();
+    itemMap = [];
+    for (const cat of data) {
+      for (const prod of cat.produtos || []) {
+        itemMap.push({ nome: prod.nome.toLowerCase().trim(), estacaoTipo: cat.estacaoTipo || 'GERAL' });
+      }
+    }
+  } catch {}
+}
+
+function imprimirPedido(p, apenasEstacao = true) {
+  const todosItens = Array.isArray(p.itens) ? p.itens : [];
+  const itens = apenasEstacao ? filtrarItensEstacao(todosItens, p) : todosItens;
+  if (!itens.length) return;
   const num = numPedido(p);
   const hora = new Date(p.createdAt).toLocaleTimeString('pt-BR', { hour: '2-digit', minute: '2-digit' });
   const isMesa = p.origem === 'MESA';
@@ -147,12 +239,23 @@ function imprimirPedido(p) {
   const origemLabel = isMesa ? `🪑 Mesa ${p.mesa}` : isRetirada ? '🏪 Retirada no balcão' : '🛵 Delivery';
   const enderecoHtml = !isMesa && !isRetirada && p.localizacao
     ? `<p class="endereco">${p.localizacao}</p>` : '';
+  const estacaoLabel = estacao && estacao.tipo !== 'GERAL' && estacao.tipo !== 'CAIXA'
+    ? `<p class="estacao-label">${estacao.nome}</p>` : '';
 
-  const itensHtml = itens.map(i => `
-    <tr>
+  const itensHtml = itens.map(i => {
+    const pizza = parsePizzaItem(i.nome);
+    if (!pizza) {
+      return `<tr><td class="qty">${i.quantidade || 1}×</td><td class="nome">${i.nome}</td></tr>`;
+    }
+    return `<tr>
       <td class="qty">${i.quantidade || 1}×</td>
-      <td class="nome">${i.nome}</td>
-    </tr>`).join('');
+      <td class="nome">
+        <span class="tam">${pizza.tamanho}</span>
+        ${pizza.sabores.map((s, idx) => `<div class="sabor">${idx + 1}. ${s}</div>`).join('')}
+        ${pizza.borda ? `<div class="borda">${pizza.borda}</div>` : ''}
+      </td>
+    </tr>`;
+  }).join('');
 
   const html = `<!DOCTYPE html><html><head><meta charset="UTF-8">
 <style>
@@ -163,9 +266,14 @@ function imprimirPedido(p) {
   .num { font-size:32px; font-weight:900; text-align:center; letter-spacing:3px; margin:6px 0; }
   .hora { text-align:center; font-size:12px; color:#555; margin-bottom:2px; }
   .restaurante { text-align:center; font-weight:bold; font-size:15px; margin-bottom:2px; }
+  .estacao-label { text-align:center; font-size:11px; color:#7c3aed; font-weight:bold; text-transform:uppercase; letter-spacing:1px; margin-bottom:4px; }
   table { width:100%; border-collapse:collapse; margin:4px 0; }
   .qty { font-size:22px; font-weight:900; width:2.8em; vertical-align:top; padding:4px 6px 4px 0; }
   .nome { font-size:17px; font-weight:bold; vertical-align:top; padding:4px 0; line-height:1.3; }
+  .tam { font-size:11px; font-weight:bold; text-transform:uppercase; letter-spacing:1px; color:#555; display:block; margin-bottom:3px; }
+  .sabor { font-size:17px; font-weight:bold; line-height:1.4; padding:2px 0; }
+  .sabor + .sabor { border-top:1px dashed #ccc; padding-top:4px; margin-top:2px; }
+  .borda { font-size:13px; color:#555; font-style:italic; border-top:1px dashed #ccc; margin-top:3px; padding-top:3px; }
   .origem { text-align:center; font-size:14px; font-weight:bold; margin-top:4px; }
   .endereco { text-align:center; font-size:11px; color:#444; margin-top:3px; word-break:break-word; }
   .acoes { display:flex; gap:8px; justify-content:center; margin-top:14px; }
@@ -175,6 +283,7 @@ function imprimirPedido(p) {
   @media print { body { width:auto; } .acoes { display:none !important; } }
 </style></head><body>
   <p class="restaurante">${nomeRestaurante}</p>
+  ${estacaoLabel}
   <div class="divider"></div>
   <p class="num">#${num}</p>
   <p class="hora">${hora}</p>
@@ -200,12 +309,16 @@ function imprimirPedido(p) {
 async function acao(id, rota) {
   if (rota === 'iniciar') {
     const p = pedidos.find(x => x.id === id);
-    if (p) imprimirPedido(p);
+    if (p) imprimirPedido(p, true);
   }
   const btn = document.querySelector(`[data-pedido="${id}"] .btn-acao`);
   if (btn) { btn.disabled = true; btn.textContent = '...'; }
   try {
-    await fetch(`/painel/pedidos/${id}/${rota}?slug=${slug}&t=${token}`, { method: 'POST' });
+    await fetch(`/painel/pedidos/${id}/${rota}?slug=${slug}&t=${token}`, {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ estacaoTipo: estacao?.tipo }),
+    });
     await carregar();
   } catch {
     if (btn) { btn.disabled = false; }
@@ -213,13 +326,20 @@ async function acao(id, rota) {
 }
 
 function criarCard(p) {
-  const itens = Array.isArray(p.itens) ? p.itens : [];
-  const isConf = p.status === 'CONFIRMADO' || p.status === 'PAGO';
-  const btnClasse = isConf
+  const todosItens = Array.isArray(p.itens) ? p.itens : [];
+  const itens = filtrarItensEstacao(todosItens, p);
+  if (!itens.length) return null; // ordem não tem itens para esta estação
+
+  const useEstacao = estacao && estacao.tipo !== 'GERAL' && estacao.tipo !== 'CAIXA';
+  const estStatus = useEstacao ? ((p.preparoEstacoes || {})[estacao.tipo]) : null;
+  const needsInit = useEstacao
+    ? (!estStatus || estStatus === 'AGUARDANDO')
+    : (p.status === 'CONFIRMADO' || p.status === 'PAGO');
+  const btnClasse = needsInit
     ? 'bg-amber-500 hover:bg-amber-400 active:bg-amber-600 text-black'
     : 'bg-emerald-500 hover:bg-emerald-400 active:bg-emerald-600 text-black';
-  const btnTexto = isConf ? '▶ Iniciar Preparo' : '✓ Marcar Pronto';
-  const btnRota = isConf ? 'iniciar' : 'pronto';
+  const btnTexto = needsInit ? '▶ Iniciar Preparo' : '✓ Marcar Pronto';
+  const btnRota = needsInit ? 'iniciar' : 'pronto';
 
   const div = document.createElement('div');
   div.className = 'bg-slate-800 border border-slate-700 rounded-2xl p-4 card-in';
@@ -234,23 +354,22 @@ function criarCard(p) {
     </div>
     <div class="space-y-2 mb-4 border-t border-slate-700 pt-3">
       ${itens.map(i => {
-        const slashIdx = i.nome.indexOf(' / ');
-        if (slashIdx < 0) {
+        const pizza = parsePizzaItem(i.nome);
+        if (!pizza) {
           return `<div class="flex items-center gap-3 bg-slate-700/50 rounded-xl px-3 py-2">
             <span class="text-2xl font-black text-amber-400 leading-none w-8 text-center flex-shrink-0">${i.quantidade||1}×</span>
             <span class="text-base font-bold text-white leading-tight">${i.nome}</span>
           </div>`;
         }
-        // Pizza com múltiplos sabores: separa por " - " (tamanho) e " / " (sabores)
-        const dashIdx = i.nome.lastIndexOf(' - ');
-        const saboresPart = dashIdx >= 0 ? i.nome.substring(0, dashIdx) : i.nome;
-        const tamPart = dashIdx >= 0 ? i.nome.substring(dashIdx + 3) : '';
-        const sabores = saboresPart.split(' / ');
         return `<div class="flex items-start gap-3 bg-slate-700/50 rounded-xl px-3 py-2.5">
-          <span class="text-2xl font-black text-amber-400 leading-none w-8 text-center flex-shrink-0 mt-0.5">${i.quantidade||1}×</span>
+          <span class="text-2xl font-black text-amber-400 leading-none w-8 text-center flex-shrink-0 mt-1">${i.quantidade||1}×</span>
           <div class="flex-1 min-w-0">
-            ${tamPart ? `<p class="text-xs font-bold text-amber-300/70 mb-1.5 uppercase tracking-wide">${tamPart}</p>` : ''}
-            ${sabores.map((s, idx) => `<p class="text-sm font-bold text-white leading-snug mb-0.5"><span class="text-slate-400 font-normal mr-1">${idx+1}.</span>${s}</p>`).join('')}
+            <p class="text-xs font-bold text-amber-300/80 mb-2 uppercase tracking-wider border-b border-slate-600 pb-1.5">${pizza.tamanho}</p>
+            ${pizza.sabores.map((s, idx) => `<div class="flex items-center gap-2 ${idx > 0 ? 'mt-2 pt-2 border-t border-slate-600/50' : ''}">
+              <span class="text-xs font-black text-amber-400 w-5 h-5 flex items-center justify-center bg-slate-700 rounded flex-shrink-0">${idx+1}</span>
+              <span class="text-base font-bold text-white leading-snug">${s}</span>
+            </div>`).join('')}
+            ${pizza.borda ? `<p class="text-xs font-semibold text-purple-300 mt-2 pt-2 border-t border-slate-600/50">🍕 ${pizza.borda}</p>` : ''}
           </div>
         </div>`;
       }).join('')}
@@ -291,45 +410,193 @@ async function carregar() {
     document.getElementById('nome-restaurante').textContent = nomeRestaurante;
     document.getElementById('ultimo-update').textContent = `Atualizado ${new Date().toLocaleTimeString('pt-BR',{hour:'2-digit',minute:'2-digit',second:'2-digit'})}`;
 
-    const confirmados = data.filter(p => p.status === 'CONFIRMADO' || p.status === 'PAGO');
-    const preparando  = data.filter(p => p.status === 'PREPARANDO');
-
-    document.getElementById('count-confirmado').textContent = confirmados.length;
-    document.getElementById('count-preparando').textContent = preparando.length;
+    const useEstacao = estacao && estacao.tipo !== 'GERAL' && estacao.tipo !== 'CAIXA';
+    const confirmados = data.filter(p => {
+      if (!useEstacao) return p.status === 'CONFIRMADO' || p.status === 'PAGO';
+      const s = (p.preparoEstacoes || {})[estacao.tipo];
+      return !s; // esta estação ainda não iniciou
+    });
+    const preparando = data.filter(p => {
+      if (!useEstacao) return p.status === 'PREPARANDO';
+      const s = (p.preparoEstacoes || {})[estacao.tipo];
+      return s === 'PREPARANDO';
+    });
+    // Pedidos com s === 'PRONTO' para esta estação desaparecem automaticamente das duas colunas
 
     const colConf = document.getElementById('col-confirmado');
     const colPrep = document.getElementById('col-preparando');
     colConf.innerHTML = '';
     colPrep.innerHTML = '';
-    confirmados.forEach(p => colConf.appendChild(criarCard(p)));
-    preparando.forEach(p  => colPrep.appendChild(criarCard(p)));
 
-    document.getElementById('empty-state').classList.toggle('hidden', total > 0);
+    let visiveisConf = 0, visiveisPrep = 0;
+    confirmados.forEach(p => { const card = criarCard(p); if (card) { colConf.appendChild(card); visiveisConf++; } });
+    preparando.forEach(p  => { const card = criarCard(p);  if (card) { colPrep.appendChild(card);  visiveisPrep++; } });
+
+    document.getElementById('count-confirmado').textContent = visiveisConf;
+    document.getElementById('count-preparando').textContent = visiveisPrep;
+    document.getElementById('empty-state').classList.toggle('hidden', (visiveisConf + visiveisPrep) > 0);
   } catch {}
 }
 
-// Update elapsed timers every 30s without re-fetching
-setInterval(updateTimers, 30000);
+// ── Parser de pizza ───────────────────────────────────────────────────────────
+// Formato SITE/app:          "🍕 Pizza (Grande · 33% Calabresa + 33% Mussarela [· Borda X])"
+// Formato Balcão/Garçom/Mesa: "Pizza Grande (até 4 sabores): Sabor1 / Sabor2 [c/ Borda X]"
+// Formato WhatsApp agent:    "Pizza Pollo Catupiry - Grande [com borda Chocolate]"
+function parsePizzaItem(nome) {
+  // Formato SITE: separador · entre seções, + entre sabores
+  if (nome.includes(' · ')) {
+    const m = nome.match(/\((.+)\)$/s);
+    if (!m) return null;
+    const partes = m[1].split(' · ');
+    if (partes.length < 2) return null;
+    return {
+      tamanho: partes[0].trim(),
+      sabores: partes[1].split(' + ').map(s => s.trim()),
+      borda: partes[2] ? partes[2].trim() : null,
+    };
+  }
+  // Formato Balcão/Garçom/Mesa: "Pizza TAMANHO: Sabor1 / Sabor2 [c/ Borda X]"
+  const mBalcao = nome.match(/^Pizza (.+?):\s*(.+)$/);
+  if (mBalcao) {
+    let saboresPart = mBalcao[2].trim();
+    let borda = null;
+    const mBorda = saboresPart.match(/^(.*?)\s+c[\/\\]\s*(Borda\s+.+)$/i);
+    if (mBorda) { saboresPart = mBorda[1].trim(); borda = mBorda[2].trim(); }
+    return {
+      tamanho: mBalcao[1].trim(),
+      sabores: saboresPart.split(' / ').map(s => s.trim()).filter(Boolean),
+      borda,
+    };
+  }
+  // Formato WhatsApp agent: "Pizza SABOR - TAMANHO [com borda X]"
+  const mWa = nome.match(/^(Pizza\s+.+?)\s+-\s+(.+)$/i);
+  if (mWa) {
+    let tamanhoPart = mWa[2].trim();
+    let borda = null;
+    const bordaIdx = tamanhoPart.toLowerCase().indexOf(' com borda ');
+    if (bordaIdx >= 0) {
+      borda = 'Borda ' + tamanhoPart.substring(bordaIdx + 11).trim();
+      tamanhoPart = tamanhoPart.substring(0, bordaIdx).trim();
+    }
+    return {
+      tamanho: tamanhoPart,
+      sabores: [mWa[1].replace(/^pizza\s+/i, '').trim()],
+      borda,
+    };
+  }
+  return null;
+}
 
-// Auto-refresh every 20s
-setInterval(carregar, 20000);
+// ── Autenticação de estação ───────────────────────────────────────────────────
+function atualizarBadgeEstacao() {
+  const badge = document.getElementById('estacao-badge');
+  if (!estacao) { badge.classList.add('hidden'); return; }
+  badge.classList.remove('hidden');
+  badge.classList.add('flex');
+  document.getElementById('estacao-cor-dot').style.background = estacao.cor || '#7c3aed';
+  document.getElementById('estacao-nome-badge').textContent = estacao.nome;
+}
 
-// Socket.IO
-const socket = io();
-socket.on('connect', () => {
-  document.getElementById('indicador-socket').className = 'w-2 h-2 rounded-full bg-emerald-400 transition-colors';
-  socket.emit('assinar', slug);
-});
-socket.on('disconnect', () => {
-  document.getElementById('indicador-socket').className = 'w-2 h-2 rounded-full bg-red-500 transition-colors';
-});
-socket.on('pedido:novo', () => { beep(); carregar(); refreshHistoricoSeAberto(); });
-socket.on('pedido:atualizado', () => { carregar(); refreshHistoricoSeAberto(); });
-socket.on('pedido:status', () => { carregar(); refreshHistoricoSeAberto(); });
+async function carregarListaEstacoes() {
+  try {
+    const res = await fetch(`/painel/estacao/lista?slug=${slug}&t=${token}`);
+    if (!res.ok) return;
+    const { data } = await res.json();
+    const sel = document.getElementById('login-estacao-select');
+    if (!data?.length) {
+      sel.innerHTML = '<option value="">Nenhuma estação cadastrada</option>';
+      return;
+    }
+    sel.innerHTML = data.map(e => `<option value="${e.id}" data-cor="${e.cor}" data-tipo="${e.tipo}">${e.nome}</option>`).join('');
+  } catch {}
+}
 
-// Initial load — silence beep on first load
-prevCount = -1;
-carregar().then(() => { prevCount = pedidos.length; });
+async function fazerLoginEstacao() {
+  const sel = document.getElementById('login-estacao-select');
+  const estacaoId = sel.value;
+  const senha = document.getElementById('login-senha').value;
+  const errEl = document.getElementById('login-erro');
+  const btn = document.getElementById('login-btn');
+  errEl.classList.add('hidden');
+  if (!estacaoId) { errEl.textContent = 'Selecione uma estação.'; errEl.classList.remove('hidden'); return; }
+  if (!senha) { errEl.textContent = 'Informe a senha.'; errEl.classList.remove('hidden'); return; }
+  btn.disabled = true; btn.textContent = 'Verificando...';
+  try {
+    const res = await fetch(`/painel/estacao/auth?slug=${slug}&t=${token}`, {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ estacaoId, senha }),
+    });
+    const data = await res.json();
+    if (!res.ok) { errEl.textContent = data.error || 'Erro ao autenticar.'; errEl.classList.remove('hidden'); return; }
+    estacao = { id: data.id, nome: data.nome, tipo: data.tipo, cor: data.cor };
+    localStorage.setItem(ESTACAO_KEY, JSON.stringify(estacao));
+    document.getElementById('login-overlay').classList.add('hidden');
+    atualizarBadgeEstacao();
+    await carregarItemMap();
+    carregar();
+  } finally {
+    btn.disabled = false; btn.textContent = 'Entrar';
+  }
+}
+
+function entrarSemEstacao() {
+  estacao = { id: null, nome: 'Cozinha Geral', tipo: 'GERAL', cor: '#64748b' };
+  localStorage.setItem(ESTACAO_KEY, JSON.stringify(estacao));
+  document.getElementById('login-overlay').classList.add('hidden');
+  atualizarBadgeEstacao();
+  carregar();
+}
+
+function logoutEstacao() {
+  estacao = null;
+  localStorage.removeItem(ESTACAO_KEY);
+  atualizarBadgeEstacao();
+  document.getElementById('login-overlay').classList.remove('hidden');
+  carregarListaEstacoes();
+}
+
+// ── Inicialização ─────────────────────────────────────────────────────────────
+async function init() {
+  // Restaurar estação do localStorage
+  try {
+    const stored = localStorage.getItem(ESTACAO_KEY);
+    if (stored) {
+      estacao = JSON.parse(stored);
+      document.getElementById('login-overlay').classList.add('hidden');
+      atualizarBadgeEstacao();
+      await carregarItemMap();
+    } else {
+      await carregarListaEstacoes();
+    }
+  } catch {
+    await carregarListaEstacoes();
+  }
+
+  // Update elapsed timers every 30s without re-fetching
+  setInterval(updateTimers, 30000);
+  // Auto-refresh every 20s
+  setInterval(carregar, 20000);
+
+  // Socket.IO
+  const socket = io();
+  socket.on('connect', () => {
+    document.getElementById('indicador-socket').className = 'w-2 h-2 rounded-full bg-emerald-400 transition-colors';
+    socket.emit('assinar', slug);
+  });
+  socket.on('disconnect', () => {
+    document.getElementById('indicador-socket').className = 'w-2 h-2 rounded-full bg-red-500 transition-colors';
+  });
+  socket.on('pedido:novo', () => { beep(); carregar(); refreshHistoricoSeAberto(); });
+  socket.on('pedido:atualizado', () => { carregar(); refreshHistoricoSeAberto(); });
+  socket.on('pedido:status', () => { carregar(); refreshHistoricoSeAberto(); });
+
+  // Initial load
+  prevCount = -1;
+  carregar().then(() => { prevCount = pedidos.length; });
+}
+
+if (slug && token) init();
 
 // ── Histórico ──────────────────────────────────────────────────────────────────
 
@@ -350,11 +617,13 @@ function statusLabel(s) {
 
 function imprimirPorId(id) {
   const p = historico.find(x => x.id === id) || pedidos.find(x => x.id === id);
-  if (p) imprimirPedido(p);
+  if (p) imprimirPedido(p, true);
 }
 
 function criarCardHistorico(p) {
-  const itens = Array.isArray(p.itens) ? p.itens : [];
+  const todosItens = Array.isArray(p.itens) ? p.itens : [];
+  const itens = filtrarItensEstacao(todosItens, p);
+  if (!itens.length) return null;
   const num = numPedido(p);
   const hora = new Date(p.createdAt).toLocaleTimeString('pt-BR', { hour: '2-digit', minute: '2-digit' });
   const div = document.createElement('div');
@@ -392,10 +661,11 @@ async function carregarHistorico() {
     const { data } = await res.json();
     historico = data;
     list.innerHTML = '';
-    if (!data.length) {
+    const cards = data.map(p => criarCardHistorico(p)).filter(Boolean);
+    if (!cards.length) {
       list.innerHTML = '<p class="text-slate-500 text-sm text-center mt-8">Nenhum pedido finalizado hoje.</p>';
     } else {
-      data.forEach(p => list.appendChild(criarCardHistorico(p)));
+      cards.forEach(c => list.appendChild(c));
     }
   } catch {
     list.innerHTML = '<p class="text-red-400 text-sm text-center mt-8">Erro ao carregar histórico.</p>';

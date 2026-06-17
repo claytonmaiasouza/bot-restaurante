@@ -48,6 +48,7 @@ model Restaurante {
   itensEstoque         ItemEstoque[]
   custosMensais        CustoMensal[]
   promocoes            Promocao[]
+  estacoes             Estacao[]
   createdAt            DateTime    @default(now())
 }
 
@@ -61,6 +62,8 @@ model Categoria {
   bordas         Json        @default("[]")
   imagemUrl      String?
   ocultarMobile  Boolean     @default(false)
+  estacaoTipo    String      @default("GERAL")  // GERAL | PIZZA | LANCHE | BAR | CAIXA
+  canais         Json        @default("[\"SALAO\",\"DELIVERY\",\"WEB\"]")  // SALAO | DELIVERY | WEB
   restauranteId  String
   restaurante   Restaurante @relation(fields: [restauranteId], references: [id], onDelete: Cascade)
   produtos      Produto[]
@@ -137,8 +140,9 @@ model Pedido {
   garconId      String?
   garconNome    String?
   garconCor     String?
-  ticketHtml    String?
-  numeroDia      Int?        // sequencial diário reiniciado a cada dia por restaurante
+  ticketHtml      String?
+  preparoEstacoes Json?       @default("{}") // { "BEBIDAS": "PREPARANDO"|"PRONTO", ... } — estado por estação
+  numeroDia       Int?        // sequencial diário reiniciado a cada dia por restaurante
   comprovanteUrl String?    // URL da foto do comprovante de pagamento enviado pelo cliente
   createdAt      DateTime   @default(now())
   updatedAt      DateTime   @updatedAt
@@ -287,6 +291,18 @@ model TurnoCaixa {
   createdAt       DateTime    @default(now())
 }
 
+model Estacao {
+  id            String      @id @default(uuid())
+  restauranteId String
+  restaurante   Restaurante @relation(fields: [restauranteId], references: [id], onDelete: Cascade)
+  nome          String
+  tipo          String      @default("GERAL")  // GERAL | PIZZA | LANCHE | BAR | CAIXA
+  senhaHash     String?
+  cor           String      @default("#6366f1")
+  ativo         Boolean     @default(true)
+  createdAt     DateTime    @default(now())
+}
+
 model Promocao {
   id               String      @id @default(uuid())
   restauranteId    String
@@ -294,7 +310,12 @@ model Promocao {
   nome             String
   descricao        String?
   precoPromocional Float?
+  tipo             String      @default("MANUAL")  // MANUAL | DESCONTO | COMPRE_PAGUE | BRINDE
+  itens            Json        @default("[]")       // [{produtoId, nome, tamanhoId?, tamanhoNome?, preco?}]
+  regra            Json        @default("{}")       // configuração específica por tipo
   ativa            Boolean     @default(true)
+  recorrencia      Json        @default("[]")       // ["SEG","TER","QUA","QUI","SEX","SAB","DOM"] — vazio = sempre
+  mostrarDelivery  Boolean     @default(true)
   createdAt        DateTime    @default(now())
   updatedAt        DateTime    @updatedAt
 }

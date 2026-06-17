@@ -51,7 +51,7 @@ async function resolverRestaurante(slug) {
   }
 
   // Cardápio do banco
-  const cardapio = await buscarCardapioDB(restaurante.id);
+  const cardapio = await buscarCardapioDB(restaurante.id, "DELIVERY");
 
   cache.set(slug, { restaurante, cardapio, expiresAt: Date.now() + CACHE_TTL_MS });
 

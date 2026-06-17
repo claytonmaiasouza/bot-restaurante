@@ -256,6 +256,7 @@ router.get("/pedidos", validarToken, async (req, res) => {
       clienteNome: true, clienteNumero: true, localizacao: true,
       itens: true, total: true, metodoPagamento: true, mesa: true,
       motoboyNome: true, motoboyId: true, createdAt: true, comprovanteUrl: true,
+      preparoEstacoes: true,
     },
   });
 
@@ -283,52 +284,159 @@ router.get("/pedidos", validarToken, async (req, res) => {
   res.json({ data: pedidos, pendenteDevolucao: pendenteDevolucao.length > 0 ? pendenteDevolucao : undefined, restaurante });
 });
 
-// POST /painel/pedidos/:id/iniciar — CONFIRMADO → PREPARANDO
+// POST /painel/pedidos/:id/iniciar — marca início de preparo (por estação ou global)
 router.post("/pedidos/:id/iniciar", validarToken, async (req, res) => {
+  const estacaoTipo = req.body?.estacaoTipo;
+  const isEstacao = estacaoTipo && estacaoTipo !== 'GERAL' && estacaoTipo !== 'CAIXA';
+
+  if (!isEstacao) {
+    const pedido = await prisma.pedido.update({
+      where: { id: req.params.id },
+      data: { status: "PREPARANDO" },
+      include: { restaurante: { select: { nome: true, slugWhatsapp: true, moeda: true, taxaEntrega: true } } },
+    });
+    const io = req.app.get("io");
+    io?.to("admin").emit("pedido:atualizado", pedido);
+    io?.to(`restaurante:${req.painelSlug}`).emit("pedido:atualizado", pedido);
+    notificarStatusPedido(req.params.id, "PREPARANDO").catch(() => {});
+    return res.json({ ok: true });
+  }
+
+  const atual = await prisma.pedido.findUnique({
+    where: { id: req.params.id },
+    select: { preparoEstacoes: true, status: true },
+  });
+  const prep = (typeof atual.preparoEstacoes === 'object' && atual.preparoEstacoes !== null)
+    ? { ...atual.preparoEstacoes }
+    : {};
+  prep[estacaoTipo] = "PREPARANDO";
+
+  const updateData = { preparoEstacoes: prep };
+  if (atual.status === 'CONFIRMADO' || atual.status === 'PAGO') updateData.status = 'PREPARANDO';
+
   const pedido = await prisma.pedido.update({
     where: { id: req.params.id },
-    data: { status: "PREPARANDO" },
+    data: updateData,
     include: { restaurante: { select: { nome: true, slugWhatsapp: true, moeda: true, taxaEntrega: true } } },
   });
   const io = req.app.get("io");
   io?.to("admin").emit("pedido:atualizado", pedido);
   io?.to(`restaurante:${req.painelSlug}`).emit("pedido:atualizado", pedido);
-  notificarStatusPedido(req.params.id, "PREPARANDO").catch(() => {});
+  if (updateData.status) {
+    console.log(`[cozinha] pedido ${req.params.id} iniciou preparo (${estacaoTipo}) — enviando notificação PREPARANDO ao cliente`);
+    notificarStatusPedido(req.params.id, "PREPARANDO").catch((err) => {
+      console.error(`[cozinha] erro ao notificar PREPARANDO pedido ${req.params.id}:`, err.message);
+    });
+  }
   res.json({ ok: true });
 });
 
-// POST /painel/pedidos/:id/pronto — PREPARANDO → PRONTO_PARA_RETIRADA (retirada/mesa) ou AGUARDANDO_DESPACHO (delivery)
+// POST /painel/pedidos/:id/pronto — marca preparo concluído (por estação ou global)
 router.post("/pedidos/:id/pronto", validarToken, async (req, res) => {
+  const estacaoTipo = req.body?.estacaoTipo;
+  const isEstacao = estacaoTipo && estacaoTipo !== 'GERAL' && estacaoTipo !== 'CAIXA';
+
   const atual = await prisma.pedido.findUnique({
     where: { id: req.params.id },
-    select: { localizacao: true, origem: true, garconId: true },
+    select: { localizacao: true, origem: true, garconId: true, preparoEstacoes: true, itens: true, restauranteId: true },
   });
   const isRetirada =
     !atual.localizacao ||
     atual.localizacao === "Retirada no balcão" ||
     atual.origem === "MESA";
-  const novoStatus = isRetirada ? "PRONTO_PARA_RETIRADA" : "AGUARDANDO_DESPACHO";
+  const statusFinal = isRetirada ? "PRONTO_PARA_RETIRADA" : "AGUARDANDO_DESPACHO";
+
+  let novoStatus = statusFinal;
+  let updateData = {};
+
+  if (isEstacao) {
+    const prep = (typeof atual.preparoEstacoes === 'object' && atual.preparoEstacoes !== null)
+      ? { ...atual.preparoEstacoes }
+      : {};
+    prep[estacaoTipo] = "PRONTO";
+    updateData = { preparoEstacoes: prep };
+
+    // Descobre quais tipos de estação têm itens neste pedido para saber se pode marcar como pronto
+    const [categorias, estacoesAtivas] = await Promise.all([
+      prisma.categoria.findMany({
+        where: { restauranteId: atual.restauranteId, ativo: true },
+        select: { estacaoTipo: true, produtos: { where: { ativo: true }, select: { nome: true } } },
+      }),
+      prisma.estacao.findMany({
+        where: { restauranteId: atual.restauranteId, ativo: true },
+        select: { tipo: true },
+      }),
+    ]);
+
+    const tiposAtivos = new Set(
+      estacoesAtivas.map(e => e.tipo).filter(t => t !== 'GERAL' && t !== 'CAIXA')
+    );
+
+    const itemMap = [];
+    for (const cat of categorias) {
+      for (const prod of cat.produtos) {
+        itemMap.push({ nome: prod.nome.toLowerCase().trim(), estacaoTipo: cat.estacaoTipo || 'GERAL' });
+      }
+    }
+
+    const resolverEstacaoItem = (nome) => {
+      const n = (nome || '').toLowerCase().trim();
+      let best = null, bestLen = 0;
+      for (const entry of itemMap) {
+        if (n.includes(entry.nome) || n.startsWith(entry.nome)) {
+          if (entry.nome.length > bestLen) { best = entry.estacaoTipo; bestLen = entry.nome.length; }
+        }
+      }
+      return best || 'GERAL';
+    };
+
+    const itens = Array.isArray(atual.itens) ? atual.itens : [];
+    const estacoesNecessarias = new Set(
+      itens.map(i => resolverEstacaoItem(i.nome)).filter(t => tiposAtivos.has(t))
+    );
+
+    // Só marca o pedido como pronto quando TODAS as estações com itens estiverem prontas
+    const allDone = estacoesNecessarias.size > 0
+      ? [...estacoesNecessarias].every(t => prep[t] === "PRONTO")
+      : Object.values(prep).length > 0 && Object.values(prep).every(s => s === "PRONTO");
+
+    console.log(`[cozinha] pedido ${req.params.id} pronto: estacao=${estacaoTipo} prep=${JSON.stringify(prep)} necessarias=${JSON.stringify([...estacoesNecessarias])} allDone=${allDone}`);
+
+    if (allDone) {
+      updateData.status = statusFinal;
+    } else {
+      novoStatus = null; // outras estações ainda têm itens pendentes — não avança o status global
+    }
+  } else {
+    updateData = { status: statusFinal };
+  }
+
   const pedido = await prisma.pedido.update({
     where: { id: req.params.id },
-    data: { status: novoStatus },
+    data: updateData,
     select: { id: true, mesa: true, itens: true, numeroDia: true, garconId: true, status: true, localizacao: true, origem: true, total: true, metodoPagamento: true },
   });
   const io = req.app.get("io");
   io?.to("admin").emit("pedido:atualizado", pedido);
   io?.to(`restaurante:${req.painelSlug}`).emit("pedido:atualizado", pedido);
-  notificarStatusPedido(req.params.id, novoStatus).catch(() => {});
-  if (novoStatus === "AGUARDANDO_DESPACHO") enviarPushMotoboys(req.painelSlug, pedido);
-  // Notifica o garçom pessoalmente quando pedido de mesa fica pronto
-  if (novoStatus === "PRONTO_PARA_RETIRADA" && pedido.garconId) {
-    io?.to(`garcon:${pedido.garconId}`).emit("pedido:pronto", {
-      id: pedido.id,
-      mesa: pedido.mesa,
-      itens: pedido.itens,
-      garconId: pedido.garconId,
-      numeroDia: pedido.numeroDia,
+
+  if (novoStatus) {
+    console.log(`[cozinha] pedido ${req.params.id} marcado como ${novoStatus} — enviando notificação ao cliente`);
+    notificarStatusPedido(req.params.id, novoStatus).catch((err) => {
+      console.error(`[cozinha] erro ao notificar cliente pedido ${req.params.id}:`, err.message);
     });
+    if (novoStatus === "AGUARDANDO_DESPACHO") enviarPushMotoboys(req.painelSlug, pedido);
+    if (novoStatus === "PRONTO_PARA_RETIRADA" && pedido.garconId) {
+      io?.to(`garcon:${pedido.garconId}`).emit("pedido:pronto", {
+        id: pedido.id,
+        mesa: pedido.mesa,
+        itens: pedido.itens,
+        garconId: pedido.garconId,
+        numeroDia: pedido.numeroDia,
+      });
+    }
   }
-  res.json({ ok: true, status: novoStatus });
+  res.json({ ok: true, status: novoStatus || "PREPARANDO" });
 });
 
 // POST /painel/pedidos/:id/localizacao — motoboy envia coordenadas GPS
@@ -628,6 +736,52 @@ router.put("/pedidos/:id/servir", validarToken, async (req, res) => {
   io?.to("admin").emit("pedido:atualizado", pedido);
   io?.to(`restaurante:${rest.slugWhatsapp}`).emit("pedido:atualizado", pedido);
   res.json({ ok: true });
+});
+
+// ── Estação de Cozinha ────────────────────────────────────────────────────────
+
+// GET /painel/estacao/lista
+router.get("/estacao/lista", validarToken, async (req, res) => {
+  try {
+    const rest = await prisma.restaurante.findFirst({ where: { slugWhatsapp: req.painelSlug, ativo: true }, select: { id: true } });
+    if (!rest) return res.status(404).json({ error: "Restaurante não encontrado" });
+    const estacoes = await prisma.estacao.findMany({
+      where: { restauranteId: rest.id, ativo: true },
+      select: { id: true, nome: true, tipo: true, cor: true },
+      orderBy: { nome: "asc" },
+    });
+    res.json({ data: estacoes });
+  } catch (err) { res.status(500).json({ error: err.message }); }
+});
+
+// POST /painel/estacao/auth
+router.post("/estacao/auth", validarToken, async (req, res) => {
+  try {
+    const { estacaoId, senha } = req.body;
+    if (!estacaoId || !senha) return res.status(400).json({ error: "estacaoId e senha obrigatórios" });
+    const rest = await prisma.restaurante.findFirst({ where: { slugWhatsapp: req.painelSlug, ativo: true }, select: { id: true } });
+    if (!rest) return res.status(404).json({ error: "Restaurante não encontrado" });
+    const estacao = await prisma.estacao.findFirst({ where: { id: estacaoId, restauranteId: rest.id, ativo: true } });
+    if (!estacao) return res.status(401).json({ error: "Estação não encontrada" });
+    if (!estacao.senhaHash) return res.status(401).json({ error: "Senha não configurada. Contate o administrador." });
+    const ok = await bcrypt.compare(senha, estacao.senhaHash);
+    if (!ok) return res.status(401).json({ error: "Senha incorreta" });
+    res.json({ ok: true, id: estacao.id, nome: estacao.nome, tipo: estacao.tipo, cor: estacao.cor });
+  } catch (err) { res.status(500).json({ error: err.message }); }
+});
+
+// GET /painel/estacao/cardapio — categorias com estacaoTipo (para o display filtrar itens)
+router.get("/estacao/cardapio", validarToken, async (req, res) => {
+  try {
+    const rest = await prisma.restaurante.findFirst({ where: { slugWhatsapp: req.painelSlug, ativo: true }, select: { id: true } });
+    if (!rest) return res.status(404).json({ error: "Restaurante não encontrado" });
+    const categorias = await prisma.categoria.findMany({
+      where: { restauranteId: rest.id, ativo: true },
+      select: { id: true, nome: true, estacaoTipo: true, produtos: { where: { ativo: true }, select: { id: true, nome: true } } },
+      orderBy: { ordem: "asc" },
+    });
+    res.json({ data: categorias });
+  } catch (err) { res.status(500).json({ error: err.message }); }
 });
 
 module.exports = router;

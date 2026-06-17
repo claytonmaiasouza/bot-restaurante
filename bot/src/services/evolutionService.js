@@ -11,6 +11,18 @@ const evolutionClient = axios.create({
   },
 });
 
+// ── Normalização de número ────────────────────────────────────────────────────
+// Converte números locais (ex: 0985462370 → Paraguai) para formato internacional.
+// Regra: número com 10 dígitos iniciando em 0 → assume Paraguai (595).
+function normalizarNumero(numero) {
+  if (!numero || numero.includes("@")) return numero;
+  const digits = numero.replace(/\D/g, "");
+  if (digits.startsWith("0") && digits.length === 10) {
+    return "595" + digits.slice(1);
+  }
+  return digits || numero;
+}
+
 // ── Resolução de JID para contatos iOS (@lid) ─────────────────────────────────
 // Contatos do iPhone com privacidade ativada têm JID @lid em vez de @s.whatsapp.net.
 // Quando o número vem sem sufixo (ex: vindo do banco), buscamos o JID completo.
@@ -18,6 +30,7 @@ const evolutionClient = axios.create({
 
 async function resolverJid(numero, instanceName) {
   if (!numero) return numero;
+  if (!numero.includes("@")) numero = normalizarNumero(numero);
 
   // Para @lid: tenta encontrar o @s.whatsapp.net equivalente via pushName no banco
   if (numero.includes("@lid")) {
@@ -330,6 +343,36 @@ async function excluirInstancia(instanceName) {
   }
 }
 
+/**
+ * Envia mensagem com botões (URL ou reply) via Evolution API.
+ * Fallback automático para texto simples se o endpoint não suportar botões.
+ */
+async function enviarBotoes(numero, { title, body, footer, botoes }, instanceName) {
+  const jid = await resolverJid(numero, instanceName);
+  try {
+    const data = await _enviarComRetryLid(
+      `/message/sendButtons/${instanceName}`,
+      {
+        number: jid,
+        title,
+        description: body,
+        footer,
+        buttons: botoes,
+      },
+      instanceName
+    );
+    return data;
+  } catch (err) {
+    console.error(
+      `[evolution] sendButtons falhou para ${jid}, usando texto:`,
+      err.response?.data || err.message
+    );
+    const urlBotao = botoes.find(b => b.type === "url");
+    const textFallback = `${title}\n\n${body}${urlBotao ? `\n\n${urlBotao.url}` : ""}${footer ? `\n\n${footer}` : ""}`;
+    return enviarMensagem(numero, textFallback, instanceName);
+  }
+}
+
 async function baixarMidiaBase64(instanceName, mensagem) {
   try {
     const { data } = await evolutionClient.post(
@@ -349,6 +392,7 @@ module.exports = {
   enviarImagem,
   enviarDocumento,
   enviarMensagemFormatada,
+  enviarBotoes,
   baixarMidiaBase64,
   // Instâncias
   criarInstancia,

@@ -2,7 +2,7 @@ const express = require("express");
 const router = express.Router();
 const { PrismaClient } = require("@prisma/client");
 const { enviarPedidoParaDono, proximoNumeroDia, formatNumPedido } = require("../services/pedidoService");
-const { enviarMensagem } = require("../services/evolutionService");
+const { enviarBotoes } = require("../services/evolutionService");
 
 const prisma = new PrismaClient();
 
@@ -13,7 +13,7 @@ router.get("/:slug", async (req, res) => {
       where: { slugWhatsapp: req.params.slug },
       include: {
         categorias: {
-          where: { ativo: true, ocultarMobile: { not: true } },
+          where: { ativo: true },
           orderBy: { ordem: "asc" },
           include: {
             produtos: {
@@ -30,6 +30,27 @@ router.get("/:slug", async (req, res) => {
       return res.status(404).json({ erro: "Restaurante não encontrado" });
     }
 
+    const diasMapa = { 0: "DOM", 1: "SEG", 2: "TER", 3: "QUA", 4: "QUI", 5: "SEX", 6: "SAB" };
+    const hoje = diasMapa[new Date().getDay()];
+
+    const todasPromocoes = await prisma.promocao.findMany({
+      where: { restauranteId: restaurante.id, ativa: true, mostrarDelivery: true },
+      orderBy: { createdAt: "asc" },
+    });
+
+    const promocoesHoje = todasPromocoes.filter(p => {
+      const dias = Array.isArray(p.recorrencia) ? p.recorrencia : [];
+      return !dias.length || dias.includes(hoje);
+    }).map(p => ({
+      id: p.id,
+      nome: p.nome,
+      descricao: p.descricao || null,
+      tipo: p.tipo,
+      itens: Array.isArray(p.itens) ? p.itens : [],
+      regra: p.regra || {},
+      precoPromocional: p.precoPromocional,
+    }));
+
     res.json({
       restaurante: {
         nome: restaurante.nome,
@@ -37,8 +58,12 @@ router.get("/:slug", async (req, res) => {
         moeda: restaurante.moeda,
         dadosTransferencia: restaurante.dadosTransferencia || null,
       },
+      promocoes: promocoesHoje,
       cardapio: restaurante.categorias
-        .filter((cat) => cat.produtos.length > 0)
+        .filter((cat) => {
+          const canais = Array.isArray(cat.canais) ? cat.canais : ["SALAO", "DELIVERY", "WEB"];
+          return canais.includes("WEB") && cat.produtos.length > 0;
+        })
         .map((cat) => ({
           id: cat.id,
           nome: cat.nome,
@@ -70,7 +95,12 @@ router.get("/:slug", async (req, res) => {
 // POST /loja/:slug/pedido — criar pedido via site
 router.post("/:slug/pedido", async (req, res) => {
   try {
-    const { clienteNome, clienteNumero, itens, tipoEntrega, endereco, metodoPagamento, trocoPara } = req.body;
+    const { clienteNome, itens, tipoEntrega, endereco, metodoPagamento, trocoPara } = req.body;
+    const rawNumero = req.body.clienteNumero || "";
+    const digits = rawNumero.replace(/\D/g, "");
+    const clienteNumero = digits.startsWith("0") && digits.length === 10
+      ? "595" + digits.slice(1)
+      : digits || rawNumero;
 
     if (!clienteNome || !clienteNumero || !Array.isArray(itens) || !itens.length) {
       return res.status(400).json({ erro: "Dados incompletos" });
@@ -142,27 +172,31 @@ router.post("/:slug/pedido", async (req, res) => {
     const numeroPedido = formatNumPedido({ ...pedido, localizacao, origem: "SITE" });
     console.log(`[loja] pedido ${numeroPedido} criado — ${restaurante.nome} — ${clienteNome}`);
 
-    // Confirmar ao cliente via WhatsApp (falha silenciosa)
+    // Confirmar ao cliente via WhatsApp com botão de rastreamento (falha silenciosa)
     const fmtTotal = (v) => `${moedaLocal} ${Number(v).toLocaleString("es-PY")}`;
     const msgEntrega = tipoEntrega === "retirada"
       ? "🏃 *Retiro en el local*"
       : `🛵 *Delivery* — ${localizacao}`;
     const trocoMsg = metodoPagamento === "dinheiro" && trocoPara
-      ? `💵 *Pagamento em dinheiro* — troco para ${fmtTotal(trocoPara)}\n`
+      ? `\n💵 *Pago en efectivo* — vuelto para ${fmtTotal(trocoPara)}`
       : "";
-    const msgCliente =
-      `✅ *¡Pedido #${numeroPedido} recibido!*\n\n` +
-      `Hola *${clienteNome}*! 👋 Recibimos tu pedido en *${restaurante.nome}* y ya estamos notificando al restaurante.\n\n` +
+    const comprobanteMsg = metodoPagamento === "transferencia"
+      ? `\n\n📸 *Por favor envía el comprobante de pago para confirmar tu pedido.*`
+      : "";
+    const trackingUrl = `${process.env.BOT_PUBLIC_URL || "https://bot.guiafinanceiro.pro"}/rastrear.html?pedido=${pedido.id}`;
+    const msgBody =
+      `Hola *${clienteNome}*! 👋 Recibimos tu pedido en *${restaurante.nome}* y ya notificamos al restaurante.\n\n` +
       `🛒 *${itens.length} item(s)*\n` +
       `💰 *Total: ${fmtTotal(total)}*\n` +
-      `${msgEntrega}\n` +
+      `${msgEntrega}` +
       trocoMsg +
-      "\n" +
-      (metodoPagamento === "transferencia"
-        ? `📸 *Por favor envía el comprobante de pago para confirmar tu pedido.*\n\n`
-        : "") +
-      `Pronto recibirás más actualizaciones. ¡Gracias por tu preferencia! 😊`;
-    enviarMensagem(clienteNumero, msgCliente, instanceName).catch(err =>
+      comprobanteMsg;
+    enviarBotoes(clienteNumero, {
+      title: `✅ ¡Pedido #${numeroPedido} confirmado!`,
+      body: msgBody,
+      footer: `¡Muchas gracias por tu preferencia! 🙏 ${restaurante.nome}`,
+      botoes: [{ type: "url", displayText: "📍 Acompanhar Pedido", url: trackingUrl }],
+    }, instanceName).catch(err =>
       console.error("[loja] erro ao confirmar cliente:", err.message)
     );
 

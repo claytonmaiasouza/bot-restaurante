@@ -544,9 +544,17 @@ router.post("/pedidos/:id/liberar-troco", async (req, res) => {
     if (!pedido) return res.status(404).json({ error: "Pedido não encontrado" });
 
     const trocoMatch = (pedido.metodoPagamento || "").match(/levar troco:\s*[^\d]*([\d.,]+)/i);
-    if (!trocoMatch) return res.status(400).json({ error: "Pedido não tem troco definido" });
-
-    const trocoValor = parseFloat(trocoMatch[1].replace(/\./g, "").replace(",", "."));
+    let trocoValor;
+    if (trocoMatch) {
+      trocoValor = parseFloat(trocoMatch[1].replace(/\./g, "").replace(",", "."));
+    } else {
+      // Fallback: pedido sem "(levar troco: X)" pré-calculado (loja online ou parse falhou)
+      // Extrai o valor com que o cliente vai pagar e calcula o troco
+      const pagarComMatch = (pedido.metodoPagamento || "").match(/troco(?:\s+p\/|\s+para)\s+[^\d]*([\d.,]+)/i);
+      if (!pagarComMatch) return res.status(400).json({ error: "Pedido não tem troco definido" });
+      const pagarCom = parseFloat(pagarComMatch[1].replace(/\./g, "").replace(",", "."));
+      trocoValor = pagarCom - (pedido.total || 0);
+    }
     if (isNaN(trocoValor) || trocoValor <= 0) return res.status(400).json({ error: "Valor de troco inválido" });
 
     const caixaAberto = await prisma.turnoCaixa.findFirst({
@@ -1678,10 +1686,10 @@ router.post("/cardapio/:restauranteId/categorias", async (req, res) => {
   if (req.user.role === "restaurante" && req.user.restauranteId !== restauranteId) {
     return res.status(403).json({ error: "Acesso negado" });
   }
-  const { nome, ordem, tamanhos, tipoTamanhos, bordas } = req.body;
+  const { nome, ordem, tamanhos, tipoTamanhos, bordas, estacaoTipo, canais } = req.body;
   if (!nome) return res.status(400).json({ error: "nome é obrigatório" });
   try {
-    const cat = await criarCategoria(restauranteId, nome, ordem, tamanhos || [], tipoTamanhos || "simples", bordas || []);
+    const cat = await criarCategoria(restauranteId, nome, ordem, tamanhos || [], tipoTamanhos || "simples", bordas || [], estacaoTipo || "GERAL", canais || ["SALAO", "DELIVERY", "WEB"]);
     await invalidarCachePorRestauranteId(restauranteId);
     res.status(201).json({ data: cat });
   } catch (err) {
@@ -2614,11 +2622,22 @@ router.get("/promocoes", async (req, res) => {
 router.post("/promocoes", async (req, res) => {
   const restauranteId = resolverRestauranteId(req);
   if (!restauranteId) return res.status(400).json({ error: "restauranteId obrigatório" });
-  const { nome, descricao, precoPromocional, ativa } = req.body;
+  const { nome, descricao, precoPromocional, ativa, tipo, itens, regra, recorrencia, mostrarDelivery } = req.body;
   if (!nome) return res.status(400).json({ error: "nome obrigatório" });
   try {
     const data = await prisma.promocao.create({
-      data: { restauranteId, nome, descricao: descricao || null, precoPromocional: precoPromocional != null ? parseFloat(precoPromocional) : null, ativa: ativa !== false },
+      data: {
+        restauranteId,
+        nome,
+        descricao: descricao || null,
+        precoPromocional: precoPromocional != null ? parseFloat(precoPromocional) : null,
+        ativa: ativa !== false,
+        tipo: tipo || "MANUAL",
+        itens: itens || [],
+        regra: regra || {},
+        recorrencia: Array.isArray(recorrencia) ? recorrencia : [],
+        mostrarDelivery: mostrarDelivery !== false,
+      },
     });
     res.json({ data });
   } catch (err) { res.status(500).json({ error: err.message }); }
@@ -2626,17 +2645,83 @@ router.post("/promocoes", async (req, res) => {
 
 router.put("/promocoes/:id", async (req, res) => {
   const { id } = req.params;
-  const { nome, descricao, precoPromocional, ativa } = req.body;
+  const { nome, descricao, precoPromocional, ativa, tipo, itens, regra, recorrencia, mostrarDelivery } = req.body;
   try {
     const existing = await prisma.promocao.findUnique({ where: { id }, select: { restauranteId: true } });
     if (!existing) return res.status(404).json({ error: "Promoção não encontrada" });
     if (denegarOutroTenant(req, res, existing.restauranteId)) return;
     const data = await prisma.promocao.update({
       where: { id },
-      data: { ...(nome && { nome }), descricao: descricao ?? undefined, precoPromocional: precoPromocional != null ? parseFloat(precoPromocional) : null, ...(ativa !== undefined && { ativa }) },
+      data: {
+        ...(nome && { nome }),
+        descricao: descricao ?? undefined,
+        precoPromocional: precoPromocional != null ? parseFloat(precoPromocional) : null,
+        ...(ativa !== undefined && { ativa }),
+        ...(tipo !== undefined && { tipo }),
+        ...(itens !== undefined && { itens }),
+        ...(regra !== undefined && { regra }),
+        ...(recorrencia !== undefined && { recorrencia: Array.isArray(recorrencia) ? recorrencia : [] }),
+        ...(mostrarDelivery !== undefined && { mostrarDelivery }),
+      },
     });
     res.json({ data });
   } catch (err) { res.status(500).json({ error: err.message }); }
+});
+
+router.post("/promocoes/gerar-ia", async (req, res) => {
+  const restauranteId = resolverRestauranteId(req);
+  if (!restauranteId) return res.status(400).json({ error: "restauranteId obrigatório" });
+  const { descricao, cardapio } = req.body;
+  if (!descricao) return res.status(400).json({ error: "descricao obrigatória" });
+  try {
+    const cardapioTexto = (cardapio || []).map(cat =>
+      `${cat.nome}: ${(cat.produtos || []).map(p => p.nome + (p.preco ? ` (${p.preco})` : '')).join(', ')}`
+    ).join('\n');
+
+    const systemPrompt = `Você é um assistente de restaurante especializado em criar promoções de vendas.
+O usuário irá descrever uma promoção em linguagem natural e você deve retornar um JSON estruturado.
+
+Cardápio disponível:
+${cardapioTexto || '(não informado)'}
+
+Responda APENAS com um JSON válido neste formato (sem texto extra):
+{
+  "nome": "Nome curto da promoção",
+  "descricao": "Descrição clara para o cliente",
+  "tipo": "DESCONTO" | "COMPRE_PAGUE" | "BRINDE" | "MANUAL",
+  "regra": {
+    // para DESCONTO: { "tipoDesconto": "%" | "fixo", "valor": número }
+    // para COMPRE_PAGUE: { "comprarQtd": número, "pagarQtd": número }
+    // para BRINDE: { "brindeNome": "nome do brinde", "brindeQtd": número }
+    // para MANUAL: {}
+  },
+  "precoPromocional": número | null,
+  "sugestaoItens": ["nome do produto 1", "nome do produto 2"]
+}`;
+
+    const response = await axios.post(
+      `${process.env.OPENROUTER_API_URL || "https://openrouter.ai/api/v1"}/chat/completions`,
+      {
+        model: "anthropic/claude-haiku-4-5",
+        max_tokens: 512,
+        messages: [
+          { role: "system", content: systemPrompt },
+          { role: "user", content: descricao },
+        ],
+      },
+      { headers: { Authorization: `Bearer ${process.env.OPENROUTER_API_KEY}`, "Content-Type": "application/json" } }
+    );
+
+    const text = response.data.choices[0]?.message?.content || "{}";
+    const jsonMatch = text.match(/\{[\s\S]*\}/);
+    if (!jsonMatch) return res.status(500).json({ error: "IA não retornou JSON válido" });
+
+    const promo = JSON.parse(jsonMatch[0]);
+    res.json({ data: promo });
+  } catch (err) {
+    console.error("[promo-ia]", err.message);
+    res.status(500).json({ error: err.message });
+  }
 });
 
 router.delete("/promocoes/:id", async (req, res) => {
@@ -2687,6 +2772,49 @@ router.put("/garcons/:id", authMiddleware, async (req, res) => {
 router.delete("/garcons/:id", authMiddleware, async (req, res) => {
   await prisma.garcon.update({ where: { id: req.params.id }, data: { ativo: false } });
   res.json({ ok: true });
+});
+
+// ── Estações ──────────────────────────────────────────────────────────────────
+router.get("/estacoes/:restauranteId", authMiddleware, async (req, res) => {
+  try {
+    const estacoes = await prisma.estacao.findMany({
+      where: { restauranteId: req.params.restauranteId, ativo: true },
+      select: { id: true, nome: true, tipo: true, cor: true, createdAt: true },
+      orderBy: { nome: "asc" },
+    });
+    res.json({ data: estacoes });
+  } catch (err) { res.status(500).json({ error: err.message }); }
+});
+
+router.post("/estacoes", authMiddleware, async (req, res) => {
+  try {
+    const { nome, tipo, cor, senha, restauranteId } = req.body;
+    if (!nome || !restauranteId) return res.status(400).json({ error: "nome e restauranteId são obrigatórios" });
+    const data = { nome: nome.trim(), tipo: tipo || "GERAL", cor: cor || "#6366f1", restauranteId };
+    if (senha) data.senhaHash = await bcryptAdmin.hash(senha, 10);
+    const estacao = await prisma.estacao.create({ data });
+    res.json({ data: { id: estacao.id, nome: estacao.nome, tipo: estacao.tipo, cor: estacao.cor } });
+  } catch (err) { res.status(500).json({ error: err.message }); }
+});
+
+router.put("/estacoes/:id", authMiddleware, async (req, res) => {
+  try {
+    const { nome, tipo, cor, senha } = req.body;
+    const data = {};
+    if (nome) data.nome = nome.trim();
+    if (tipo) data.tipo = tipo;
+    if (cor) data.cor = cor;
+    if (senha) data.senhaHash = await bcryptAdmin.hash(senha, 10);
+    const estacao = await prisma.estacao.update({ where: { id: req.params.id }, data });
+    res.json({ data: { id: estacao.id, nome: estacao.nome, tipo: estacao.tipo, cor: estacao.cor } });
+  } catch (err) { res.status(500).json({ error: err.message }); }
+});
+
+router.delete("/estacoes/:id", authMiddleware, async (req, res) => {
+  try {
+    await prisma.estacao.update({ where: { id: req.params.id }, data: { ativo: false } });
+    res.json({ ok: true });
+  } catch (err) { res.status(500).json({ error: err.message }); }
 });
 
 // ── Balcão ────────────────────────────────────────────────────────────────────

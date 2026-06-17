@@ -5408,20 +5408,24 @@ let pedidosSortDir = 'desc';
 let pedidosBuscaTxt = '';
 
 const TASKBAR_STATUSES = [
-  { key:'TODOS',                    label:'Todos',       cor:'#2B7DD4' },
-  { key:'NOVO',                     label:'Novos',       cor:'#f97316' },
-  { key:'CONFIRMADO',               label:'Confirmado',  cor:'#3b82f6' },
-  { key:'PAGO',                     label:'Pago',        cor:'#06b6d4' },
-  { key:'PREPARANDO',               label:'Preparando',  cor:'#f59e0b' },
-  { key:'PRONTO_PARA_RETIRADA',     label:'Pronto',      cor:'#10b981' },
-  { key:'SAIU_PARA_ENTREGA',        label:'Entrega',     cor:'#8b5cf6' },
-  { key:'EM_CAMINHO',               label:'A caminho',   cor:'#7c3aed' },
-  { key:'ENTREGUE',                 label:'Entregue',    cor:'#16a34a' },
-  { key:'CANCELADO',                label:'Cancelado',   cor:'#ef4444' },
+  { key:'TODOS',                       label:'Todos',              cor:'#2B7DD4' },
+  { key:'NOVO',                        label:'Novos',              cor:'#f97316' },
+  { key:'CONFIRMADO',                  label:'Confirmado',         cor:'#3b82f6' },
+  { key:'PAGO',                        label:'Pago',               cor:'#06b6d4' },
+  { key:'PREPARANDO',                  label:'Preparando',         cor:'#f59e0b' },
+  { key:'AGUARDANDO_DESPACHO',         label:'Aguard. despacho',   cor:'#eab308' },
+  { key:'PRONTO_PARA_RETIRADA',        label:'Pronto',             cor:'#10b981' },
+  { key:'EM_CAMINHO',                  label:'A caminho',          cor:'#7c3aed' },
+  { key:'SAIU_PARA_ENTREGA',           label:'Saiu entrega',       cor:'#8b5cf6' },
+  { key:'ENTREGUE',                    label:'Entregue',           cor:'#16a34a',  filter: p => p.status === 'ENTREGUE' && (p.pago || !/transf/i.test(p.metodoPagamento || '')) },
+  { key:'AGUARDANDO_PAGAMENTO_TRANSF', label:'Aguard. pagamento',  cor:'#d97706',  filter: p => p.status === 'ENTREGUE' && !p.pago && /transf/i.test(p.metodoPagamento || '') },
+  { key:'CANCELADO',                   label:'Cancelado',          cor:'#ef4444' },
 ];
 
 function _pedidoMatchStatus(p, key) {
   if (key === 'TODOS') return true;
+  const ts = TASKBAR_STATUSES.find(t => t.key === key);
+  if (ts?.filter) return ts.filter(p);
   const col = COLUNAS_KANBAN.find(c => c.status === key);
   return col ? (col.filter ? col.filter(p) : p.status === key) : p.status === key;
 }

@@ -9,6 +9,8 @@
   <style>
     .card-new { animation: slideDown 0.3s ease; }
     @keyframes slideDown { from { opacity:0; transform:translateY(-12px); } to { opacity:1; transform:translateY(0); } }
+    @keyframes cl-blink { 0%,100%{opacity:1} 50%{opacity:.35} }
+    .cozinha-local-blink { animation: cl-blink 1s infinite; }
     ::-webkit-scrollbar { width: 8px; height: 8px; }
     ::-webkit-scrollbar-thumb { background: #94a3b8; border-radius: 9999px; }
     ::-webkit-scrollbar-thumb:hover { background: #64748b; }
@@ -182,6 +184,7 @@
         <li><button id="nav-estoque" onclick="mostrarSecao('estoque')" class="sidebar-nav-item w-full text-left" data-i18n="nav.estoque">📦 Estoque</button></li>
         <li><button id="nav-financeiro" onclick="mostrarSecao('financeiro')" class="sidebar-nav-item w-full text-left" data-i18n="nav.financeiro">💰 Financeiro</button></li>
         <li><button id="nav-cozinha-painel" onclick="mostrarSecao('cozinha-painel')" class="sidebar-nav-item w-full text-left">👨‍🍳 Cozinha</button></li>
+        <li><button id="nav-cozinha-local" onclick="mostrarSecao('cozinha-local')" class="sidebar-nav-item w-full text-left">🏠 Cozinha Local</button></li>
         <li><button id="nav-configuracoes" onclick="mostrarSecao('configuracoes')" class="sidebar-nav-item w-full text-left" data-i18n="nav.configuracoes">⚙️ Configurações</button></li>
       </ul>
     </nav>
@@ -208,24 +211,51 @@
     <div id="main-scroll">
     <!-- Stats — visível apenas na seção Pedidos -->
     <div id="stats-bar" class="px-6 pt-4 pb-0 shrink-0 bg-[#f4f6f8]">
-      <div class="grid grid-cols-2 md:grid-cols-4 gap-3 mb-0">
-      <div class="bg-white rounded-xl p-4 shadow-sm">
-        <p class="text-xs text-gray-400 mb-1" data-i18n="stat.hoje">Pedidos hoje</p>
-        <p id="stat-hoje" class="text-2xl font-bold text-gray-800">—</p>
+      <div class="grid grid-cols-2 sm:grid-cols-3 lg:grid-cols-6 gap-3 mb-0">
+        <div class="bg-white rounded-xl p-4 shadow-sm border border-gray-100 flex flex-col gap-1">
+          <div class="flex items-center justify-between">
+            <p class="text-xs text-gray-400 font-medium">Pedidos hoje</p>
+            <span class="text-lg leading-none">📦</span>
+          </div>
+          <p id="stat-hoje" class="text-2xl font-bold text-gray-800">—</p>
+          <p id="stat-hoje-delta" class="text-xs text-gray-400 hidden"></p>
+        </div>
+        <div class="bg-white rounded-xl p-4 shadow-sm border border-gray-100 flex flex-col gap-1">
+          <div class="flex items-center justify-between">
+            <p class="text-xs text-gray-400 font-medium">Faturamento</p>
+            <span class="text-lg leading-none">💰</span>
+          </div>
+          <p id="stat-fat" class="text-xl font-bold text-gray-800 leading-tight">—</p>
+        </div>
+        <div class="bg-white rounded-xl p-4 shadow-sm border border-gray-100 flex flex-col gap-1">
+          <div class="flex items-center justify-between">
+            <p class="text-xs text-gray-400 font-medium">Em produção</p>
+            <span class="text-lg leading-none">👨‍🍳</span>
+          </div>
+          <p id="stat-producao" class="text-2xl font-bold text-amber-500">—</p>
+        </div>
+        <div class="bg-white rounded-xl p-4 shadow-sm border border-gray-100 flex flex-col gap-1">
+          <div class="flex items-center justify-between">
+            <p class="text-xs text-gray-400 font-medium">Para entrega</p>
+            <span class="text-lg leading-none">🛵</span>
+          </div>
+          <p id="stat-entrega" class="text-2xl font-bold text-purple-500">—</p>
+        </div>
+        <div class="bg-white rounded-xl p-4 shadow-sm border border-gray-100 flex flex-col gap-1">
+          <div class="flex items-center justify-between">
+            <p class="text-xs text-gray-400 font-medium">Cancelados</p>
+            <span class="text-lg leading-none">❌</span>
+          </div>
+          <p id="stat-cancelados" class="text-2xl font-bold text-red-400">—</p>
+        </div>
+        <div class="bg-white rounded-xl p-4 shadow-sm border border-gray-100 flex flex-col gap-1">
+          <div class="flex items-center justify-between">
+            <p class="text-xs text-gray-400 font-medium">Sessões ativas</p>
+            <span class="text-lg leading-none">💬</span>
+          </div>
+          <p id="stat-sessoes" class="text-2xl font-bold text-gray-800">—</p>
+        </div>
       </div>
-      <div class="bg-white rounded-xl p-4 shadow-sm">
-        <p class="text-xs text-gray-400 mb-1" data-i18n="stat.faturamento">Faturamento hoje</p>
-        <p id="stat-fat" class="text-2xl font-bold text-gray-800">—</p>
-      </div>
-      <div class="bg-white rounded-xl p-4 shadow-sm">
-        <p class="text-xs text-gray-400 mb-1" data-i18n="stat.aberto">Em aberto</p>
-        <p id="stat-aberto" class="text-2xl font-bold text-orange-500">—</p>
-      </div>
-      <div class="bg-white rounded-xl p-4 shadow-sm">
-        <p class="text-xs text-gray-400 mb-1" data-i18n="stat.sessoes">Sessões ativas</p>
-        <p id="stat-sessoes" class="text-2xl font-bold text-gray-800">—</p>
-      </div>
-    </div>
     </div><!-- /stats wrapper -->
 
     <!-- Toolbar Pedidos — fora do scroll container para não criar gap nas outras seções -->
@@ -319,9 +349,27 @@
       </div>
     </div>
 
-    <!-- Kanban Pedidos -->
-    <div id="secao-pedidos" class="px-6 pb-6">
-      <div id="kanban-board" class="flex gap-3 overflow-x-auto pb-4" style="scrollbar-width:thin"></div>
+    <!-- Status Taskbar (substituindo kanban) -->
+    <div id="pedidos-status-bar" class="hidden px-6 pt-2 pb-0 shrink-0">
+      <div class="flex items-center gap-2 flex-wrap">
+        <div id="status-tabs" class="flex items-center gap-1.5 flex-wrap flex-1"></div>
+        <div class="flex items-center gap-2 ml-auto">
+          <div id="busca-pedidos-wrap" class="hidden">
+            <input id="busca-pedidos-input" type="text" placeholder="🔍 Buscar pedido..." oninput="filtrarPedidosBusca()"
+              class="border border-gray-200 rounded-xl px-3 py-1.5 text-sm focus:outline-none focus:border-[#2B7DD4] w-52">
+          </div>
+          <button onclick="toggleBuscaPedidos()" class="flex items-center gap-1.5 text-xs font-medium bg-white hover:bg-gray-50 text-gray-600 border border-gray-200 px-3 py-1.5 rounded-xl transition">🔍 Buscar</button>
+          <select onchange="setPedidosSort(this.value)" class="border border-gray-200 rounded-xl px-3 py-1.5 text-xs font-medium text-gray-600 focus:outline-none focus:border-[#2B7DD4] bg-white">
+            <option value="desc">Mais recentes ▼</option>
+            <option value="asc">Mais antigos ▲</option>
+          </select>
+        </div>
+      </div>
+    </div>
+
+    <!-- Grid de Pedidos -->
+    <div id="secao-pedidos" class="px-6 pb-6 pt-3">
+      <div id="kanban-board" class="grid gap-3" style="grid-template-columns:repeat(4,1fr)"></div>
       <div id="empty" class="hidden text-center py-16 text-[#718096]">
         <p class="text-4xl mb-2">📭</p>
         <p class="text-sm">Nenhum pedido encontrado</p>
@@ -2459,6 +2507,55 @@
       </div>
     </div>
 
+    <!-- Cozinha Local -->
+    <div id="secao-cozinha-local" class="hidden px-6 pb-6 pt-4">
+      <div class="flex items-center justify-between mb-3 flex-wrap gap-2">
+        <h2 class="text-lg font-bold text-[#1a202c]">🏠 Cozinha Local</h2>
+        <div class="flex items-center gap-2">
+          <span class="text-sm text-gray-400"><span id="cozinha-local-count">0</span> em andamento</span>
+          <button onclick="carregarCozinhaLocal()" class="text-xs text-[#2B7DD4] hover:text-[#2570c0] font-semibold transition">↻ Atualizar</button>
+          <button onclick="abrirConfigCozinhaLocal()" class="flex items-center gap-1 text-xs font-medium bg-gray-100 hover:bg-gray-200 text-gray-600 px-3 py-1.5 rounded-lg transition">⚙️ Tempos</button>
+        </div>
+      </div>
+      <!-- Legenda -->
+      <div class="flex items-center gap-4 mb-4">
+        <span class="flex items-center gap-1.5 text-xs text-gray-500"><span class="w-3 h-3 rounded-full bg-green-500 inline-block"></span> Verde &lt;<span id="cl-leg-verde">10</span>min</span>
+        <span class="flex items-center gap-1.5 text-xs text-gray-500"><span class="w-3 h-3 rounded-full bg-yellow-500 inline-block"></span> Amarelo &lt;<span id="cl-leg-amarelo">20</span>min</span>
+        <span class="flex items-center gap-1.5 text-xs text-gray-500"><span class="w-3 h-3 rounded-full bg-red-500 inline-block"></span> Vermelho &lt;<span id="cl-leg-vermelho">30</span>min</span>
+        <span class="flex items-center gap-1.5 text-xs text-gray-500"><span class="inline-block w-3 h-3 rounded-full bg-red-600 animate-pulse"></span> Pisca &gt;<span id="cl-leg-blink">25</span>min</span>
+      </div>
+      <div id="cozinha-local-lista" class="grid gap-3" style="grid-template-columns:repeat(auto-fill,minmax(280px,1fr))"></div>
+    </div>
+
+    <!-- Modal Config Cozinha Local -->
+    <div id="modal-config-cozinha-local" class="hidden fixed inset-0 bg-black/50 z-50 flex items-center justify-center p-4">
+      <div class="bg-white rounded-2xl shadow-2xl w-full max-w-sm p-6">
+        <div class="flex items-center justify-between mb-5">
+          <h3 class="text-base font-bold text-gray-800">⚙️ Tempos de Alerta — Cozinha</h3>
+          <button onclick="fecharConfigCozinhaLocal()" class="text-gray-400 hover:text-gray-600 text-xl leading-none">✕</button>
+        </div>
+        <div class="space-y-4">
+          <div>
+            <label class="text-xs text-gray-500 font-semibold block mb-1">🟢 Verde até (min)</label>
+            <input id="cl-cfg-verde" type="number" min="1" max="60" value="10" class="w-full border border-gray-200 rounded-xl px-3 py-2.5 text-sm focus:outline-none focus:border-[#2B7DD4]">
+          </div>
+          <div>
+            <label class="text-xs text-gray-500 font-semibold block mb-1">🟡 Amarelo até (min)</label>
+            <input id="cl-cfg-amarelo" type="number" min="1" max="60" value="20" class="w-full border border-gray-200 rounded-xl px-3 py-2.5 text-sm focus:outline-none focus:border-[#2B7DD4]">
+          </div>
+          <div>
+            <label class="text-xs text-gray-500 font-semibold block mb-1">🔴 Vermelho até (min)</label>
+            <input id="cl-cfg-vermelho" type="number" min="1" max="120" value="30" class="w-full border border-gray-200 rounded-xl px-3 py-2.5 text-sm focus:outline-none focus:border-[#2B7DD4]">
+          </div>
+          <div>
+            <label class="text-xs text-gray-500 font-semibold block mb-1">💥 Começa a piscar após (min)</label>
+            <input id="cl-cfg-blink" type="number" min="1" max="120" value="25" class="w-full border border-gray-200 rounded-xl px-3 py-2.5 text-sm focus:outline-none focus:border-[#2B7DD4]">
+          </div>
+        </div>
+        <button onclick="salvarConfigCozinhaLocal()" class="mt-5 w-full bg-[#2B7DD4] hover:bg-[#2570c0] text-white font-semibold py-2.5 rounded-xl transition text-sm">Salvar</button>
+      </div>
+    </div>
+
     </div><!-- /inner scroll -->
   </div>
   </div><!-- /painel-principal -->
@@ -3600,10 +3697,12 @@ async function carregarStats() {
   if (!res.ok) return;
   const { data } = await res.json();
   document.getElementById('stat-hoje').textContent = data.pedidosHoje;
-  document.getElementById('stat-aberto').textContent = data.emAberto;
   document.getElementById('stat-sessoes').textContent = data.sessoesAtivas;
   const moeda = getMoeda();
   document.getElementById('stat-fat').textContent = moeda ? formatarPreco(data.faturamentoHoje, moeda) : '—';
+  // stat-aberto legado (pode não existir mais no DOM)
+  const elAberto = document.getElementById('stat-aberto');
+  if (elAberto) elAberto.textContent = data.emAberto;
 }
 
 // ── Pedidos ───────────────────────────────────────────────────────────────────
@@ -3748,6 +3847,8 @@ function setPedidosView(view) {
   document.getElementById('secao-fila').classList.toggle('hidden', !isFila);
   document.getElementById('filtros-datas').classList.toggle('hidden', !isKanban);
   document.getElementById('relatorios-container').classList.toggle('hidden', !isKanban);
+  const statusBar = document.getElementById('pedidos-status-bar');
+  if (statusBar) statusBar.classList.toggle('hidden', !isKanban);
   const active = 'relative flex items-center gap-1.5 text-sm font-bold px-5 py-2.5 rounded-xl shadow transition bg-[#2B7DD4] text-white';
   const inactiveBase = 'relative flex items-center gap-1.5 text-sm font-bold px-5 py-2.5 rounded-xl transition bg-white text-gray-600 border-2 border-gray-200';
   const hoverMap = { kanban:' hover:border-[#2B7DD4] hover:text-[#2B7DD4]', mesas:' hover:border-[#2B7DD4] hover:text-[#2B7DD4]', balcao:' hover:border-amber-500 hover:text-amber-600', notificacoes:' hover:border-red-400 hover:text-red-500', fila:' hover:border-green-500 hover:text-green-600' };
@@ -4775,10 +4876,13 @@ async function carregarBalcao() {
 
 function balcaoEmojiCategoria(nome) {
   const n = (nome || '').toLowerCase().normalize('NFD').replace(/[̀-ͯ]/g, '');
-  if (/pizza/.test(n)) return '🍕';
+  if (/pizza|pre.?assada|massa.?pizza/.test(n)) return '🍕';
   if (/burger|hamburguer|hamburgues|lanche/.test(n)) return '🍔';
   if (/frango|chicken|galinha/.test(n)) return '🍗';
-  if (/carne|churrasco|bife|picanha|costela/.test(n)) return '🥩';
+  if (/rodizio/.test(n) && /destilado|alcool|whisky|vodka|rum|gin/.test(n)) return '🥃';
+  if (/destilado|whisky|vodka|rum|gin|bourbon/.test(n)) return '🥃';
+  if (/rodizio|churrasco/.test(n)) return '🥩';
+  if (/carne|bife|picanha|costela/.test(n)) return '🥩';
   if (/peixe|fruto|marisco|camarao|salmao/.test(n)) return '🐟';
   if (/massa|macarrao|lasanha|espaguete|fettuccine/.test(n)) return '🍝';
   if (/sushi|japones|oriental/.test(n)) return '🍱';
@@ -4802,6 +4906,7 @@ function balcaoEmojiCategoria(nome) {
   if (/prato|executivo|almoco|jantar/.test(n)) return '🍽️';
   if (/fruta/.test(n)) return '🍎';
   if (/sopa|caldo|creme/.test(n)) return '🍲';
+  if (/produto|balcon|mercearia|mercadinho|minimercado/.test(n)) return '🏪';
   return '🍴';
 }
 
@@ -5297,59 +5402,121 @@ function toggleHistoricoMesa() {
   document.getElementById('mesa-historico-panel').classList.toggle('hidden');
 }
 
+// ── Status taskbar ────────────────────────────────────────────────────────────
+let pedidosStatusFiltro = 'TODOS';
+let pedidosSortDir = 'desc';
+let pedidosBuscaTxt = '';
+
+const TASKBAR_STATUSES = [
+  { key:'TODOS',                    label:'Todos',       cor:'#2B7DD4' },
+  { key:'NOVO',                     label:'Novos',       cor:'#f97316' },
+  { key:'CONFIRMADO',               label:'Confirmado',  cor:'#3b82f6' },
+  { key:'PAGO',                     label:'Pago',        cor:'#06b6d4' },
+  { key:'PREPARANDO',               label:'Preparando',  cor:'#f59e0b' },
+  { key:'PRONTO_PARA_RETIRADA',     label:'Pronto',      cor:'#10b981' },
+  { key:'SAIU_PARA_ENTREGA',        label:'Entrega',     cor:'#8b5cf6' },
+  { key:'EM_CAMINHO',               label:'A caminho',   cor:'#7c3aed' },
+  { key:'ENTREGUE',                 label:'Entregue',    cor:'#16a34a' },
+  { key:'CANCELADO',                label:'Cancelado',   cor:'#ef4444' },
+];
+
+function _pedidoMatchStatus(p, key) {
+  if (key === 'TODOS') return true;
+  const col = COLUNAS_KANBAN.find(c => c.status === key);
+  return col ? (col.filter ? col.filter(p) : p.status === key) : p.status === key;
+}
+
+function renderTaskbar() {
+  const tabs = document.getElementById('status-tabs');
+  if (!tabs) return;
+  tabs.innerHTML = '';
+  TASKBAR_STATUSES.forEach(ts => {
+    const cnt = ts.key === 'TODOS' ? pedidos.length : pedidos.filter(p => _pedidoMatchStatus(p, ts.key)).length;
+    if (ts.key !== 'TODOS' && cnt === 0) return;
+    const isActive = pedidosStatusFiltro === ts.key;
+    const btn = document.createElement('button');
+    btn.style.cssText = `display:flex;align-items:center;gap:5px;padding:6px 12px;border-radius:10px;border:2px solid ${isActive ? ts.cor : '#e2e8f0'};background:${isActive ? ts.cor : '#fff'};color:${isActive ? '#fff' : '#374151'};font-size:12px;font-weight:700;cursor:pointer;transition:all .15s;white-space:nowrap`;
+    btn.innerHTML = `${ts.label} <span style="background:${isActive ? 'rgba(255,255,255,.3)' : '#f1f5f9'};color:${isActive ? '#fff' : ts.cor};border-radius:99px;padding:1px 6px;font-size:11px;font-weight:800">${cnt}</span>`;
+    btn.onclick = () => { pedidosStatusFiltro = ts.key; renderizarPedidos(); };
+    tabs.appendChild(btn);
+  });
+}
+
+function setPedidosSort(val) {
+  pedidosSortDir = val;
+  renderizarPedidos();
+}
+
+function toggleBuscaPedidos() {
+  const wrap = document.getElementById('busca-pedidos-wrap');
+  if (!wrap) return;
+  wrap.classList.toggle('hidden');
+  if (!wrap.classList.contains('hidden')) document.getElementById('busca-pedidos-input')?.focus();
+  else { pedidosBuscaTxt = ''; renderizarPedidos(); }
+}
+
+function filtrarPedidosBusca() {
+  pedidosBuscaTxt = (document.getElementById('busca-pedidos-input')?.value || '').toLowerCase();
+  renderizarPedidos();
+}
+
 function renderizarPedidos() {
   const board = document.getElementById('kanban-board');
   const empty = document.getElementById('empty');
   board.innerHTML = '';
 
-  if (!pedidos.length) {
+  // Atualizar stats dinâmicos a partir dos pedidos carregados
+  const statProd = document.getElementById('stat-producao');
+  const statEnt  = document.getElementById('stat-entrega');
+  const statCanc = document.getElementById('stat-cancelados');
+  if (statProd) statProd.textContent = pedidos.filter(p => ['NOVO','CONFIRMADO','PAGO','PREPARANDO'].includes(p.status)).length;
+  if (statEnt)  statEnt.textContent  = pedidos.filter(p => ['SAIU_PARA_ENTREGA','EM_CAMINHO'].includes(p.status)).length;
+  if (statCanc) statCanc.textContent = pedidos.filter(p => p.status === 'CANCELADO').length;
+
+  renderTaskbar();
+
+  const contagem = document.getElementById('pedidos-contagem');
+  if (contagem) contagem.textContent = `${pedidos.length} pedido${pedidos.length !== 1 ? 's' : ''}`;
+
+  // Filtrar por status + busca
+  let filtrados = pedidos.filter(p => _pedidoMatchStatus(p, pedidosStatusFiltro));
+  if (pedidosBuscaTxt) {
+    filtrados = filtrados.filter(p => {
+      const txt = `${p.clienteNome||''} ${p.clienteNumero||''} ${p.numeroDia||''} ${(p.itens||[]).map(i=>i.nome).join(' ')}`.toLowerCase();
+      return txt.includes(pedidosBuscaTxt);
+    });
+  }
+
+  // Ordenar
+  filtrados = [...filtrados].sort((a, b) =>
+    pedidosSortDir === 'asc'
+      ? new Date(a.createdAt) - new Date(b.createdAt)
+      : new Date(b.createdAt) - new Date(a.createdAt)
+  );
+
+  if (!filtrados.length) {
     empty.classList.remove('hidden');
     return;
   }
   empty.classList.add('hidden');
 
-  const contagem = document.getElementById('pedidos-contagem');
-  if (contagem) contagem.textContent = `${pedidos.length} pedido${pedidos.length !== 1 ? 's' : ''}`;
-
-  const colHeight = 'calc(100vh - 230px)';
-  COLUNAS_KANBAN.forEach(col => {
-    const colPedidos = pedidos.filter(col.filter || (p => p.status === col.status));
-    const autoVazia = colPedidos.length === 0;
-    const collapsed = colapsadasKanban.has(col.status) || autoVazia;
-    const div = document.createElement('div');
-    div.className = `kanban-col border-t-4 ${col.border}${collapsed ? ' col-collapsed' : ''}`;
-    div.id = `kanban-col-${col.status}`;
-
-    if (collapsed) {
-      // Coluna minimizada — só expande se houver pedidos E foi colapsada manualmente
-      if (!autoVazia) {
-        div.title = `Expandir ${t('status.' + col.status)}`;
-        div.onclick = (e) => toggleKanbanCol(col.status, e);
-      }
-      div.innerHTML = `
-        <div class="kanban-col-header">
-          <span class="col-count text-xs font-bold px-1.5 py-0.5 rounded-full ${col.bg} ${col.text}">${colPedidos.length}</span>
-          <span class="col-label font-bold ${col.text}">${t('status.' + col.status)}</span>
-        </div>`;
-    } else {
-      div.innerHTML = `
-        <div class="kanban-col-header">
-          <span class="col-label text-xs font-bold ${col.text}">${t('status.' + col.status)}</span>
-          <div class="flex items-center gap-1.5">
-            <span class="col-count text-xs font-bold px-2 py-0.5 rounded-full ${col.bg} ${col.text}">${colPedidos.length}</span>
-            <button class="col-min-btn text-gray-400 hover:text-gray-600 transition leading-none w-6 h-6 flex items-center justify-center rounded-lg hover:bg-gray-200"
-              title="Minimizar coluna" onclick="toggleKanbanCol('${col.status}', event)">−</button>
-          </div>
-        </div>
-        <div class="kanban-cards" style="max-height:${colHeight}"></div>`;
-      const cardsDiv = div.querySelector('.kanban-cards');
-      colPedidos.forEach(p => cardsDiv.appendChild(criarCard(p)));
-    }
-    board.appendChild(div);
-  });
+  if (pedidosStatusFiltro === 'TODOS') {
+    // Modo Todos: agrupa por status com header de seção
+    TASKBAR_STATUSES.filter(ts => ts.key !== 'TODOS').forEach(ts => {
+      const grupo = filtrados.filter(p => _pedidoMatchStatus(p, ts.key));
+      if (!grupo.length) return;
+      const hdr = document.createElement('div');
+      hdr.style.cssText = `grid-column:1/-1;display:flex;align-items:center;gap:8px;margin-top:8px`;
+      hdr.innerHTML = `<span style="font-size:12px;font-weight:800;color:#fff;background:${ts.cor};padding:3px 10px;border-radius:8px">${ts.label}</span><span style="font-size:12px;color:#9ca3af">${grupo.length} pedido${grupo.length!==1?'s':''}</span><div style="flex:1;height:1px;background:#e5e7eb"></div>`;
+      board.appendChild(hdr);
+      grupo.forEach(p => board.appendChild(criarCard(p)));
+    });
+  } else {
+    filtrados.forEach(p => board.appendChild(criarCard(p)));
+  }
 }
 
-function renderizarTabs() { /* kanban — sem abas */ }
+function renderizarTabs() { /* substituído pelo taskbar */ }
 
 function toggleRelatoriosDropdown() {
   const dd = document.getElementById('relatorios-dropdown');
@@ -5458,6 +5625,124 @@ function renderFilaLocal() {
     _filaTickerHandle = setInterval(() => {
       if (pedidosViewAtual === 'fila') renderFilaLocal();
       else { clearInterval(_filaTickerHandle); _filaTickerHandle = null; }
+    }, 30000);
+  }
+}
+
+// ── Cozinha Local ─────────────────────────────────────────────────────────────
+let _clConfig = JSON.parse(localStorage.getItem('cozinhaLocalConfig') || '{"verde":10,"amarelo":20,"vermelho":30,"blink":25}');
+let _clTickerHandle = null;
+let _clData = [];
+
+function _clSalvarConfig(c) {
+  _clConfig = c;
+  localStorage.setItem('cozinhaLocalConfig', JSON.stringify(c));
+}
+
+function abrirConfigCozinhaLocal() {
+  document.getElementById('cl-cfg-verde').value = _clConfig.verde;
+  document.getElementById('cl-cfg-amarelo').value = _clConfig.amarelo;
+  document.getElementById('cl-cfg-vermelho').value = _clConfig.vermelho;
+  document.getElementById('cl-cfg-blink').value = _clConfig.blink;
+  document.getElementById('modal-config-cozinha-local').classList.remove('hidden');
+}
+
+function fecharConfigCozinhaLocal() {
+  document.getElementById('modal-config-cozinha-local').classList.add('hidden');
+}
+
+function salvarConfigCozinhaLocal() {
+  _clSalvarConfig({
+    verde:    parseInt(document.getElementById('cl-cfg-verde').value)    || 10,
+    amarelo:  parseInt(document.getElementById('cl-cfg-amarelo').value)  || 20,
+    vermelho: parseInt(document.getElementById('cl-cfg-vermelho').value) || 30,
+    blink:    parseInt(document.getElementById('cl-cfg-blink').value)    || 25,
+  });
+  fecharConfigCozinhaLocal();
+  _clAtualizarLegenda();
+  renderCozinhaLocal();
+}
+
+function _clAtualizarLegenda() {
+  const el = (id) => document.getElementById(id);
+  if (el('cl-leg-verde'))    el('cl-leg-verde').textContent    = _clConfig.verde;
+  if (el('cl-leg-amarelo'))  el('cl-leg-amarelo').textContent  = _clConfig.amarelo;
+  if (el('cl-leg-vermelho')) el('cl-leg-vermelho').textContent = _clConfig.vermelho;
+  if (el('cl-leg-blink'))    el('cl-leg-blink').textContent    = _clConfig.blink;
+}
+
+async function carregarCozinhaLocal() {
+  _clAtualizarLegenda();
+  const params = new URLSearchParams();
+  if (restauranteAtual) params.set('restauranteId', restauranteAtual);
+  const hoje = new Date().toISOString().slice(0, 10);
+  params.set('inicio', hoje);
+  params.set('fim', hoje);
+  const res = await fetch(`/admin/pedidos?${params}`, { headers: getHeaders() });
+  if (!res.ok) return;
+  const { data } = await res.json();
+  _clData = data
+    .filter(p =>
+      (p.origem === 'MESA' || p.origem === 'BALCAO') &&
+      !['ENTREGUE', 'SERVIDO', 'CANCELADO'].includes(p.status)
+    )
+    .sort((a, b) => new Date(a.createdAt) - new Date(b.createdAt));
+  renderCozinhaLocal();
+}
+
+function renderCozinhaLocal() {
+  const cont = document.getElementById('cozinha-local-lista');
+  const badge = document.getElementById('cozinha-local-count');
+  if (!cont) return;
+  if (badge) badge.textContent = _clData.length;
+  if (!_clData.length) {
+    cont.innerHTML = `<div class="col-span-full text-center py-16 text-gray-400"><p class="text-4xl mb-2">✅</p><p class="text-sm font-medium">Sem pedidos locais em andamento</p></div>`;
+    if (_clTickerHandle) { clearInterval(_clTickerHandle); _clTickerHandle = null; }
+    return;
+  }
+  const moeda = getMoeda() || 'Gs';
+  cont.innerHTML = _clData.map((p, i) => {
+    const mins = Math.floor((Date.now() - new Date(p.createdAt).getTime()) / 60000);
+    const doBlink = mins >= _clConfig.blink;
+    const isVermelho = mins >= _clConfig.amarelo;
+    const isAmarelo  = mins >= _clConfig.verde && !isVermelho;
+    const prioBg = isVermelho ? '#ef4444' : isAmarelo ? '#f59e0b' : '#22c55e';
+    const cardBorder = isVermelho ? 'border-red-200' : isAmarelo ? 'border-yellow-200' : 'border-green-200';
+    const cardBg     = isVermelho ? 'bg-red-50'    : isAmarelo ? 'bg-yellow-50'    : 'bg-green-50';
+    const timeStyle  = isVermelho
+      ? 'background:#fef2f2;color:#dc2626;border:1.5px solid #fca5a5'
+      : isAmarelo
+        ? 'background:#fffbeb;color:#d97706;border:1.5px solid #fcd34d'
+        : 'background:#f0fdf4;color:#16a34a;border:1.5px solid #86efac';
+    const blinkClass = doBlink ? 'cozinha-local-blink' : '';
+    const origem = p.origem === 'MESA' ? `🪑 Mesa ${p.mesa || '?'}` : '🏪 Balcão';
+    const itens = Array.isArray(p.itens) ? p.itens : [];
+    const numFmt = p.numeroDia ? String(p.numeroDia).padStart(3, '0') : p.id.slice(-4);
+    const itensHtml = itens.map(it => `<p class="text-sm font-semibold text-gray-800 leading-snug"><span class="text-indigo-600 font-bold">${it.quantidade||1}×</span> ${it.nome}</p>`).join('');
+    const acoes = obterAcoes(p);
+    const botoesHtml = acoes.map(a =>
+      `<button onclick="atualizarStatus('${p.id}','${a.status}')" class="${a.cor} text-white text-xs font-bold px-3 py-1.5 rounded-lg transition active:scale-95">${a.label}</button>`
+    ).join('');
+    return `<div class="rounded-2xl border-2 ${cardBorder} ${cardBg} p-4 ${blinkClass}">
+      <div class="flex items-start gap-3 mb-3">
+        <div class="shrink-0 w-10 h-10 rounded-xl flex items-center justify-center font-black text-white text-lg" style="background:${prioBg}">${i+1}</div>
+        <div class="flex-1">
+          <div class="flex items-center gap-2 flex-wrap">
+            <span class="font-bold text-gray-800 text-sm">${origem}</span>
+            <span class="text-xs text-gray-400">#${numFmt}</span>
+            <span class="ml-auto text-xs font-bold px-2.5 py-0.5 rounded-lg" style="${timeStyle}">⏱ ${mins}min</span>
+          </div>
+          ${p.garconNome ? `<span class="inline-block text-xs text-white font-semibold px-2 py-0.5 rounded-full mt-1" style="background:${p.garconCor||'#6366f1'}">${p.garconNome}</span>` : ''}
+        </div>
+      </div>
+      <div class="mb-3 space-y-1">${itensHtml}</div>
+      <div class="flex gap-2 flex-wrap">${botoesHtml}</div>
+    </div>`;
+  }).join('');
+  if (!_clTickerHandle) {
+    _clTickerHandle = setInterval(() => {
+      if (secaoAtual === 'cozinha-local') renderCozinhaLocal();
+      else { clearInterval(_clTickerHandle); _clTickerHandle = null; }
     }, 30000);
   }
 }
@@ -6368,7 +6653,7 @@ function mostrarSecao(secao) {
   secaoAtual = secao;
   const mainScroll = document.getElementById('main-scroll');
   if (mainScroll) mainScroll.scrollTop = 0;
-  ['pedidos', 'conversas', 'clientes', 'cardapio', 'configuracoes', 'motoboys', 'garcons', 'estacoes', 'crm', 'metricas', 'estoque', 'financeiro', 'caixa', 'comprovantes', 'links', 'cozinha-painel', 'motoboy-painel', 'ventas-historial', 'ventas-reportes'].forEach(s => {
+  ['pedidos', 'conversas', 'clientes', 'cardapio', 'configuracoes', 'motoboys', 'garcons', 'estacoes', 'crm', 'metricas', 'estoque', 'financeiro', 'caixa', 'comprovantes', 'links', 'cozinha-painel', 'cozinha-local', 'motoboy-painel', 'ventas-historial', 'ventas-reportes'].forEach(s => {
     document.getElementById(`secao-${s}`).classList.toggle('hidden', secao !== s);
   });
   // mesas, balcão e notificações estão dentro do contexto pedidos — garante estado correto ao navegar
@@ -6386,9 +6671,11 @@ function mostrarSecao(secao) {
   if (toolbar) toolbar.classList.toggle('hidden', secao !== 'pedidos');
   const statsBar = document.getElementById('stats-bar');
   if (statsBar) statsBar.classList.toggle('hidden', secao !== 'pedidos');
+  const statusBar = document.getElementById('pedidos-status-bar');
+  if (statusBar) statusBar.classList.toggle('hidden', secao !== 'pedidos' || pedidosViewAtual !== 'kanban');
 
   // Sidebar active state
-  ['pedidos', 'conversas', 'clientes', 'cardapio', 'configuracoes', 'motoboys', 'garcons', 'estacoes', 'crm', 'metricas', 'estoque', 'financeiro', 'caixa', 'comprovantes', 'links', 'cozinha-painel', 'motoboy-painel', 'ventas-historial', 'ventas-reportes'].forEach(s => {
+  ['pedidos', 'conversas', 'clientes', 'cardapio', 'configuracoes', 'motoboys', 'garcons', 'estacoes', 'crm', 'metricas', 'estoque', 'financeiro', 'caixa', 'comprovantes', 'links', 'cozinha-painel', 'cozinha-local', 'motoboy-painel', 'ventas-historial', 'ventas-reportes'].forEach(s => {
     const el = document.getElementById(`nav-${s}`);
     if (!el) return;
     el.classList.remove('sidebar-nav-active');
@@ -6427,6 +6714,7 @@ function mostrarSecao(secao) {
   if (secao === 'comprovantes') carregarComprovantes();
   if (secao === 'links') carregarLinks();
   if (secao === 'cozinha-painel') carregarIframePainel('cozinha');
+  if (secao === 'cozinha-local') carregarCozinhaLocal();
   if (secao === 'motoboy-painel') carregarIframePainel('motoboy');
   if (secao === 'restaurantes-admin') carregarListaRestaurantes();
   if (secao === 'ventas-historial') iniciarVentasHistorial();

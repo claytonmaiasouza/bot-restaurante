@@ -83,6 +83,29 @@ body{font-family:-apple-system,BlinkMacSystemFont,'Segoe UI',sans-serif;backgrou
 .garcon-bld-footer button{width:100%;padding:13px;background:#6366f1;color:#fff;font-size:15px;font-weight:700;border:none;border-radius:12px;cursor:pointer}
 /* Carrinho flutuante */
 #cart-fab{position:fixed;bottom:24px;right:20px;background:#6366f1;color:#fff;border:none;border-radius:50px;padding:12px 20px;font-size:14px;font-weight:700;cursor:pointer;box-shadow:0 4px 20px rgba(99,102,241,.45);display:none;align-items:center;gap:8px;z-index:100}
+/* Basket sheet */
+#basket-overlay{position:fixed;inset:0;background:rgba(0,0,0,.45);z-index:300;display:none}
+#basket-sheet{position:fixed;bottom:0;left:0;right:0;background:#fff;border-radius:24px 24px 0 0;z-index:301;display:none;flex-direction:column;max-height:80vh}
+#basket-sheet .bs-handle{width:40px;height:4px;background:#e5e7eb;border-radius:99px;margin:12px auto 0}
+#basket-sheet .bs-header{display:flex;align-items:center;justify-content:space-between;padding:12px 20px 8px}
+#basket-sheet .bs-header h3{font-size:16px;font-weight:800;color:#1a202c;margin:0}
+#basket-sheet .bs-close{width:30px;height:30px;border-radius:50%;background:#f3f4f6;border:none;cursor:pointer;font-size:18px;display:flex;align-items:center;justify-content:center;color:#6b7280}
+#basket-items{flex:1;overflow-y:auto;padding:8px 16px}
+.basket-row{display:flex;align-items:center;gap:10px;padding:10px 12px;background:#f9fafb;border-radius:12px;margin-bottom:8px}
+.basket-row .b-nome{flex:1;font-size:13px;font-weight:600;color:#1a202c;line-height:1.3}
+.basket-row .b-preco{font-size:12px;font-weight:700;color:#6b7280;white-space:nowrap;margin-left:6px}
+.basket-qty-ctrl{display:flex;align-items:center;gap:6px;flex-shrink:0}
+.basket-qty-ctrl button{width:28px;height:28px;border-radius:8px;border:none;cursor:pointer;font-size:16px;font-weight:800;display:flex;align-items:center;justify-content:center;background:#e5e7eb;color:#374151}
+.basket-qty-ctrl button.minus{background:#fef2f2;color:#dc2626}
+.basket-qty-ctrl span{min-width:22px;text-align:center;font-size:14px;font-weight:800;color:#1a202c}
+#basket-footer{padding:12px 16px 24px;border-top:1.5px solid #f0f0f0;background:#fff;flex-shrink:0}
+#basket-total-row{display:flex;justify-content:space-between;align-items:center;margin-bottom:12px}
+#basket-total-row span{font-size:13px;font-weight:600;color:#6b7280}
+#basket-total-row strong{font-size:20px;font-weight:900;color:#1a202c}
+.basket-actions{display:grid;grid-template-columns:1fr 1fr;gap:8px}
+.basket-actions button{padding:13px 10px;border:none;border-radius:12px;font-size:13px;font-weight:700;cursor:pointer;font-family:inherit}
+.basket-btn-add{background:#6366f1;color:#fff}
+.basket-btn-close{background:#10b981;color:#fff}
 /* Toast */
 #garcon-toast{position:fixed;top:80px;left:50%;transform:translateX(-50%) translateY(-12px);background:#1a202c;color:#fff;padding:10px 20px;border-radius:20px;font-size:13px;font-weight:600;opacity:0;transition:all .25s;pointer-events:none;z-index:999;white-space:nowrap}
 #garcon-toast.show{opacity:1;transform:translateX(-50%) translateY(0)}
@@ -125,6 +148,27 @@ body{font-family:-apple-system,BlinkMacSystemFont,'Segoe UI',sans-serif;backgrou
 
 <!-- ── Toast ─────────────────────────────────────────────────────────────────── -->
 <div id="garcon-toast"></div>
+
+<!-- ── Basket Sheet ───────────────────────────────────────────────────────────── -->
+<div id="basket-overlay" onclick="fecharBasket()"></div>
+<div id="basket-sheet">
+  <div class="bs-handle"></div>
+  <div class="bs-header">
+    <h3>🛒 Cesta de Itens</h3>
+    <button class="bs-close" onclick="fecharBasket()">✕</button>
+  </div>
+  <div id="basket-items"></div>
+  <div id="basket-footer">
+    <div id="basket-total-row">
+      <span>Total da cesta</span>
+      <strong id="basket-total-val">Gs 0</strong>
+    </div>
+    <div class="basket-actions">
+      <button class="basket-btn-add" onclick="basketConfirmar(false)">➕ Adicionar ao pedido</button>
+      <button class="basket-btn-close" onclick="basketConfirmar(true)">✓ Adicionar e Fechar conta</button>
+    </div>
+  </div>
+</div>
 
 <!-- ── Modal: nova mesa ──────────────────────────────────────────────────────── -->
 <div id="modal-nova-mesa" class="modal-overlay">
@@ -174,7 +218,7 @@ body{font-family:-apple-system,BlinkMacSystemFont,'Segoe UI',sans-serif;backgrou
   <div class="app-header">
     <button class="back-btn" onclick="voltarHome()">←</button>
     <span class="header-title" id="mesa-titulo">Mesa</span>
-    <button class="header-badge" onclick="solicitarFechamento()" id="btn-fechar-mesa">Fechar Conta</button>
+    <button onclick="solicitarFechamento()" id="btn-fechar-mesa" style="background:#10b981;color:#fff;border:none;padding:9px 14px;border-radius:8px;font-size:13px;font-weight:800;cursor:pointer;display:flex;align-items:center;gap:5px;line-height:1;white-space:nowrap">✓ Fechar Conta</button>
   </div>
   <div class="body">
     <div class="tabs">
@@ -219,8 +263,8 @@ body{font-family:-apple-system,BlinkMacSystemFont,'Segoe UI',sans-serif;backgrou
     </div>
   </div>
   <!-- Carrinho flutuante -->
-  <button id="cart-fab" onclick="confirmarCarrinho()">
-    🛒 <span id="cart-count">0</span> iten(s) · Adicionar
+  <button id="cart-fab" onclick="abrirBasket()">
+    🛒 <span id="cart-count">0</span> iten(s) · Ver cesta
   </button>
 </div>
 
@@ -460,21 +504,67 @@ function atualizarFab() {
   const fab = document.getElementById('cart-fab');
   const total = gCarrinho.reduce((s, i) => s + i.quantidade, 0);
   if (total > 0) { fab.style.display = 'flex'; document.getElementById('cart-count').textContent = total; }
-  else fab.style.display = 'none';
+  else { fab.style.display = 'none'; fecharBasket(); }
+}
+
+// ── Basket Sheet ──────────────────────────────────────────────────────────────
+function abrirBasket() {
+  if (!gCarrinho.length) return;
+  renderBasket();
+  document.getElementById('basket-overlay').style.display = 'block';
+  document.getElementById('basket-sheet').style.display = 'flex';
+}
+
+function fecharBasket() {
+  document.getElementById('basket-overlay').style.display = 'none';
+  document.getElementById('basket-sheet').style.display = 'none';
+}
+
+function renderBasket() {
+  const cont = document.getElementById('basket-items');
+  if (!cont) return;
+  cont.innerHTML = gCarrinho.map((item, idx) => `
+    <div class="basket-row">
+      <div class="b-nome">${item.nome}</div>
+      <div class="basket-qty-ctrl">
+        <button class="minus" onclick="basketQty(${idx},-1)">−</button>
+        <span>${item.quantidade}</span>
+        <button onclick="basketQty(${idx},1)">+</button>
+      </div>
+      <div class="b-preco">${fmtPreco(item.preco * item.quantidade)}</div>
+    </div>`).join('');
+  const total = gCarrinho.reduce((s, i) => s + i.preco * i.quantidade, 0);
+  const tv = document.getElementById('basket-total-val');
+  if (tv) tv.textContent = fmtPreco(total);
+}
+
+function basketQty(idx, delta) {
+  if (!gCarrinho[idx]) return;
+  gCarrinho[idx].quantidade = Math.max(0, gCarrinho[idx].quantidade + delta);
+  if (gCarrinho[idx].quantidade === 0) gCarrinho.splice(idx, 1);
+  atualizarFab();
+  if (gCarrinho.length) renderBasket(); else fecharBasket();
+}
+
+async function basketConfirmar(fecharConta) {
+  fecharBasket();
+  await confirmarCarrinho(!fecharConta);
+  if (fecharConta) await solicitarFechamento();
 }
 
 async function confirmarCarrinho(silencioso=false) {
   if (!gCarrinho.length) return;
   if (!mesaAtual) return;
+  const itensEnviados = [...gCarrinho];
   const res = await api(`garcon/mesas/${mesaAtual.id}/itens`, {
     method: 'POST',
-    body: JSON.stringify({ itens: gCarrinho, garconId: garconLogado.id, garconNome: garconLogado.nome, garconCor: garconLogado.cor }),
+    body: JSON.stringify({ itens: itensEnviados, garconId: garconLogado.id, garconNome: garconLogado.nome, garconCor: garconLogado.cor }),
   });
   if (res.ok) {
     mesaAtual = res.data;
     gCarrinho = [];
     atualizarFab();
-    if (!silencioso) { toast(`✅ ${gCarrinho.length || 'Itens'} adicionado(s)!`); mudarTab('pedido'); renderPedidoAtual(); }
+    if (!silencioso) { toast(`✅ ${itensEnviados.length} iten(s) adicionado(s)!`); mudarTab('pedido'); renderPedidoAtual(); }
   } else {
     if (!silencioso) toast(res.error || 'Erro ao adicionar itens');
   }
@@ -654,7 +744,23 @@ function garconSetPrg(passo, show, temBorda) {
   });
 }
 
+function _gBldFooterScrollMode(enable, threshold=250) {
+  const footer = document.querySelector('.garcon-bld-footer');
+  const content = document.getElementById('garcon-bld-content');
+  if (!footer || !content) return;
+  if (!enable) { footer.style.display = 'block'; content.onscroll = null; return; }
+  footer.style.display = 'none';
+  content.scrollTop = 0;
+  content.onscroll = function() {
+    if (content.scrollTop >= threshold) {
+      footer.style.display = 'block';
+      content.onscroll = null;
+    }
+  };
+}
+
 function garconRenderTamStep(ehPizza) {
+  _gBldFooterScrollMode(false);
   const content = document.getElementById('garcon-bld-content');
   if (!content) return;
   content.innerHTML = `<p style="font-size:13px;font-weight:700;color:#4b5563;margin-bottom:12px">📏 Escolha o tamanho</p>`;
@@ -732,6 +838,7 @@ function _gSetPrincipalGarcon(nome) {
 }
 
 function garconRenderSabStep() {
+  _gBldFooterScrollMode(true, 250);
   const content = document.getElementById('garcon-bld-content');
   if (!content || !gAppCat) return;
   const max = gAppPizza.maxSabores || 2;
@@ -791,6 +898,7 @@ function garconRenderSabStep() {
 }
 
 function garconRenderBordaStep() {
+  _gBldFooterScrollMode(false);
   const cat = gAppCat;
   const bordas = cat?.bordas || [];
   const tam = gAppPizza.tamanho;

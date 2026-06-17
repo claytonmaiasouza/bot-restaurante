@@ -3,7 +3,7 @@ const path = require("path");
 const { processarMensagem } = require("../services/claudeService");
 const { criarOuBuscarSessao, atualizarSessao, salvarMensagem, buscarSessaoFinalizada, buscarTelefoneDoLID, buscarJidCompleto, buscarNomeContato } = require("../services/sessaoService");
 const { enviarMensagem, enviarImagem, enviarDocumento, baixarMidiaBase64 } = require("../services/evolutionService");
-const { finalizarPedido, salvarComprovante, buscarPedidoAtivoDaSessao, buscarPedidoEntregueNaoPago, formatNumPedido } = require("../services/pedidoService");
+const { finalizarPedido, salvarComprovante, buscarPedidoAtivoDaSessao, buscarTodosOsPedidosAtivos, buscarPedidoEntregueNaoPago, formatNumPedido } = require("../services/pedidoService");
 const { transcreverAudio } = require("../services/transcricaoService");
 const { buscarContextoFidelidade } = require("../services/cardapioService");
 const { PrismaClient } = require("@prisma/client");
@@ -396,48 +396,78 @@ async function receberMensagem(req, res) {
 
     if (!textoCliente && !eMensagemDeLocalizacao(mensagem)) return;
 
-    // ── e) Sessão FINALIZADO com pedido ativo → informa status, não inicia nova ─
+    // ── e) Sessão FINALIZADO com pedido ativo → informa status ou inicia novo ──
     if (sessao.estado === "FINALIZADO") {
-      const pedidoAtivo = await buscarPedidoAtivoDaSessao(sessao.id);
-      if (pedidoAtivo) {
-        await salvarMensagem(sessao.id, "cliente", textoCliente);
-        io?.to("admin").emit("conversa:mensagem", {
-          sessaoId: sessao.id,
-          mensagem: { role: "cliente", conteudo: textoCliente, createdAt: new Date() },
-        });
+      await salvarMensagem(sessao.id, "cliente", textoCliente);
+      const agora1 = new Date();
+      io?.to("admin").emit("conversa:mensagem", { sessaoId: sessao.id, mensagem: { role: "cliente", conteudo: textoCliente, createdAt: agora1 } });
+      io?.to(`restaurante:${restaurante.slugWhatsapp}`).emit("conversa:mensagem", { sessaoId: sessao.id, mensagem: { role: "cliente", conteudo: textoCliente, createdAt: agora1 } });
 
-        const statusMsgs = {
-          pt: {
-            NOVO: "Recebemos seu pedido e estamos aguardando a confirmação do restaurante. Em breve retornaremos! 🍽️",
-            CONFIRMADO: "Ótima notícia! O restaurante confirmou seu pedido e já está preparando. 👨‍🍳",
-            PAGO: "Pagamento confirmado! O restaurante está preparando seu pedido. 👨‍🍳",
-            PREPARANDO: "Seu pedido está sendo preparado com carinho! Logo ficará pronto. ⏳",
-            SAIU_PARA_ENTREGA: "Seu pedido saiu para entrega! O motoboy está a caminho. 🛵",
-            PRONTO_PARA_RETIRADA: "Seu pedido está pronto para retirada no balcão! 🏪",
-            padrao: "Seu pedido está em andamento. Em breve temos novidades! 😊",
-          },
-          es: {
-            NOVO: "¡Recibimos tu pedido y estamos esperando la confirmación del restaurante. ¡Pronto te avisamos! 🍽️",
-            CONFIRMADO: "¡Buenas noticias! El restaurante confirmó tu pedido y ya lo está preparando. 👨‍🍳",
-            PAGO: "¡Pago confirmado! El restaurante está preparando tu pedido. 👨‍🍳",
-            PREPARANDO: "¡Tu pedido se está preparando con cariño! Ya casi está listo. ⏳",
-            SAIU_PARA_ENTREGA: "¡Tu pedido salió para entrega! El repartidor ya va en camino. 🛵",
-            PRONTO_PARA_RETIRADA: "¡Tu pedido está listo para retirarlo en el mostrador! 🏪",
-            padrao: "Tu pedido está en proceso. ¡Pronto te enviamos novedades! 😊",
-          },
-        };
+      // Cliente quer fazer um novo pedido → resetar sessão para INICIO
+      const querNovoPedido = textoCliente && /novo pedido|quero pedir|mais comida|outro pedido|fazer pedido|quero mais|pedir mais|nuevo pedido|quiero pedir|hacer pedido|quiero m[aá]s/i.test(textoCliente);
+      if (querNovoPedido) {
+        await atualizarSessao(sessao.id, { estado: "INICIO", carrinho: [] });
+        const msgNovo = idioma === "es"
+          ? `¡Claro! Puedes hacer un nuevo pedido. ¿Qué deseas? 😊`
+          : `Claro! Pode fazer um novo pedido. O que você gostaria? 😊`;
+        await enviarMensagem(remoteJid, msgNovo, instanceName);
+        await salvarMensagem(sessao.id, "bot", msgNovo);
+        const agora2 = new Date();
+        io?.to("admin").emit("conversa:mensagem", { sessaoId: sessao.id, mensagem: { role: "bot", conteudo: msgNovo, createdAt: agora2 } });
+        io?.to(`restaurante:${restaurante.slugWhatsapp}`).emit("conversa:mensagem", { sessaoId: sessao.id, mensagem: { role: "bot", conteudo: msgNovo, createdAt: agora2 } });
+        return;
+      }
 
-        const numFmt = formatNumPedido(pedidoAtivo);
+      const statusMsgs = {
+        pt: {
+          NOVO: "Aguardando confirmação do restaurante. Em breve retornaremos! 🍽️",
+          CONFIRMADO: "Confirmado! O restaurante já está preparando. 👨‍🍳",
+          PAGO: "Pagamento confirmado! O restaurante está preparando. 👨‍🍳",
+          PREPARANDO: "Sendo preparado com carinho! Logo ficará pronto. ⏳",
+          SAIU_PARA_ENTREGA: "Saiu para entrega! O motoboy está a caminho. 🛵",
+          PRONTO_PARA_RETIRADA: "Pronto para retirada no balcão! 🏪",
+          padrao: "Em andamento. Em breve temos novidades! 😊",
+        },
+        es: {
+          NOVO: "Esperando confirmación del restaurante. ¡Pronto te avisamos! 🍽️",
+          CONFIRMADO: "¡Confirmado! El restaurante ya lo está preparando. 👨‍🍳",
+          PAGO: "¡Pago confirmado! El restaurante está preparando. 👨‍🍳",
+          PREPARANDO: "¡Se está preparando con cariño! Ya casi está listo. ⏳",
+          SAIU_PARA_ENTREGA: "¡Salió para entrega! El repartidor ya va en camino. 🛵",
+          PRONTO_PARA_RETIRADA: "¡Listo para retirarlo en el mostrador! 🏪",
+          padrao: "En proceso. ¡Pronto te enviamos novedades! 😊",
+        },
+      };
+
+      const pedidosAtivos = await buscarTodosOsPedidosAtivos(clienteNumero, restaurante.id);
+
+      if (pedidosAtivos.length > 0) {
+        let resposta;
         const mapa = statusMsgs[idioma];
-        const statusMsg = mapa[pedidoAtivo.status] || mapa.padrao;
-        const resposta = `📦 *Pedido #${numFmt}*\n\n${statusMsg}`;
+        const dicaNovoPedido = idioma === "es"
+          ? `\n\n_Para hacer un nuevo pedido, escribe *nuevo pedido*._`
+          : `\n\n_Para fazer um novo pedido, escreva *novo pedido*._`;
+
+        if (pedidosAtivos.length === 1) {
+          const p = pedidosAtivos[0];
+          const numFmt = formatNumPedido(p);
+          const statusMsg = mapa[p.status] || mapa.padrao;
+          resposta = `📦 *Pedido #${numFmt}*\n\n${statusMsg}${dicaNovoPedido}`;
+        } else {
+          const cabecalho = idioma === "es" ? `📋 *Tus pedidos activos:*` : `📋 *Seus pedidos ativos:*`;
+          const linhas = pedidosAtivos.map(p => {
+            const numFmt = formatNumPedido(p);
+            const statusMsg = mapa[p.status] || mapa.padrao;
+            return `📦 *Pedido #${numFmt}*\n${statusMsg}`;
+          });
+          resposta = `${cabecalho}\n\n${linhas.join("\n\n")}${dicaNovoPedido}`;
+        }
 
         await enviarMensagem(remoteJid, resposta, instanceName);
         await salvarMensagem(sessao.id, "bot", resposta);
-        io?.to("admin").emit("conversa:mensagem", {
-          sessaoId: sessao.id,
-          mensagem: { role: "bot", conteudo: resposta, createdAt: new Date() },
-        });
+        const agora3 = new Date();
+        io?.to("admin").emit("conversa:mensagem", { sessaoId: sessao.id, mensagem: { role: "bot", conteudo: resposta, createdAt: agora3 } });
+        io?.to(`restaurante:${restaurante.slugWhatsapp}`).emit("conversa:mensagem", { sessaoId: sessao.id, mensagem: { role: "bot", conteudo: resposta, createdAt: agora3 } });
       }
       return;
     }

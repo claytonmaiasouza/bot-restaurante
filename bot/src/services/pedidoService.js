@@ -295,6 +295,18 @@ async function buscarPedidoAtivoDaSessao(sessaoId) {
   });
 }
 
+async function buscarTodosOsPedidosAtivos(clienteNumero, restauranteId) {
+  return prisma.pedido.findMany({
+    where: {
+      clienteNumero,
+      restauranteId,
+      status: { notIn: ["ENTREGUE", "CANCELADO"] },
+      origem: { notIn: ["MESA", "BALCAO"] },
+    },
+    orderBy: { createdAt: "asc" },
+  });
+}
+
 async function buscarPedidoEntregueNaoPago(clienteNumero, restauranteId) {
   return prisma.pedido.findFirst({
     where: {
@@ -308,4 +320,4 @@ async function buscarPedidoEntregueNaoPago(clienteNumero, restauranteId) {
   });
 }
 
-module.exports = { finalizarPedido, enviarPedidoParaDono, confirmarPedido, proximoNumeroDia, formatNumPedido, salvarComprovante, buscarPedidoAtivoDaSessao, buscarPedidoEntregueNaoPago, notificarStatusPedido };
+module.exports = { finalizarPedido, enviarPedidoParaDono, confirmarPedido, proximoNumeroDia, formatNumPedido, salvarComprovante, buscarPedidoAtivoDaSessao, buscarTodosOsPedidosAtivos, buscarPedidoEntregueNaoPago, notificarStatusPedido };

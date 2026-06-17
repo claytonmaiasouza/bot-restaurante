@@ -429,7 +429,7 @@
     .res-line.tot { font-weight: 800; font-size: 18px; border-top: 1px solid var(--border); padding-top: 10px; margin-top: 4px; margin-bottom: 0; }
 
     /* ── Checkout ── */
-    .ck-form { padding: 20px; padding-bottom: 100px; display: flex; flex-direction: column; gap: 22px; }
+    .ck-form { padding: 20px; padding-bottom: 160px; display: flex; flex-direction: column; gap: 22px; }
     .fg label { display: block; font-size: 13px; font-weight: 700; color: var(--muted); margin-bottom: 8px; }
     .inp {
       width: 100%; border: 2px solid var(--border);
@@ -884,7 +884,10 @@
         <p class="conf-num-val" id="conf-num">—</p>
       </div>
       <p class="conf-msg" id="conf-msg"></p>
-      <button class="btn-prim" style="width:100%;max-width:300px" onclick="recomecar()">Pedir mais 🍕</button>
+      <a id="btn-whatsapp-pedido" href="#" target="_blank" rel="noopener"
+        class="btn-prim" style="width:100%;max-width:300px;text-decoration:none;display:inline-block;text-align:center">
+        Acompanhar pelo WhatsApp 💬
+      </a>
     </div>
   </div>
 
@@ -951,11 +954,9 @@ function ir(tela) {
   sync();
   if (tela === 'sacola') renderSacola();
   window.scrollTo(0, 0);
-  if (tela === 'lista' || tela === 'builder') {
-    const bar = tela === 'lista'
-      ? document.getElementById('lista-bot-action')
-      : document.querySelector('#s-builder .bot-action');
-    const pb = document.querySelector(`#s-${tela} .pb90`);
+  if (tela === 'lista') {
+    const bar = document.getElementById('lista-bot-action');
+    const pb = document.querySelector('#s-lista .pb90');
     bar.classList.add('auto-hidden');
     requestAnimationFrame(() => {
       if (pb) pb.style.height = bar.offsetHeight + 'px';
@@ -972,6 +973,14 @@ function ir(tela) {
     }
     document.addEventListener('scroll', onScroll, { passive: true, capture: true });
     _listaScrollOff = () => document.removeEventListener('scroll', onScroll, { capture: true });
+  } else if (tela === 'builder') {
+    // Botão sempre visível no builder (wizard de pizza tem conteúdo curto)
+    const bar = document.querySelector('#s-builder .bot-action');
+    const pb = document.querySelector('#s-builder .pb90');
+    bar.classList.remove('auto-hidden');
+    requestAnimationFrame(() => {
+      if (pb) pb.style.height = bar.offsetHeight + 'px';
+    });
   }
 }
 
@@ -1113,7 +1122,7 @@ function renderLista() {
     const precoTxt = p.tamanhos?.length ? `A partir de ${fmt(minPreco)}` : fmt(minPreco);
     return `
       <div class="item-card">
-        ${p.imagemUrl ? `<img src="${p.imagemUrl}" class="item-img" alt="${p.nome}" loading="lazy">` : ''}
+        ${p.imagemUrl ? `<img src="${p.imagemUrl}" class="item-img" alt="${p.nome}" loading="lazy" onclick="addItem('${p.id}')" style="cursor:pointer">` : ''}
         <div class="item-info">
           <div class="item-nome">${p.nome}</div>
           ${p.descricao ? `<div class="item-desc">${p.descricao}</div>` : ''}
@@ -1729,6 +1738,15 @@ function setPag(v) {
     G.troco = null;
     renderTroco();
     trocoBox.style.display = 'block';
+    setTimeout(() => {
+      const rect = trocoBox.getBoundingClientRect();
+      const botBar = document.querySelector('#s-checkout .bot-action');
+      const botH = botBar ? botBar.offsetHeight : 130;
+      const visBottom = window.innerHeight - botH - 16;
+      if (rect.bottom > visBottom) {
+        window.scrollBy({ top: rect.bottom - visBottom, behavior: 'smooth' });
+      }
+    }, 50);
   } else {
     trocoBox.style.display = 'none';
     G.troco = null;
@@ -1783,11 +1801,14 @@ async function finalizar() {
     }
     const data = await res.json();
 
-    document.getElementById('conf-num').textContent = data.numeroPedido || '—';
+    const numeroPedido = data.numeroPedido || '';
+    document.getElementById('conf-num').textContent = numeroPedido || '—';
     document.getElementById('conf-msg').textContent =
       G.entrega === 'delivery'
         ? 'Logo nosso entregador estará aí com seu pedido! 🛵'
         : 'Pode vir buscar em alguns minutinhos! 🏃';
+    const waMsg = `Olá! Quero acompanhar meu pedido #${numeroPedido}`;
+    document.getElementById('btn-whatsapp-pedido').href = `https://wa.me/${SLUG}?text=${encodeURIComponent(waMsg)}`;
 
     G.cart = []; sync();
     salvarDadosCliente();

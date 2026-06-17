@@ -618,10 +618,14 @@ router.post("/garcon/auth", validarToken, async (req, res) => {
 router.get("/garcon/cardapio", validarToken, async (req, res) => {
   const rest = await prisma.restaurante.findFirst({ where: { slugWhatsapp: req.painelSlug, ativo: true }, select: { id: true, moeda: true } });
   if (!rest) return res.status(404).json({ error: "Restaurante não encontrado" });
-  const categorias = await prisma.categoria.findMany({
+  const todasCategorias = await prisma.categoria.findMany({
     where: { restauranteId: rest.id, ativo: true },
     include: { produtos: { where: { ativo: true }, include: { tamanhos: true }, orderBy: { nome: "asc" } } },
     orderBy: { ordem: "asc" },
+  });
+  const categorias = todasCategorias.filter(c => {
+    const canais = Array.isArray(c.canais) ? c.canais : ["SALAO", "DELIVERY", "WEB"];
+    return canais.includes("SALAO");
   });
   res.json({ data: categorias, moeda: rest.moeda });
 });

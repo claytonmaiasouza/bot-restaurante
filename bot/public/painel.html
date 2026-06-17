@@ -346,7 +346,7 @@
       <div style="display:flex;height:100%">
 
         <!-- Esquerda: fluxo passo a passo -->
-        <div style="flex:1;display:flex;flex-direction:column;overflow:hidden;min-width:0">
+        <div id="balcao-left-panel" style="flex:1;display:flex;flex-direction:column;overflow:hidden;min-width:0">
           <!-- Nav: voltar + breadcrumb -->
           <div id="balcao-nav" style="display:none;padding:12px 20px;background:#fff;border-bottom:2px solid #f0f0f0;flex-shrink:0;align-items:center;gap:12px">
             <button onclick="balcaoVoltar()" style="width:38px;height:38px;border-radius:50%;background:#f3f4f6;border:none;cursor:pointer;font-size:20px;line-height:1;flex-shrink:0;display:flex;align-items:center;justify-content:center">←</button>
@@ -354,7 +354,7 @@
             <span id="balcao-bld-counter" style="display:none;font-size:12px;font-weight:700;background:#fff7ed;color:#ea580c;border-radius:99px;padding:3px 10px"></span>
           </div>
           <!-- Conteúdo principal (muda por tela) -->
-          <div id="balcao-content" style="flex:1;overflow-y:auto;padding:20px;background:#f6f7fb"></div>
+          <div id="balcao-content" style="flex:1;overflow-y:auto;padding:20px;background:#f6f7fb;display:flex;flex-direction:column"></div>
           <!-- Footer do builder (próximo / confirmar) -->
           <div id="balcao-bld-footer" style="display:none;padding:14px 20px;background:#fff;border-top:2px solid #f0f0f0;flex-shrink:0">
             <button id="balcao-bld-btn" onclick="balcaoAvancarBuilder()" style="width:100%;padding:14px;background:#2B7DD4;color:#fff;font-size:16px;font-weight:800;border:none;border-radius:14px;cursor:pointer;font-family:inherit;transition:background .2s">Próximo →</button>
@@ -362,7 +362,7 @@
         </div>
 
         <!-- Direita: carrinho -->
-        <div style="width:360px;background:#fff;border-left:2px solid #eaecf0;display:flex;flex-direction:column;flex-shrink:0;overflow:hidden">
+        <div id="balcao-cart-panel" style="width:360px;background:#fff;border-left:2px solid #eaecf0;display:flex;flex-direction:column;flex-shrink:0;overflow:hidden">
           <!-- Cabeçalho carrinho -->
           <div style="padding:18px 20px 14px;border-bottom:2px solid #f0f0f0;flex-shrink:0">
             <p style="font-size:18px;font-weight:800;color:#1a202c;margin:0 0 14px;letter-spacing:-.3px">🛒 Pedido</p>
@@ -2454,22 +2454,9 @@
           </button>
         </div>
       </div>
-      <!-- Tabs Salão / Delivery -->
-      <div class="flex gap-1 mb-4 p-1 bg-gray-100 rounded-xl w-fit">
-        <button id="tab-card-todos" onclick="setCardapioFiltro('todos')"
-          class="tab-card-btn px-4 py-1.5 rounded-lg text-sm font-semibold transition bg-white shadow text-gray-800">
-          Todos
-        </button>
-        <button id="tab-card-SALAO" onclick="setCardapioFiltro('SALAO')"
-          class="tab-card-btn px-4 py-1.5 rounded-lg text-sm font-semibold transition text-gray-500 hover:text-gray-700">
-          🪑 Salão
-        </button>
-        <button id="tab-card-DELIVERY" onclick="setCardapioFiltro('DELIVERY')"
-          class="tab-card-btn px-4 py-1.5 rounded-lg text-sm font-semibold transition text-gray-500 hover:text-gray-700">
-          🛵 Delivery
-        </button>
+      <div id="cardapio-card" class="border border-gray-200 rounded-2xl p-5 bg-white">
+        <div id="cardapio-lista" class="flex flex-col gap-4"></div>
       </div>
-      <div id="cardapio-lista" class="flex flex-col gap-4"></div>
     </div>
 
     </div><!-- /inner scroll -->
@@ -3769,6 +3756,33 @@ function setPedidosView(view) {
     if (!btn) return;
     btn.className = v === view ? active : inactiveBase + (hoverMap[v] || '');
   });
+  // Fix the cart panel on the right side of the viewport when in balcão view
+  const cartPanel = document.getElementById('balcao-cart-panel');
+  const leftPanel = document.getElementById('balcao-left-panel');
+  if (cartPanel && leftPanel) {
+    if (isBalcao) {
+      const toolbar = document.getElementById('pedidos-toolbar');
+      const topOffset = toolbar ? toolbar.getBoundingClientRect().bottom : 0;
+      cartPanel.style.position = 'fixed';
+      cartPanel.style.right = '0';
+      cartPanel.style.top = topOffset + 'px';
+      cartPanel.style.bottom = '0';
+      cartPanel.style.width = '360px';
+      cartPanel.style.zIndex = '15';
+      cartPanel.style.boxShadow = '-4px 0 24px rgba(0,0,0,.1)';
+      leftPanel.style.marginRight = '360px';
+    } else {
+      cartPanel.style.position = '';
+      cartPanel.style.right = '';
+      cartPanel.style.top = '';
+      cartPanel.style.bottom = '';
+      cartPanel.style.width = '360px';
+      cartPanel.style.zIndex = '';
+      cartPanel.style.boxShadow = '';
+      leftPanel.style.marginRight = '';
+    }
+  }
+
   if (isKanban) carregarPedidos();
   else if (isMesas) carregarMesas();
   else if (isBalcao) carregarBalcao();
@@ -4802,7 +4816,7 @@ function balcaoMostrarInicio() {
   const content = document.getElementById('balcao-content');
   if (!content) return;
   content.innerHTML = `
-    <div style="display:flex;flex-direction:column;align-items:center;justify-content:center;height:100%;min-height:320px;gap:28px;padding:20px">
+    <div style="display:flex;flex-direction:column;align-items:center;justify-content:center;flex:1;min-height:320px;gap:28px;padding:20px">
       <div style="text-align:center">
         <span style="font-size:72px;display:block;line-height:1">🏪</span>
         <p style="font-size:24px;font-weight:900;color:#1a202c;margin:16px 0 6px;letter-spacing:-.5px">Balcão</p>
@@ -6966,21 +6980,7 @@ async function criarRestaurante() {
 let cardapioRestauranteId = '';
 let cardapioModalCatId = null;
 let cardapioData = [];
-let cardapioFiltroCanal = 'todos';
 const categoriasExpandidas = new Set();
-
-function setCardapioFiltro(canal) {
-  cardapioFiltroCanal = canal;
-  document.querySelectorAll('.tab-card-btn').forEach(btn => {
-    const active = btn.id === `tab-card-${canal}`;
-    btn.classList.toggle('bg-white', active);
-    btn.classList.toggle('shadow', active);
-    btn.classList.toggle('text-gray-800', active);
-    btn.classList.toggle('text-gray-500', !active);
-    btn.classList.toggle('hover:text-gray-700', !active);
-  });
-  renderizarCardapio(cardapioData);
-}
 
 async function carregarCardapio() {
   const rid = restauranteAtual || (restaurantes[0]?.id || '');
@@ -7321,22 +7321,15 @@ function renderizarCardapio(categoriasRaw) {
   lista.innerHTML = '';
   const moeda = getMoeda() || 'R$';
 
-  // filtro de canal (Salão / Delivery / todos)
-  const categorias = cardapioFiltroCanal === 'todos' ? categoriasRaw : categoriasRaw.filter(c => {
-    const canais = Array.isArray(c.canais) ? c.canais : ['SALAO','DELIVERY','WEB'];
-    return canais.includes(cardapioFiltroCanal);
-  });
-
-  if (!categorias.length) {
-    const msg = cardapioFiltroCanal !== 'todos'
-      ? `<p class="text-sm text-gray-400 text-center py-8">Nenhuma categoria no canal <strong>${cardapioFiltroCanal === 'SALAO' ? '🪑 Salão' : '🛵 Delivery'}</strong>.<br><span class="text-xs">Configure os canais de cada categoria clicando em ✏️.</span></p>`
-      : `<p class="text-sm text-gray-400 text-center py-8">${t('card.vazio')}</p>`;
-    lista.innerHTML = msg;
+  if (!categoriasRaw.length) {
+    lista.innerHTML = `<p class="text-sm text-gray-400 text-center py-8">${t('card.vazio')}</p>`;
     return;
   }
 
-  categorias.forEach((cat) => {
+  categoriasRaw.forEach((cat) => {
+    const catCanais = Array.isArray(cat.canais) ? cat.canais : ['SALAO','DELIVERY','WEB'];
     const inativa = cat.ativo === false;
+    const inativaLabel = 'Oculta';
     const expandida = categoriasExpandidas.has(cat.id);
     const numProdutos = cat.produtos.length;
     const temTamanhosCat = (cat.tamanhos || []).length > 0;
@@ -7362,14 +7355,34 @@ function renderizarCardapio(categoriasRaw) {
           <span class="font-semibold text-gray-800 truncate">${cat.nome}</span>
           <span class="text-xs bg-gray-100 text-gray-500 px-2 py-0.5 rounded-full shrink-0">${numProdutos} ${numProdutos === 1 ? 'produto' : 'produtos'}</span>
           ${cat.tipoTamanhos && cat.tipoTamanhos !== 'simples' ? `<span class="text-xs bg-gray-100 text-gray-500 px-2 py-0.5 rounded-full shrink-0">${{pizza:'🍕 Pizza',porcao:'🍽️ Porção',custom:'⚙️ Custom'}[cat.tipoTamanhos]||''}</span>` : ''}
-          ${inativa ? '<span class="text-xs bg-gray-200 text-gray-500 px-2 py-0.5 rounded-full shrink-0">Oculta</span>' : ''}
+          ${inativa ? `<span class="text-xs bg-gray-200 text-gray-500 px-2 py-0.5 rounded-full shrink-0">${inativaLabel}</span>` : ''}
         </div>
-        <div class="flex gap-1.5 shrink-0 ml-2" onclick="event.stopPropagation()">
+        <div class="flex gap-1.5 shrink-0 ml-2 items-center" onclick="event.stopPropagation()">
           <button onclick="toggleCategoria('${cat.id}', ${cat.ativo !== false})"
             title="${inativa ? 'Mostrar categoria' : 'Ocultar categoria'}"
             class="text-xs px-2.5 py-1.5 rounded-lg transition font-semibold ${inativa ? 'bg-green-100 hover:bg-green-200 text-green-700' : 'bg-yellow-100 hover:bg-yellow-200 text-yellow-700'}">
             ${inativa ? '👁 Mostrar' : '🙈 Ocultar'}
           </button>
+          <div class="flex gap-1 items-center">
+            <button onclick="toggleCategoriaCanal('${cat.id}', 'SALAO')"
+              title="${catCanais.includes('SALAO') ? 'Salão ativo — clique para desativar' : 'Salão inativo — clique para ativar'}"
+              class="flex flex-col items-center gap-0.5 px-2.5 py-1.5 rounded-lg border transition font-semibold ${catCanais.includes('SALAO') ? 'bg-indigo-50 border-indigo-300 text-indigo-700' : 'bg-gray-50 border-gray-200 text-gray-400'}">
+              <span class="text-base leading-none">🪑</span>
+              <span class="text-[10px] leading-none font-semibold">Salão</span>
+            </button>
+            <button onclick="toggleCategoriaCanal('${cat.id}', 'DELIVERY')"
+              title="${catCanais.includes('DELIVERY') ? 'Delivery ativo — clique para desativar' : 'Delivery inativo — clique para ativar'}"
+              class="flex flex-col items-center gap-0.5 px-2.5 py-1.5 rounded-lg border transition font-semibold ${catCanais.includes('DELIVERY') ? 'bg-amber-50 border-amber-300 text-amber-700' : 'bg-gray-50 border-gray-200 text-gray-400'}">
+              <span class="text-base leading-none">🛵</span>
+              <span class="text-[10px] leading-none font-semibold">Delivery</span>
+            </button>
+            <button onclick="toggleCategoriaCanal('${cat.id}', 'WEB')"
+              title="${catCanais.includes('WEB') ? 'WhatsApp/Web ativo — clique para desativar' : 'WhatsApp/Web inativo — clique para ativar'}"
+              class="flex flex-col items-center gap-0.5 px-2.5 py-1.5 rounded-lg border transition font-semibold ${catCanais.includes('WEB') ? 'bg-green-50 border-green-300 text-green-700' : 'bg-gray-50 border-gray-200 text-gray-400'}">
+              <span class="text-base leading-none">💬</span>
+              <span class="text-[10px] leading-none font-semibold">WhatsApp</span>
+            </button>
+          </div>
           <button onclick="abrirModalProduto('${cat.id}')"
             class="text-xs bg-orange-100 hover:bg-orange-200 text-orange-700 px-2.5 py-1.5 rounded-lg transition">${t('card.add-prod')}</button>
           <button onclick="editarCategoria('${cat.id}')"
@@ -7412,6 +7425,19 @@ async function toggleCategoria(id, ativoAtual) {
     method: 'PATCH',
     headers: getHeaders({ 'Content-Type': 'application/json' }),
     body: JSON.stringify({ ativo: !ativoAtual }),
+  });
+  carregarCardapio();
+}
+
+async function toggleCategoriaCanal(id, canal) {
+  const cat = cardapioData.find(c => c.id === id);
+  if (!cat) return;
+  const catCanais = Array.isArray(cat.canais) ? [...cat.canais] : ['SALAO','DELIVERY','WEB'];
+  const novosCanais = catCanais.includes(canal) ? catCanais.filter(c => c !== canal) : [...catCanais, canal];
+  await fetch(`/admin/cardapio/categorias/${id}`, {
+    method: 'PATCH',
+    headers: getHeaders({ 'Content-Type': 'application/json' }),
+    body: JSON.stringify({ canais: novosCanais }),
   });
   carregarCardapio();
 }

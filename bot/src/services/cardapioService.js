@@ -132,13 +132,14 @@ async function criarProduto(categoriaId, dados) {
 }
 
 async function atualizarProduto(id, dados) {
-  const { nome, descricao, preco, ativo, tamanhos } = dados;
+  const { nome, descricao, preco, ativo, tamanhos, imagemUrl } = dados;
 
   const data = {};
   if (nome !== undefined) data.nome = nome;
   if (descricao !== undefined) data.descricao = descricao;
   if (preco !== undefined) data.preco = preco;
   if (ativo !== undefined) data.ativo = ativo;
+  if (imagemUrl !== undefined) data.imagemUrl = imagemUrl;
 
   // Se tamanhos fornecidos, substitui todos
   if (tamanhos !== undefined) {

@@ -50,11 +50,10 @@ Fluxo WhatsApp:
 |---|---|---|
 | `bot-app` | Aplicação Node.js principal | 3000 (exposta via Traefik) |
 | `bot-postgres` | PostgreSQL 15 do projeto | 127.0.0.1:5432 |
-| `bot-evolution` | Evolution API (WhatsApp) deste projeto | 8181→8080 |
-| `evolution-api-vbys-api-1` | Evolution API externa (outra instância) | 59439→8080 |
+| `bot-evolution` | Evolution API (WhatsApp) — porta **8181** | 8181→8080 |
 | `traefik-traefik-1` | Proxy reverso + SSL (Let's Encrypt) | 80, 443 |
 
-> A `EVOLUTION_API_URL` no `.env` aponta para `http://185.137.92.141:59439` (instância externa), não para `bot-evolution`.
+> `EVOLUTION_API_URL` no `.env` aponta para `http://185.137.92.141:8181` (`bot-evolution`). A instância `evolution-api-vbys-api-1` (porta 59439) não está mais em uso.
 
 ---
 
@@ -129,7 +128,7 @@ Ficam em `/opt/bot-restaurante/.env` e são passadas ao container via `docker-co
 |---|---|
 | `DATABASE_URL` | PostgreSQL (gerado pelo docker-compose a partir de DB_USER/DB_PASSWORD/DB_NAME) |
 | `OPENROUTER_API_KEY` | Chave OpenRouter (acesso ao Claude AI) |
-| `EVOLUTION_API_URL` | `http://185.137.92.141:59439` |
+| `EVOLUTION_API_URL` | `http://185.137.92.141:8181` (bot-evolution) |
 | `EVOLUTION_API_KEY` | Chave de autenticação da Evolution API |
 | `ADMIN_TOKEN` | Token para rotas `/admin` e `/onboarding` |
 | `BOT_PUBLIC_URL` | `https://bot.guiafinanceiro.pro` |
@@ -307,10 +306,9 @@ Upload via painel: `POST /admin/restaurantes/:id/upload-cardapio-fotos`
 
 ## Restaurantes em Produção
 
-| Restaurante | Slug WhatsApp |
-|---|---|
-| (restaurante 1) | `31645730876` |
-| (restaurante 2) | `595984743801` |
+| Restaurante | Slug WhatsApp | Instância Evolution API |
+|---|---|---|
+| Don Pedro Pizzeria & Heladeria | `595982980051` | `0982980051` (bot-evolution:8181) |
 
 ---
 

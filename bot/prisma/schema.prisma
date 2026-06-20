@@ -41,15 +41,39 @@ model Restaurante {
   faturaCiudad       String?
   faturaTelefone     String?
   faturaTimbrado     String?
-  faturaVencTimbrado String?
-  faturaSerie        String   @default("001-001")
+  faturaVencTimbrado   String?
+  faturaInicioVigencia String?
+  faturaSerie          String   @default("001-001")
   faturaProximoNum   Int      @default(1)
   campanhas            CampanhaMarketing[]
   itensEstoque         ItemEstoque[]
   custosMensais        CustoMensal[]
   promocoes            Promocao[]
   estacoes             Estacao[]
+  facturas             Factura[]
   createdAt            DateTime    @default(now())
+}
+
+model Factura {
+  id            String      @id @default(uuid())
+  restauranteId String
+  restaurante   Restaurante @relation(fields: [restauranteId], references: [id], onDelete: Cascade)
+  numero        String
+  timbrado      String      @default("")
+  cliNome       String      @default("CONSUMIDOR FINAL")
+  cliRuc        String?
+  cliDirec      String?
+  cliTel        String?
+  condicion     String      @default("contado")
+  itens         Json
+  total         Float
+  iva5          Float       @default(0)
+  iva10         Float       @default(0)
+  origem        String      @default("PEDIDO")
+  mesa          Int?
+  createdAt     DateTime    @default(now())
+
+  @@index([restauranteId])
 }
 
 model Categoria {

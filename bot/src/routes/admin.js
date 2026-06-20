@@ -70,6 +70,19 @@ const uploadDiscoFotos = multer({
   fileFilter: (_req, file, cb) => cb(null, file.mimetype in FOTO_EXTS),
 });
 
+// Multer: salva foto de produto em disco
+const uploadProdutoImagem = multer({
+  storage: multer.diskStorage({
+    destination: (_req, _file, cb) => cb(null, UPLOADS_DIR),
+    filename: (req, file, cb) => {
+      const ext = FOTO_EXTS[file.mimetype] || "jpg";
+      cb(null, `produto-${req.params.id}-${Date.now()}.${ext}`);
+    },
+  }),
+  limits: { fileSize: 5 * 1024 * 1024 },
+  fileFilter: (_req, file, cb) => cb(null, file.mimetype in FOTO_EXTS),
+});
+
 function parseFotos(cardapioPdfUrl) {
   if (!cardapioPdfUrl) return [];
   try {
@@ -159,7 +172,7 @@ router.get("/restaurantes", async (req, res) => {
     const restaurantes = await prisma.restaurante.findMany({
       where,
       select: { id: true, nome: true, slugWhatsapp: true, donoWhatsapp: true, moeda: true, taxaEntrega: true, ativo: true, email: true, horarioAtendimento: true, cardapioPdfUrl: true, dadosTransferencia: true, instrucoes: true,
-                faturaRuc: true, faturaRazaoSocial: true, faturaEndereco: true, faturaCiudad: true, faturaTelefone: true, faturaTimbrado: true, faturaVencTimbrado: true, faturaSerie: true, faturaProximoNum: true },
+                faturaRuc: true, faturaRazaoSocial: true, faturaEndereco: true, faturaCiudad: true, faturaTelefone: true, faturaTimbrado: true, faturaVencTimbrado: true, faturaInicioVigencia: true, faturaSerie: true, faturaProximoNum: true },
       orderBy: { nome: "asc" },
     });
     res.json({ data: restaurantes });
@@ -1414,7 +1427,7 @@ router.patch("/restaurantes/:id", async (req, res) => {
   }
 
   const { nome, donoWhatsapp, moeda, taxaEntrega, email, senha, ativo, horarioAtendimento, dadosTransferencia, instrucoes,
-          faturaRuc, faturaRazaoSocial, faturaEndereco, faturaCiudad, faturaTelefone, faturaTimbrado, faturaVencTimbrado, faturaSerie } = req.body;
+          faturaRuc, faturaRazaoSocial, faturaEndereco, faturaCiudad, faturaTelefone, faturaTimbrado, faturaVencTimbrado, faturaInicioVigencia, faturaSerie } = req.body;
 
   try {
     const dados = {};
@@ -1433,8 +1446,9 @@ router.patch("/restaurantes/:id", async (req, res) => {
     if (faturaCiudad !== undefined)        dados.faturaCiudad = faturaCiudad || null;
     if (faturaTelefone !== undefined)      dados.faturaTelefone = faturaTelefone || null;
     if (faturaTimbrado !== undefined)      dados.faturaTimbrado = faturaTimbrado || null;
-    if (faturaVencTimbrado !== undefined)  dados.faturaVencTimbrado = faturaVencTimbrado || null;
-    if (faturaSerie !== undefined)         dados.faturaSerie = faturaSerie || "001-001";
+    if (faturaVencTimbrado !== undefined)    dados.faturaVencTimbrado = faturaVencTimbrado || null;
+    if (faturaInicioVigencia !== undefined) dados.faturaInicioVigencia = faturaInicioVigencia || null;
+    if (faturaSerie !== undefined)           dados.faturaSerie = faturaSerie || "001-001";
     // Só admin pode ativar/desativar
     if (ativo !== undefined && req.user.role === "admin") dados.ativo = ativo;
 
@@ -1442,7 +1456,7 @@ router.patch("/restaurantes/:id", async (req, res) => {
       where: { id },
       data: dados,
       select: { id: true, nome: true, slugWhatsapp: true, donoWhatsapp: true, moeda: true, taxaEntrega: true, ativo: true, email: true, horarioAtendimento: true, cardapioPdfUrl: true, dadosTransferencia: true, instrucoes: true,
-                faturaRuc: true, faturaRazaoSocial: true, faturaEndereco: true, faturaCiudad: true, faturaTelefone: true, faturaTimbrado: true, faturaVencTimbrado: true, faturaSerie: true, faturaProximoNum: true },
+                faturaRuc: true, faturaRazaoSocial: true, faturaEndereco: true, faturaCiudad: true, faturaTelefone: true, faturaTimbrado: true, faturaVencTimbrado: true, faturaInicioVigencia: true, faturaSerie: true, faturaProximoNum: true },
     });
 
     // Invalida cache para refletir mudanças imediatamente
@@ -1775,6 +1789,102 @@ router.delete("/cardapio/produtos/:id", async (req, res) => {
     await deletarProduto(req.params.id);
     res.json({ ok: true });
   } catch (err) {
+    res.status(500).json({ error: err.message });
+  }
+});
+
+// POST /admin/cardapio/produtos/:id/foto — upload de foto do produto
+router.post("/cardapio/produtos/:id/foto", uploadProdutoImagem.single("foto"), async (req, res) => {
+  try {
+    const existing = await prisma.produto.findUnique({
+      where: { id: req.params.id },
+      select: { categoria: { select: { restauranteId: true } } },
+    });
+    if (!existing) return res.status(404).json({ error: "Produto não encontrado" });
+    if (denegarOutroTenant(req, res, existing.categoria.restauranteId)) return;
+    if (!req.file) return res.status(400).json({ error: "Nenhuma imagem enviada" });
+    const imagemUrl = `${process.env.BOT_PUBLIC_URL}/uploads/${req.file.filename}`;
+    await prisma.produto.update({ where: { id: req.params.id }, data: { imagemUrl } });
+    await invalidarCachePorProdutoId(req.params.id);
+    res.json({ data: { imagemUrl } });
+  } catch (err) {
+    res.status(500).json({ error: err.message });
+  }
+});
+
+// POST /admin/cardapio/produtos/:id/gerar-foto — busca foto real na internet pelo sabor
+router.post("/cardapio/produtos/:id/gerar-foto", async (req, res) => {
+  try {
+    const existing = await prisma.produto.findUnique({
+      where: { id: req.params.id },
+      select: { nome: true, categoria: { select: { restauranteId: true, nome: true } } },
+    });
+    if (!existing) return res.status(404).json({ error: "Produto não encontrado" });
+    if (denegarOutroTenant(req, res, existing.categoria.restauranteId)) return;
+
+    // Extrai sabor: remove prefixo "pizza" para buscar só o sabor
+    const isPizza = /pizza/i.test(existing.nome) || /pizza/i.test(existing.categoria.nome);
+    const sabor = existing.nome.replace(/^pizza\s+/i, '').trim();
+    const searchQuery = isPizza ? `pizza ${sabor} brasileira` : `${existing.nome} ${existing.categoria.nome} foto comida`;
+
+    console.log(`[gerar-foto] buscando imagem: "${searchQuery}"`);
+
+    // Busca no Bing Images
+    const bingRes = await axios.get(
+      `https://www.bing.com/images/search?q=${encodeURIComponent(searchQuery)}&form=HDRSC2&first=1&count=20`,
+      {
+        headers: {
+          'User-Agent': 'Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/124.0.0.0 Safari/537.36',
+          'Accept-Language': 'pt-BR,pt;q=0.9,en;q=0.8',
+          'Accept': 'text/html,application/xhtml+xml,application/xml;q=0.9,*/*;q=0.8',
+        },
+        timeout: 15000,
+      }
+    );
+
+    // Extrai URLs das imagens do HTML do Bing (suporta aspas normais e HTML-encoded &quot;)
+    const html = bingRes.data;
+    let imageUrls = [];
+
+    // Padrão 1: HTML-encoded — &quot;murl&quot;:&quot;URL&quot; (formato mais comum)
+    const enc = [...html.matchAll(/&quot;murl&quot;:&quot;(https?:[^&]+)&quot;/g)];
+    if (enc.length) imageUrls = enc.map(m => m[1]);
+
+    // Padrão 2: JSON puro — "murl":"URL" (fallback)
+    if (!imageUrls.length) {
+      const raw = [...html.matchAll(/"murl":"(https?:[^"]+)"/g)];
+      imageUrls = raw.map(m => m[1]);
+    }
+
+    imageUrls = imageUrls.filter(url => /\.(jpg|jpeg|png|webp)/i.test(url));
+    console.log(`[gerar-foto] ${imageUrls.length} URLs encontradas`);
+
+    if (!imageUrls.length) return res.status(500).json({ error: `Nenhuma imagem encontrada para "${sabor}". Verifique o nome do produto.` });
+
+    // Tenta baixar as primeiras 5 URLs até uma funcionar
+    let imgBuffer = null;
+    for (const url of imageUrls.slice(0, 5)) {
+      try {
+        const imgRes = await axios.get(url, { responseType: 'arraybuffer', timeout: 10000 });
+        const contentType = imgRes.headers['content-type'] || '';
+        if (contentType.startsWith('image/') && imgRes.data.byteLength > 5000) {
+          imgBuffer = imgRes.data;
+          break;
+        }
+      } catch { continue; }
+    }
+
+    if (!imgBuffer) return res.status(500).json({ error: 'Não foi possível baixar imagem. Tente novamente.' });
+
+    const filename = `produto-${req.params.id}-${Date.now()}.jpg`;
+    fs.writeFileSync(path.join(UPLOADS_DIR, filename), imgBuffer);
+
+    const imagemUrl = `${process.env.BOT_PUBLIC_URL}/uploads/${filename}`;
+    await prisma.produto.update({ where: { id: req.params.id }, data: { imagemUrl } });
+    await invalidarCachePorProdutoId(req.params.id);
+    res.json({ data: { imagemUrl } });
+  } catch (err) {
+    console.error("[gerar-foto]", err.message);
     res.status(500).json({ error: err.message });
   }
 });
@@ -2832,7 +2942,7 @@ router.post("/pedidos/balcao", authMiddleware, async (req, res) => {
       sessaoId: sessao.id, restauranteId: rid,
       clienteNumero: sessao.clienteNumero, clienteNome: clienteNome || "Balcão",
       itens, total, metodoPagamento: metodoPagamento || null,
-      mesa: mesa ? Number(mesa) : null, origem: "BALCAO", numeroDia,
+      mesa: mesa ? Number(mesa) : null, origem: "BALCAO", numeroDia, status: "CONFIRMADO",
     },
     include: { restaurante: { select: { slugWhatsapp: true } } },
   });
@@ -2859,11 +2969,11 @@ router.post("/facturas/proximo-numero", authMiddleware, async (req, res) => {
   const rest = await prisma.restaurante.update({
     where: { id: rid },
     data: { faturaProximoNum: { increment: 1 } },
-    select: { faturaProximoNum: true, faturaSerie: true, faturaTimbrado: true, faturaRuc: true, faturaRazaoSocial: true, faturaEndereco: true, faturaCiudad: true, faturaTelefone: true, faturaVencTimbrado: true },
+    select: { faturaProximoNum: true, faturaSerie: true, faturaTimbrado: true, faturaRuc: true, faturaRazaoSocial: true, faturaEndereco: true, faturaCiudad: true, faturaTelefone: true, faturaVencTimbrado: true, faturaInicioVigencia: true },
   });
   const num = rest.faturaProximoNum - 1; // consumed number
   const serie = rest.faturaSerie || "001-001";
-  res.json({ numero: `${serie}-${String(num).padStart(7, "0")}`, timbrado: rest.faturaTimbrado || "", ruc: rest.faturaRuc, razaoSocial: rest.faturaRazaoSocial, endereco: rest.faturaEndereco, ciudad: rest.faturaCiudad, telefone: rest.faturaTelefone, vencTimbrado: rest.faturaVencTimbrado });
+  res.json({ numero: `${serie}-${String(num).padStart(7, "0")}`, timbrado: rest.faturaTimbrado || "", ruc: rest.faturaRuc, razaoSocial: rest.faturaRazaoSocial, endereco: rest.faturaEndereco, ciudad: rest.faturaCiudad, telefone: rest.faturaTelefone, vencTimbrado: rest.faturaVencTimbrado, inicioVigencia: rest.faturaInicioVigencia });
 });
 
 // ── Envio de link de acesso via WhatsApp ──────────────────────────────────────
@@ -2908,6 +3018,80 @@ router.post("/enviar-link-acesso", authMiddleware, async (req, res) => {
   } catch (err) {
     console.error("[admin] erro ao enviar link via WA:", err.message);
     res.status(500).json({ error: "Erro ao enviar mensagem no WhatsApp" });
+  }
+});
+
+// GET /admin/consultar-ruc/:ruc — proxy para turuc.com.py (evita CORS no browser)
+router.get('/consultar-ruc/:ruc', authMiddleware, async (req, res) => {
+  try {
+    const ruc = req.params.ruc.replace(/[^0-9\-]/g, '');
+    if (!ruc) return res.status(400).json({ error: 'RUC inválido' });
+    const resp = await fetch(`https://turuc.com.py/api/contribuyente/${ruc}`);
+    if (!resp.ok) return res.status(404).json({ error: 'RUC não encontrado' });
+    const data = await resp.json();
+    res.json(data);
+  } catch (e) {
+    res.status(500).json({ error: 'Erro ao consultar RUC' });
+  }
+});
+
+// ── Facturas emitidas (auditoria) ────────────────────────────────────────────
+
+router.post('/facturas/salvar', authMiddleware, async (req, res) => {
+  try {
+    const rid = resolverRestauranteId(req);
+    if (!rid) return res.status(400).json({ error: 'restauranteId obrigatório' });
+    const { numero, timbrado, cliNome, cliRuc, cliDirec, cliTel, condicion, itens, total, iva5, iva10, origem, mesa } = req.body;
+    if (!numero || total == null) return res.status(400).json({ error: 'numero e total obrigatórios' });
+    const factura = await prisma.factura.create({
+      data: {
+        restauranteId: rid,
+        numero,
+        timbrado: timbrado || '',
+        cliNome: cliNome || 'CONSUMIDOR FINAL',
+        cliRuc: cliRuc || null,
+        cliDirec: cliDirec || null,
+        cliTel: cliTel || null,
+        condicion: condicion || 'contado',
+        itens: Array.isArray(itens) ? itens : [],
+        total: Number(total),
+        iva5: Number(iva5 || 0),
+        iva10: Number(iva10 || 0),
+        origem: origem || 'PEDIDO',
+        mesa: mesa != null ? Number(mesa) : null,
+      }
+    });
+    res.json(factura);
+  } catch (e) {
+    console.error('[admin] erro ao salvar factura:', e.message);
+    res.status(500).json({ error: 'Erro ao salvar factura' });
+  }
+});
+
+router.get('/facturas/historico', authMiddleware, async (req, res) => {
+  try {
+    const rid = resolverRestauranteId(req);
+    if (!rid) return res.status(400).json({ error: 'restauranteId obrigatório' });
+    const { pagina = 1, limite = 100, inicio, fim } = req.query;
+    const where = { restauranteId: rid };
+    if (inicio || fim) {
+      where.createdAt = {};
+      if (inicio) where.createdAt.gte = new Date(inicio);
+      if (fim) where.createdAt.lte = new Date(fim + 'T23:59:59');
+    }
+    const [facturas, total] = await Promise.all([
+      prisma.factura.findMany({
+        where,
+        orderBy: { createdAt: 'desc' },
+        skip: (Number(pagina) - 1) * Number(limite),
+        take: Number(limite),
+      }),
+      prisma.factura.count({ where }),
+    ]);
+    res.json({ facturas, total });
+  } catch (e) {
+    console.error('[admin] erro ao listar facturas:', e.message);
+    res.status(500).json({ error: 'Erro ao listar facturas' });
   }
 });
 

@@ -360,7 +360,8 @@ router.post("/pedidos/:id/pronto", validarToken, async (req, res) => {
     const [categorias, estacoesAtivas] = await Promise.all([
       prisma.categoria.findMany({
         where: { restauranteId: atual.restauranteId, ativo: true },
-        select: { estacaoTipo: true, produtos: { where: { ativo: true }, select: { nome: true } } },
+        orderBy: { ordem: 'asc' },
+        select: { nome: true, estacaoTipo: true, produtos: { where: { ativo: true }, select: { nome: true } } },
       }),
       prisma.estacao.findMany({
         where: { restauranteId: atual.restauranteId, ativo: true },
@@ -374,8 +375,16 @@ router.post("/pedidos/:id/pronto", validarToken, async (req, res) => {
 
     const itemMap = [];
     for (const cat of categorias) {
+      const catNomeLower = cat.nome.toLowerCase().trim();
       for (const prod of cat.produtos) {
-        itemMap.push({ nome: prod.nome.toLowerCase().trim(), estacaoTipo: cat.estacaoTipo || 'GERAL' });
+        const prodNomeLower = prod.nome.toLowerCase().trim();
+        const estacaoTipo = cat.estacaoTipo || 'GERAL';
+        itemMap.push({ nome: prodNomeLower, estacaoTipo });
+        // Para categorias de pizza, também registra "pizza <sabor>" para disambiguar de outros
+        // produtos com mesmo nome em outra categoria (ex: "Burguer" em Pizza vs Hamburguesas)
+        if (catNomeLower.includes('pizza') && !prodNomeLower.startsWith('pizza')) {
+          itemMap.push({ nome: `pizza ${prodNomeLower}`, estacaoTipo });
+        }
       }
     }
 

@@ -206,11 +206,54 @@ function isDelivery(p) {
 
 function filtrarItensEstacao(itens, pedido) {
   if (!estacao || estacao.tipo === 'GERAL' || estacao.tipo === 'CAIXA') return itens;
+  const delivery = isDelivery(pedido);
+  const tipo = estacao.tipo;
+
+  // ── Tipos principais (novos) ────────────────────────────────────────────────
+  if (tipo === 'PIZZA_DELIVERY') {
+    if (!delivery) return [];
+    return itens.filter(i => { const t = resolverEstacaoItem(i.nome); return t === 'PIZZA' || t === 'GERAL'; });
+  }
+  if (tipo === 'PIZZA_LOCAL') {
+    if (delivery) return [];
+    return itens.filter(i => { const t = resolverEstacaoItem(i.nome); return t === 'PIZZA' || t === 'GERAL'; });
+  }
+  if (tipo === 'LANCHE_DELIVERY') {
+    if (!delivery) return [];
+    return itens.filter(i => { const t = resolverEstacaoItem(i.nome); return t === 'LANCHE' || t === 'GERAL'; });
+  }
+  if (tipo === 'LANCHE_LOCAL') {
+    if (delivery) return [];
+    return itens.filter(i => { const t = resolverEstacaoItem(i.nome); return t === 'LANCHE' || t === 'GERAL'; });
+  }
+  if (tipo === 'BAR_LOCAL') {
+    if (delivery) return [];
+    return itens.filter(i => resolverEstacaoItem(i.nome) === 'BAR');
+  }
+  if (tipo === 'BAR_DELIVERY') {
+    if (!delivery) return [];
+    return itens.filter(i => resolverEstacaoItem(i.nome) === 'BAR');
+  }
+
+  // ── Tipos legados (compatibilidade com estações criadas antes) ──────────────
+  if (tipo === 'LOCAL') return delivery ? [] : itens;
+  if (tipo === 'LOCAL_PIZZA') {
+    if (delivery) return [];
+    return itens.filter(i => { const t = resolverEstacaoItem(i.nome); return t === 'PIZZA' || t === 'GERAL'; });
+  }
+  if (tipo === 'LOCAL_LANCHE') {
+    if (delivery) return [];
+    return itens.filter(i => { const t = resolverEstacaoItem(i.nome); return t === 'LANCHE' || t === 'GERAL'; });
+  }
+  if (tipo === 'LOCAL_BAR') {
+    if (delivery) return [];
+    return itens.filter(i => resolverEstacaoItem(i.nome) === 'BAR');
+  }
+  // PIZZA / LANCHE / BAR legados: mostram todos (delivery + local)
   return itens.filter(i => {
-    const tipo = resolverEstacaoItem(i.nome);
-    // Bebidas de delivery não vão para o bar — só para cozinha geral/caixa
-    if (estacao.tipo === 'BAR' && tipo === 'BAR' && isDelivery(pedido)) return false;
-    return tipo === estacao.tipo || tipo === 'GERAL';
+    const t = resolverEstacaoItem(i.nome);
+    if (tipo === 'BAR') return t === 'BAR';
+    return t === tipo || t === 'GERAL';
   });
 }
 

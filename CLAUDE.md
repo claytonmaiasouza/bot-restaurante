@@ -308,7 +308,7 @@ Upload via painel: `POST /admin/restaurantes/:id/upload-cardapio-fotos`
 
 | Restaurante | Slug WhatsApp | Instância Evolution API |
 |---|---|---|
-| Don Pedro Pizzeria & Heladeria | `595982980051` | `0982980051` (bot-evolution:8181) |
+| Don Pedro Pizzeria & Heladeria | `595981078839` | `donpedro` (bot-evolution:8181) |
 
 ---
 

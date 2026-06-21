@@ -70,6 +70,7 @@ async function buscarCardapioAdmin(restauranteId) {
     bordas: cat.bordas || [],
     imagemUrl: cat.imagemUrl || null,
     ocultarMobile: cat.ocultarMobile || false,
+    visivelGarcom: cat.visivelGarcom !== false,
     canais: Array.isArray(cat.canais) ? cat.canais : ["SALAO", "DELIVERY", "WEB"],
     produtos: cat.produtos.map((p) => ({
       id: p.id,
@@ -132,13 +133,14 @@ async function criarProduto(categoriaId, dados) {
 }
 
 async function atualizarProduto(id, dados) {
-  const { nome, descricao, preco, ativo, tamanhos, imagemUrl } = dados;
+  const { nome, descricao, preco, ativo, visivelGarcom, tamanhos, imagemUrl } = dados;
 
   const data = {};
   if (nome !== undefined) data.nome = nome;
   if (descricao !== undefined) data.descricao = descricao;
   if (preco !== undefined) data.preco = preco;
   if (ativo !== undefined) data.ativo = ativo;
+  if (visivelGarcom !== undefined) data.visivelGarcom = visivelGarcom;
   if (imagemUrl !== undefined) data.imagemUrl = imagemUrl;
 
   // Se tamanhos fornecidos, substitui todos

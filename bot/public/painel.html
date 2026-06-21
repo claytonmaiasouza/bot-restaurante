@@ -153,10 +153,10 @@
       <p class="text-gray-400 text-[10px] font-semibold uppercase tracking-wider px-2 mb-2" data-i18n="nav.menu">Menu</p>
       <ul id="sidebar-nav-ul" class="flex flex-col gap-0.5">
         <li data-nav-key="pedidos"><button id="nav-pedidos" onclick="mostrarSecao('pedidos')" class="sidebar-nav-item sidebar-nav-active w-full text-left" data-i18n="nav.pedidos">🛒 Pedidos</button></li>
+        <li data-nav-key="caixa"><button id="nav-caixa" onclick="mostrarSecao('caixa')" class="sidebar-nav-item w-full text-left">💵 Caixa</button></li>
         <li data-nav-key="conversas"><button id="nav-conversas" onclick="mostrarSecao('conversas')" class="sidebar-nav-item w-full text-left" data-i18n="nav.conversas">💬 Conversas</button></li>
         <li data-nav-key="clientes"><button id="nav-clientes" onclick="mostrarSecao('clientes')" class="sidebar-nav-item w-full text-left" data-i18n="nav.clientes">👥 Clientes</button></li>
         <li data-nav-key="cardapio"><button id="nav-cardapio" onclick="mostrarSecao('cardapio')" class="sidebar-nav-item w-full text-left" data-i18n="nav.cardapio">🍽 Cardápio</button></li>
-        <li data-nav-key="app-mobile"><button onclick="abrirLojaApp()" class="sidebar-nav-item w-full text-left">🛍️ App Mobile</button></li>
         <li data-nav-key="motoboys"><button id="nav-motoboys" onclick="mostrarSecao('motoboys')" class="sidebar-nav-item w-full text-left" data-i18n="nav.motoboys">🛵 Motoboys</button></li>
         <li data-nav-key="garcons"><button id="nav-garcons" onclick="mostrarSecao('garcons')" class="sidebar-nav-item w-full text-left">🧑‍🍳 Garçons</button></li>
         <li data-nav-key="estacoes"><button id="nav-estacoes" onclick="mostrarSecao('estacoes')" class="sidebar-nav-item w-full text-left">📺 Estações</button></li>
@@ -175,7 +175,6 @@
           <ul id="ventas-submenu" class="hidden mt-0.5 space-y-0.5 border-l border-gray-200 ml-4 pl-2">
             <li><button id="nav-ventas-historial" onclick="mostrarSecao('ventas-historial')" class="sidebar-nav-item w-full text-left" style="font-size:0.8rem;padding:7px 10px">📋 Historial de pedidos</button></li>
             <li><button id="nav-ventas-reportes" onclick="mostrarSecao('ventas-reportes')" class="sidebar-nav-item w-full text-left" style="font-size:0.8rem;padding:7px 10px">📊 Reportes</button></li>
-            <li><button id="nav-caixa" onclick="mostrarSecao('caixa')" class="sidebar-nav-item w-full text-left" style="font-size:0.8rem;padding:7px 10px">💵 Caixa</button></li>
             <li><button id="nav-comprovantes" onclick="mostrarSecao('comprovantes')" class="sidebar-nav-item w-full text-left" style="font-size:0.8rem;padding:7px 10px">📋 Comprovantes</button></li>
             <li><button id="nav-facturas" onclick="mostrarSecao('facturas')" class="sidebar-nav-item w-full text-left" style="font-size:0.8rem;padding:7px 10px">🧾 Facturas</button></li>
           </ul>
@@ -197,6 +196,18 @@
       <button id="btn-voltar-restaurantes" onclick="mostrarTelaRestaurantes()" class="hidden w-full flex items-center gap-2 px-3 py-2 text-xs text-gray-500 hover:text-gray-800 transition-colors rounded-xl hover:bg-gray-100" data-i18n="nav.trocar">
         ← Trocar restaurante
       </button>
+      <div id="sidebar-apps-section" class="hidden flex flex-col gap-1">
+        <p class="text-[10px] uppercase text-gray-400 font-semibold px-2 mb-0.5">Apps</p>
+        <button onclick="abrirLinkIframe('garcon')" class="w-full flex items-center gap-2 px-3 py-2 text-xs font-medium text-indigo-600 hover:text-indigo-800 transition-colors rounded-xl hover:bg-indigo-50 border border-indigo-200">
+          ↗ App Garçons
+        </button>
+        <button onclick="abrirLinkIframe('motoboy')" class="w-full flex items-center gap-2 px-3 py-2 text-xs font-medium text-blue-600 hover:text-blue-800 transition-colors rounded-xl hover:bg-blue-50 border border-blue-200">
+          ↗ App Motoboy
+        </button>
+        <button onclick="abrirLojaApp()" class="w-full flex items-center gap-2 px-3 py-2 text-xs font-medium text-green-600 hover:text-green-800 transition-colors rounded-xl hover:bg-green-50 border border-green-200">
+          ↗ App Mobile
+        </button>
+      </div>
       <button onclick="alternarIdioma()" id="btn-idioma"
         class="w-full flex items-center justify-center gap-1 px-3 py-2 text-xs font-bold text-gray-500 hover:text-gray-800 transition-colors rounded-xl hover:bg-gray-100 border border-gray-200">
         🇧🇷&nbsp;PT
@@ -332,10 +343,20 @@
     <div id="secao-mesas" class="hidden px-6 pb-6">
       <div class="flex items-center justify-between mb-4 flex-wrap gap-2">
         <p id="mesas-contagem" class="text-sm text-[#718096]">Carregando mesas...</p>
-        <div class="flex items-center gap-3 text-xs text-[#718096]">
-          <span class="flex items-center gap-1.5"><span class="w-3 h-3 rounded-full bg-white border-2 border-gray-300 inline-block"></span> Livre</span>
-          <span class="flex items-center gap-1.5"><span class="w-3 h-3 rounded-full bg-amber-100 border-2 border-amber-400 inline-block"></span> Ocupada</span>
-          <span class="flex items-center gap-1.5"><span class="w-3 h-3 rounded-full bg-green-100 border-2 border-green-400 inline-block"></span> Pronta</span>
+        <div class="flex items-center gap-3 flex-wrap">
+          <div class="flex items-center gap-3 text-xs text-[#718096]">
+            <span class="flex items-center gap-1.5"><span class="w-3 h-3 rounded-full bg-white border-2 border-gray-300 inline-block"></span> Livre</span>
+            <span class="flex items-center gap-1.5"><span class="w-3 h-3 rounded-full bg-amber-100 border-2 border-amber-400 inline-block"></span> Ocupada</span>
+            <span class="flex items-center gap-1.5"><span class="w-3 h-3 rounded-full bg-green-100 border-2 border-green-400 inline-block"></span> Pronta</span>
+          </div>
+          <div class="flex items-center gap-1.5">
+            <input id="mesa-numero-direto" type="number" min="1" placeholder="Nº mesa" onkeydown="if(event.key==='Enter')abrirMesaDireta()"
+              class="w-24 border border-gray-300 rounded-lg px-2.5 py-1.5 text-sm text-center focus:outline-none focus:ring-2 focus:ring-blue-400">
+            <button onclick="abrirMesaDireta()"
+              class="bg-[#2B7DD4] hover:bg-[#2570c0] text-white text-xs font-semibold px-3 py-1.5 rounded-lg transition">
+              Abrir
+            </button>
+          </div>
         </div>
       </div>
       <div id="mesas-grid" class="grid gap-4" style="grid-template-columns: repeat(auto-fill, minmax(143px, 1fr))"></div>
@@ -3380,7 +3401,7 @@ const TRADUCOES = {
     'rest.super-admin':'Super Admin','rest.restaurantes':'Restaurantes registrados',
     'nav.menu':'Menú','nav.restaurante':'Restaurante',
     'nav.pedidos':'🛒 Pedidos','nav.conversas':'💬 Conversaciones','nav.clientes':'👥 Clientes',
-    'nav.cardapio':'🍽 Menú','nav.motoboys':'🛵 Repartidores','nav.crm':'🎯 CRM',
+    'nav.cardapio':'🍽 Cardápio','nav.motoboys':'🛵 Repartidores','nav.crm':'🎯 CRM',
     'nav.metricas':'📊 Métricas','nav.estoque':'📦 Stock','nav.financeiro':'💰 Financiero',
     'nav.configuracoes':'⚙️ Configuración',
     'nav.trocar':'← Cambiar restaurante','nav.sair':'✕ Salir',
@@ -3681,6 +3702,7 @@ function entrarNoPainel(nomeRestaurante) {
     document.getElementById('sidebar-restaurante-nome').classList.remove('hidden');
     document.getElementById('sidebar-restaurante-label').textContent = nomeRestaurante;
   }
+  document.getElementById('sidebar-apps-section').classList.remove('hidden');
   _aplicarEstadoSidebar();
   aplicarOrdemMenu();
   mostrarSecao('pedidos');
@@ -4020,6 +4042,12 @@ function aplicarOrdemMenu() {
       const li = ul.querySelector(`li[data-nav-key="${key}"]`);
       if (li) ul.appendChild(li);
     });
+    // Garante que caixa fique sempre logo após pedidos
+    const liPedidos = ul.querySelector('li[data-nav-key="pedidos"]');
+    const liCaixa = ul.querySelector('li[data-nav-key="caixa"]');
+    if (liPedidos && liCaixa && liPedidos.nextElementSibling !== liCaixa) {
+      liPedidos.insertAdjacentElement('afterend', liCaixa);
+    }
   } catch(e) {}
 }
 
@@ -4134,20 +4162,20 @@ function renderizarMesas() {
       pronta ? 'bg-green-50 border-green-400 hover:border-green-500' :
                'bg-amber-50 border-amber-300 hover:border-amber-400 shadow-sm'}`;
     btn.onclick = () => abrirMesa(mesa);
-    const numColor = temFechamento ? 'text-indigo-700' : livre ? 'text-gray-300' : pronta ? 'text-green-700' : 'text-amber-800';
-    let inner = `<div class="text-4xl font-black ${numColor}">${mesa}</div>`;
+    const numColor = temFechamento ? 'text-indigo-700' : livre ? 'text-gray-400' : pronta ? 'text-green-700' : 'text-amber-800';
+    let inner = `<div class="text-5xl font-black ${numColor} leading-none">${mesa}</div>`;
     if (!livre) {
       const total = formatarPreco(pedido.total, moeda);
       const mins = Math.floor((Date.now() - new Date(pedido.createdAt).getTime()) / 60000);
       const qty = pedido.itens.reduce((s, i) => s + (i.quantidade || 1), 0);
-      inner += `<div class="text-sm mt-1.5 font-medium ${temFechamento ? 'text-indigo-500' : pronta ? 'text-green-600' : 'text-amber-600'}">${qty} iten${qty !== 1 ? 's' : ''}</div>`;
+      inner += `<div class="text-sm mt-2 font-medium ${temFechamento ? 'text-indigo-500' : pronta ? 'text-green-600' : 'text-amber-600'}">${qty} iten${qty !== 1 ? 's' : ''}</div>`;
       inner += `<div class="text-sm font-bold mt-1 ${temFechamento ? 'text-indigo-700' : pronta ? 'text-green-800' : 'text-amber-900'}">${total}</div>`;
       inner += `<div class="text-sm text-gray-400">${mins}min</div>`;
       if (pedido.garconCor) {
         inner += `<div class="mt-2 w-3.5 h-3.5 rounded-full mx-auto" style="background:${pedido.garconCor}" title="${pedido.garconNome || 'Garçom'}"></div>`;
       }
     } else {
-      inner += `<div class="text-sm text-gray-300 mt-2">Livre</div>`;
+      inner += `<div class="text-sm font-semibold text-green-500 mt-2">Livre</div>`;
     }
     btn.innerHTML = inner;
     wrapper.appendChild(btn);
@@ -4185,6 +4213,14 @@ function renderizarMesaHistorico(historico) {
       ${resumo ? `<div class="text-gray-400 truncate mt-0.5">${resumo}</div>` : ''}
     </div>`;
   }).join('');
+}
+
+function abrirMesaDireta() {
+  const input = document.getElementById('mesa-numero-direto');
+  const num = parseInt(input?.value, 10);
+  if (!num || num < 1) return;
+  input.value = '';
+  abrirMesa(num);
 }
 
 async function abrirMesa(num) {
@@ -4320,7 +4356,8 @@ function mesaAppRenderHome() {
   mesaCardapio.forEach(cat => {
     const emoji = _maCatEmoji(cat.nome);
     const ehPizza = cat.tipoTamanhos === 'pizza';
-    const qtd = (cat.produtos || []).filter(p => p.ativo !== false).length;
+    const qtd = (cat.produtos || []).filter(p => p.ativo !== false && p.visivelGarcom !== false).length;
+    if (!ehPizza && qtd === 0) return;
     const card = document.createElement('div');
     card.style.cssText = 'background:#fff;border-radius:20px;padding:28px 14px 23px;text-align:center;cursor:pointer;border:2px solid #f0f0f0;box-shadow:0 2px 8px rgba(0,0,0,.06);transition:transform .12s,box-shadow .15s,border-color .15s;user-select:none';
     card.addEventListener('mouseenter', () => { card.style.transform='translateY(-3px)'; card.style.boxShadow='0 8px 24px rgba(0,0,0,.12)'; card.style.borderColor='#bfdbfe'; });
@@ -4360,7 +4397,7 @@ function mesaAppRenderLista() {
   const emoji = _maCatEmoji(mesaAppCatAtual.nome);
   const grid = document.createElement('div');
   grid.style.cssText = 'display:grid;grid-template-columns:repeat(4,1fr);gap:12px';
-  mesaAppCatAtual.produtos.filter(p => p.ativo !== false).forEach(prod => {
+  mesaAppCatAtual.produtos.filter(p => p.ativo !== false && p.visivelGarcom !== false).forEach(prod => {
     const minPreco = prod.tamanhos?.length ? Math.min(...prod.tamanhos.map(t => t.preco)) : (prod.preco || 0);
     const temTamanhos = (prod.tamanhos?.length || 0) > 1;
     const card = document.createElement('div');
@@ -4593,7 +4630,7 @@ function mesaAppRenderSabStep() {
   hdr.style.cssText = 'display:flex;align-items:center;justify-content:space-between;margin-bottom:10px';
   hdr.innerHTML = `<p style="font-size:13px;font-weight:700;color:#4b5563">😋 Qual o sabor?</p><span style="font-size:11px;font-weight:700;background:#fff7ed;color:#ea580c;border-radius:99px;padding:2px 8px">${sel.length}/${max}</span>`;
   content.appendChild(hdr);
-  cat.produtos.filter(p => p.ativo !== false).forEach(prod => {
+  cat.produtos.filter(p => p.ativo !== false && p.visivelGarcom !== false).forEach(prod => {
     const idx = sel.findIndex(s => s.nome === prod.nome);
     const isSelected = idx >= 0;
     const lotado = !isSelected && sel.length >= max;
@@ -4800,11 +4837,28 @@ function _adicionarItemMesa(nome, preco) {
   renderizarMesaCarrinho();
 }
 
+function _atualizarBtnFecharMesa() {
+  const btn = document.getElementById('btn-fechar-conta');
+  if (!btn) return;
+  if (mesaCarrinho.length > 0) {
+    btn.innerHTML = '🖨️ Fechar conta';
+    btn.onclick = fecharContaMesa;
+    btn.style.background = 'linear-gradient(135deg,#10b981,#059669)';
+    btn.style.boxShadow = '0 4px 14px rgba(16,185,129,.3)';
+  } else {
+    btn.innerHTML = '🚪 Fechar Mesa';
+    btn.onclick = fecharModalMesa;
+    btn.style.background = 'linear-gradient(135deg,#6b7280,#4b5563)';
+    btn.style.boxShadow = '0 4px 14px rgba(75,85,99,.25)';
+  }
+}
+
 function renderizarMesaCarrinho() {
   const lista = document.getElementById('mesa-itens-lista');
   const totalEl = document.getElementById('mesa-total');
   const moeda = getMoeda() || 'Gs';
   lista.innerHTML = '';
+  _atualizarBtnFecharMesa();
   if (!mesaCarrinho.length) {
     lista.innerHTML = '<p class="text-sm text-gray-400 text-center mt-8">Nenhum item.<br><span class="text-xs">Adicione pelo cardápio →</span></p>';
     totalEl.textContent = formatarPreco(0, moeda);
@@ -6615,10 +6669,20 @@ function criarCard(pedido) {
 
   const itensHtml = itens.map(i => {
     const pz = _parsePizzaTicket(i.nome);
-    const nome = pz ? `🍕 ${_limparTamanho(pz.tamanho)}` : i.nome;
+    if (pz) {
+      const tam = _limparTamanho(pz.tamanho);
+      const saboresHtml = pz.sabores.map(s =>
+        `<div style="color:${clay.txt};opacity:0.72" class="text-[10px] font-semibold leading-snug pl-1">▸ ${s}</div>`
+      ).join('');
+      const bordaHtml = pz.borda ? `<div style="color:${clay.txt};opacity:0.55" class="text-[10px] font-medium leading-snug pl-1 italic">▸ ${pz.borda}</div>` : '';
+      return `<div class="flex gap-1.5 items-start">
+        <span style="color:${clay.txt};opacity:0.6" class="text-[11px] font-bold shrink-0">${i.quantidade || 1}x</span>
+        <div class="flex-1"><span style="color:${clay.txt}" class="text-[11px] font-medium leading-snug">🍕 ${tam}</span>${saboresHtml}${bordaHtml}</div>
+      </div>`;
+    }
     return `<div class="flex gap-1.5 items-baseline">
       <span style="color:${clay.txt};opacity:0.6" class="text-[11px] font-bold shrink-0">${i.quantidade || 1}x</span>
-      <span style="color:${clay.txt}" class="text-[11px] font-medium leading-snug">${nome}</span>
+      <span style="color:${clay.txt}" class="text-[11px] font-medium leading-snug">${i.nome}</span>
     </div>`;
   }).join('');
 
@@ -6660,8 +6724,11 @@ function criarCard(pedido) {
   }).join('');
 
   const tipoLabel = isMesa ? '🪑 Salão' : isRetirada ? '🏪 Retirada' : '🛵 Entrega';
+  const garcomDot = isMesa && pedido.garconCor
+    ? `<span style="display:inline-block;width:9px;height:9px;border-radius:50%;background:${pedido.garconCor};margin-right:3px;vertical-align:middle;box-shadow:0 1px 3px rgba(0,0,0,0.3)"></span>`
+    : '';
   const nomeCliente = isMesa
-    ? `🪑 Mesa ${pedido.mesa}${pedido.garconNome ? ' · ' + pedido.garconNome : ''}`
+    ? `🪑 Mesa ${pedido.mesa}${pedido.garconNome ? ' · ' + garcomDot + pedido.garconNome : ''}`
     : (pedido.clienteNome || 'Cliente');
   const metodoLabel = (pedido.metodoPagamento || '').replace(/\s*\([^)]*\)\s*$/, '').trim() || '';
 
@@ -8579,6 +8646,12 @@ function renderizarCardapio(categoriasRaw) {
               <span class="text-base leading-none">💬</span>
               <span class="text-[10px] leading-none font-semibold">WhatsApp</span>
             </button>
+            <button onclick="toggleCategoriaGarcom('${cat.id}', ${cat.visivelGarcom !== false})"
+              title="${cat.visivelGarcom !== false ? 'Garçom ativo — clique para ocultar' : 'Garçom oculto — clique para ativar'}"
+              class="flex flex-col items-center gap-0.5 px-2.5 py-1.5 rounded-lg border transition font-semibold ${cat.visivelGarcom !== false ? 'bg-orange-50 border-orange-300 text-orange-700' : 'bg-gray-50 border-gray-200 text-gray-400'}">
+              <span class="text-base leading-none">🧑‍🍳</span>
+              <span class="text-[10px] leading-none font-semibold">Garçom</span>
+            </button>
           </div>
           <button onclick="abrirModalProduto('${cat.id}')"
             class="text-xs bg-orange-100 hover:bg-orange-200 text-orange-700 px-2.5 py-1.5 rounded-lg transition">${t('card.add-prod')}</button>
@@ -8639,6 +8712,16 @@ async function toggleCategoriaCanal(id, canal) {
   carregarCardapio();
 }
 
+async function toggleCategoriaGarcom(id, visivelAtual) {
+  await fetch(`/admin/cardapio/categorias/${id}`, {
+    method: 'PATCH',
+    headers: getHeaders({ 'Content-Type': 'application/json' }),
+    body: JSON.stringify({ visivelGarcom: !visivelAtual }),
+  });
+  mesaCardapio = [];
+  carregarCardapio();
+}
+
 async function toggleProduto(id, ativoAtual) {
   await fetch(`/admin/cardapio/produtos/${id}`, {
     method: 'PATCH',
@@ -8648,11 +8731,22 @@ async function toggleProduto(id, ativoAtual) {
   carregarCardapio();
 }
 
+async function toggleProdutoGarcom(id, visivelAtual) {
+  await fetch(`/admin/cardapio/produtos/${id}`, {
+    method: 'PATCH',
+    headers: getHeaders({ 'Content-Type': 'application/json' }),
+    body: JSON.stringify({ visivelGarcom: !visivelAtual }),
+  });
+  mesaCardapio = [];
+  carregarCardapio();
+}
+
 function renderizarProdutoLinha(p, catTamanhos = [], catNome = '') {
   const moeda = getMoeda() || 'R$';
   let precoTexto = '';
   let precoClass = inativo => inativo ? 'text-gray-400' : 'text-orange-600';
   const inativo = p.ativo === false;
+  const garcomOculto = p.visivelGarcom === false;
 
   if (catTamanhos.length > 0) {
     const temPadrao = catTemPrecosPadrao(catTamanhos);
@@ -8690,6 +8784,11 @@ function renderizarProdutoLinha(p, catTamanhos = [], catNome = '') {
           title="${inativo ? 'Mostrar produto' : 'Ocultar produto'}"
           class="text-xs px-2 py-1 rounded-lg transition ${inativo ? 'bg-green-100 hover:bg-green-200 text-green-700' : 'bg-yellow-100 hover:bg-yellow-200 text-yellow-700'}">
           ${inativo ? '👁' : '🙈'}
+        </button>
+        <button onclick="toggleProdutoGarcom('${p.id}', ${!garcomOculto})"
+          title="${garcomOculto ? 'Mostrar no app garçom' : 'Ocultar no app garçom'}"
+          class="text-xs px-2 py-1 rounded-lg transition ${garcomOculto ? 'bg-orange-100 hover:bg-orange-200 text-orange-700' : 'bg-gray-100 hover:bg-gray-200 text-gray-500'}">
+          🧑‍🍳${garcomOculto ? ' ✗' : ''}
         </button>
         <button onclick="editarProduto('${p.id}')" class="text-xs text-gray-400 hover:text-gray-600 transition px-1">✏️</button>
         <button onclick="deletarProduto('${p.id}')" class="text-xs text-red-400 hover:text-red-600 transition px-1">🗑</button>
@@ -10516,6 +10615,16 @@ async function carregarGarcons() {
           class="mt-2 inline-flex items-center gap-1 text-xs bg-green-500 hover:bg-green-600 text-white px-3 py-1.5 rounded-lg font-medium transition">
           📲 Enviar link via WhatsApp
         </button>` : '<p class="text-xs text-gray-400 mt-2">Adicione o WhatsApp para enviar o link</p>'}
+        <div class="mt-1.5 flex gap-1.5">
+          <button onclick="abrirLinkGarcon()"
+            class="inline-flex items-center gap-1 text-xs bg-indigo-50 hover:bg-indigo-100 text-indigo-600 px-2.5 py-1.5 rounded-lg font-medium transition">
+            ↗ Abrir link
+          </button>
+          <button onclick="copiarLinkGarcon(this)"
+            class="inline-flex items-center gap-1 text-xs bg-gray-100 hover:bg-gray-200 text-gray-600 px-2.5 py-1.5 rounded-lg font-medium transition">
+            📋 Copiar link
+          </button>
+        </div>
       </div>
       <div class="flex flex-col gap-1.5 shrink-0">
         <button onclick="abrirModalEditarGarcon('${g.id}','${nomeEsc}','${telEsc}','${cedEsc}','${corEsc}')"
@@ -10657,7 +10766,8 @@ async function carregarEstacoes() {
         <p class="text-xs text-green-600 mt-1">🔑 Senha configurada</p>
       </div>
       <div class="flex flex-col gap-1.5 shrink-0">
-        ${['LOCAL','LOCAL_PIZZA','LOCAL_LANCHE','LOCAL_BAR','PIZZA_LOCAL','LANCHE_LOCAL','BAR_LOCAL'].includes(e.tipo) ? `<button onclick="abrirFilaLocal()" class="text-xs bg-green-500 hover:bg-green-600 text-white px-2.5 py-1.5 rounded-lg transition font-semibold">🎯 Abrir Fila</button>` : ''}
+        <button onclick="abrirEstacaoNovaAba('${e.id}')"
+          class="text-xs bg-purple-50 hover:bg-purple-100 text-purple-600 px-2.5 py-1.5 rounded-lg transition font-semibold">↗ Abrir</button>
         <button onclick="abrirModalEditarEstacao('${e.id}','${nomeEsc}','${tipoEsc}','${corEsc}')"
           class="text-xs bg-gray-100 hover:bg-gray-200 text-gray-600 px-2.5 py-1.5 rounded-lg transition">✏️ Editar</button>
         <button onclick="excluirEstacao('${e.id}')"
@@ -10720,6 +10830,41 @@ async function excluirEstacao(id) {
   await fetch(`/admin/estacoes/${id}`, { method: 'DELETE', headers: getHeaders() });
   carregarEstacoes();
   mostrarToast('Estação removida.');
+}
+
+async function abrirEstacaoNovaAba(estacaoId) {
+  const slug = restauranteInfo?.slug || restaurantes.find(r => r.id === (estacaoRestauranteId || restauranteAtual))?.slugWhatsapp;
+  if (!slug) { mostrarToast('Selecione um restaurante primeiro.'); return; }
+  try {
+    const res = await fetch(`/painel/token/${slug}`, { headers: getHeaders() });
+    if (!res.ok) { mostrarToast('Erro ao gerar link.'); return; }
+    const data = await res.json();
+    window.open(`${data.cozinha}&estacao=${estacaoId}`, '_blank', 'noopener');
+  } catch { mostrarToast('Erro ao gerar link.'); }
+}
+
+async function abrirLinkGarcon() {
+  const slug = restauranteInfo?.slug || restaurantes.find(r => r.id === (garconRestauranteId || restauranteAtual))?.slugWhatsapp;
+  if (!slug) { mostrarToast('Selecione um restaurante primeiro.'); return; }
+  try {
+    const res = await fetch(`/painel/token/${slug}`, { headers: getHeaders() });
+    if (!res.ok) { mostrarToast('Erro ao gerar link.'); return; }
+    const data = await res.json();
+    window.open(data.garcon, '_blank', 'noopener');
+  } catch { mostrarToast('Erro ao gerar link.'); }
+}
+
+async function copiarLinkGarcon(btn) {
+  const slug = restauranteInfo?.slug || restaurantes.find(r => r.id === (garconRestauranteId || restauranteAtual))?.slugWhatsapp;
+  if (!slug) { mostrarToast('Selecione um restaurante primeiro.'); return; }
+  try {
+    const res = await fetch(`/painel/token/${slug}`, { headers: getHeaders() });
+    if (!res.ok) { mostrarToast('Erro ao gerar link.'); return; }
+    const data = await res.json();
+    await navigator.clipboard.writeText(data.garcon);
+    if (btn) { const orig = btn.innerHTML; btn.innerHTML = '✅ Copiado!'; setTimeout(() => { btn.innerHTML = orig; }, 2000); }
+    mostrarToast('Link do App Garçons copiado! 📋');
+  } catch { mostrarToast('Erro ao gerar link.'); }
 }
 
 // ── Motoboys ─────────────────────────────────────────────────────────────────

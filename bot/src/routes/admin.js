@@ -188,7 +188,7 @@ router.get("/pedidos", async (req, res) => {
   const limite = limiteQuery ? Math.min(Number(limiteQuery), 200) : 50;
   const offset = (Number(pagina) - 1) * limite;
 
-  const where = {};
+  const where = { NOT: { AND: [{ origem: "MESA" }, { total: 0 }] } };
   if (restauranteId) where.restauranteId = restauranteId;
   if (status && status !== "Todos") {
     if (status === "PAGO") {

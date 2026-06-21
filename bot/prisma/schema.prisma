@@ -86,6 +86,7 @@ model Categoria {
   bordas         Json        @default("[]")
   imagemUrl      String?
   ocultarMobile  Boolean     @default(false)
+  visivelGarcom  Boolean     @default(true)
   estacaoTipo    String      @default("GERAL")  // GERAL | PIZZA | LANCHE | BAR | CAIXA
   canais         Json        @default("[\"SALAO\",\"DELIVERY\",\"WEB\"]")  // SALAO | DELIVERY | WEB
   restauranteId  String
@@ -100,7 +101,8 @@ model Produto {
   descricao   String?
   imagemUrl   String?
   preco       Float     @default(0)
-  ativo       Boolean   @default(true)
+  ativo          Boolean   @default(true)
+  visivelGarcom  Boolean   @default(true)
   categoriaId String
   categoria   Categoria @relation(fields: [categoriaId], references: [id], onDelete: Cascade)
   tamanhos    Tamanho[]

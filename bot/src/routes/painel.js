@@ -256,7 +256,7 @@ router.get("/pedidos", validarToken, async (req, res) => {
       clienteNome: true, clienteNumero: true, localizacao: true,
       itens: true, total: true, metodoPagamento: true, mesa: true,
       motoboyNome: true, motoboyId: true, createdAt: true, comprovanteUrl: true,
-      preparoEstacoes: true,
+      preparoEstacoes: true, garconNome: true, garconCor: true,
     },
   });
 
@@ -629,12 +629,12 @@ router.get("/garcon/cardapio", validarToken, async (req, res) => {
   if (!rest) return res.status(404).json({ error: "Restaurante não encontrado" });
   const todasCategorias = await prisma.categoria.findMany({
     where: { restauranteId: rest.id, ativo: true },
-    include: { produtos: { where: { ativo: true }, include: { tamanhos: true }, orderBy: { nome: "asc" } } },
+    include: { produtos: { where: { ativo: true, visivelGarcom: true }, include: { tamanhos: true }, orderBy: { nome: "asc" } } },
     orderBy: { ordem: "asc" },
   });
   const categorias = todasCategorias.filter(c => {
     const canais = Array.isArray(c.canais) ? c.canais : ["SALAO", "DELIVERY", "WEB"];
-    return canais.includes("SALAO");
+    return canais.includes("SALAO") && c.visivelGarcom !== false;
   });
   res.json({ data: categorias, moeda: rest.moeda });
 });
@@ -645,8 +645,8 @@ router.get("/garcon/mesas", validarToken, async (req, res) => {
   if (!rest) return res.status(404).json({ error: "Restaurante não encontrado" });
   const pedidos = await prisma.pedido.findMany({
     where: { restauranteId: rest.id, origem: "MESA", status: { notIn: ["ENTREGUE", "CANCELADO"] } },
-    select: { id: true, mesa: true, itens: true, total: true, status: true, garconId: true, garconNome: true, garconCor: true, createdAt: true },
-    orderBy: { mesa: "asc" },
+    select: { id: true, mesa: true, itens: true, total: true, status: true, numeroDia: true, garconId: true, garconNome: true, garconCor: true, createdAt: true },
+    orderBy: [{ mesa: "asc" }, { createdAt: "asc" }],
   });
   res.json({ data: pedidos, moeda: rest.moeda });
 });
@@ -675,9 +675,6 @@ router.post("/garcon/mesas", validarToken, async (req, res) => {
       garconId: garconId || null, garconNome: garconNome || null, garconCor: garconCor || null,
     },
   });
-  const io = req.app.get("io");
-  io?.to("admin").emit("pedido:novo", pedido);
-  io?.to(`restaurante:${req.painelSlug}`).emit("pedido:novo", pedido);
   res.json({ ok: true, data: pedido });
 });
 
@@ -687,17 +684,43 @@ router.post("/garcon/mesas/:pedidoId/itens", validarToken, async (req, res) => {
   if (!itens?.length) return res.status(400).json({ error: "itens obrigatórios" });
   const pedido = await prisma.pedido.findUnique({
     where: { id: req.params.pedidoId },
-    select: { itens: true, total: true, garconId: true },
+    select: { itens: true, total: true, garconId: true, status: true, mesa: true, restauranteId: true },
   });
   if (!pedido) return res.status(404).json({ error: "Pedido não encontrado" });
+
+  const io = req.app.get("io");
+
+  // Cozinha já iniciou o preparo — criar novo pedido para a mesa
+  if (["PREPARANDO", "PRONTO_PARA_RETIRADA", "AGUARDANDO_DESPACHO"].includes(pedido.status)) {
+    const rest = await prisma.restaurante.findFirst({ where: { slugWhatsapp: req.painelSlug, ativo: true }, select: { id: true } });
+    if (!rest) return res.status(404).json({ error: "Restaurante não encontrado" });
+    const numeroDia = await proximoNumeroDia(rest.id).catch(() => null);
+    const totalNovo = itens.reduce((s, i) => s + i.preco * i.quantidade, 0);
+    const sessao = await prisma.sessao.create({
+      data: { clienteNumero: `mesa-${pedido.mesa}`, clienteNome: `Mesa ${pedido.mesa}`, restauranteId: rest.id, estado: "FINALIZADO", carrinho: [] },
+    });
+    const novoPedido = await prisma.pedido.create({
+      data: {
+        sessaoId: sessao.id, restauranteId: rest.id,
+        clienteNumero: `mesa-${pedido.mesa}`, clienteNome: `Mesa ${pedido.mesa}`,
+        itens, total: totalNovo, status: "CONFIRMADO",
+        mesa: pedido.mesa, origem: "MESA", numeroDia,
+        garconId: garconId || null, garconNome: garconNome || null, garconCor: garconCor || null,
+      },
+    });
+    io?.to("admin").emit("pedido:novo", novoPedido);
+    io?.to(`restaurante:${req.painelSlug}`).emit("pedido:novo", novoPedido);
+    return res.json({ ok: true, data: novoPedido, novoPedido: true });
+  }
+
   const itensAtuais = Array.isArray(pedido.itens) ? pedido.itens : [];
   const totalExtra = itens.reduce((s, i) => s + i.preco * i.quantidade, 0);
   const data = { itens: [...itensAtuais, ...itens], total: pedido.total + totalExtra };
   if (!pedido.garconId && garconId) { data.garconId = garconId; data.garconNome = garconNome; data.garconCor = garconCor; }
   const updated = await prisma.pedido.update({ where: { id: req.params.pedidoId }, data });
-  const io = req.app.get("io");
-  io?.to("admin").emit("pedido:atualizado", updated);
-  io?.to(`restaurante:${req.painelSlug}`).emit("pedido:atualizado", updated);
+  const eventoSocket = itensAtuais.length === 0 ? "pedido:novo" : "pedido:atualizado";
+  io?.to("admin").emit(eventoSocket, updated);
+  io?.to(`restaurante:${req.painelSlug}`).emit(eventoSocket, updated);
   res.json({ ok: true, data: updated });
 });
 
@@ -713,6 +736,25 @@ router.post("/garcon/mesas/:pedidoId/solicitar-fechamento", validarToken, async 
   io?.to("admin").to(`restaurante:${req.painelSlug}`).emit("garcon:solicitar-fechamento", {
     pedidoId: pedido.id, numeroDia: pedido.numeroDia, mesa: pedido.mesa,
     total: pedido.total, garconId, garconNome, garconCor,
+  });
+  res.json({ ok: true });
+});
+
+// POST /painel/garcon/mesas/:pedidoId/cancelar — cancela mesa vazia (sem itens)
+router.post("/garcon/mesas/:pedidoId/cancelar", validarToken, async (req, res) => {
+  const pedido = await prisma.pedido.findUnique({
+    where: { id: req.params.pedidoId },
+    select: { id: true, mesa: true, restauranteId: true },
+  });
+  if (!pedido) return res.status(404).json({ error: "Pedido não encontrado" });
+  await prisma.pedido.updateMany({
+    where: {
+      restauranteId: pedido.restauranteId,
+      mesa: pedido.mesa,
+      origem: "MESA",
+      status: { notIn: ["ENTREGUE", "CANCELADO"] },
+    },
+    data: { status: "CANCELADO" },
   });
   res.json({ ok: true });
 });

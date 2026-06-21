@@ -76,7 +76,11 @@ body{font-family:-apple-system,BlinkMacSystemFont,'Segoe UI',sans-serif;backgrou
 .garcon-prod-nome{font-size:13px;font-weight:700;color:#1a202c;line-height:1.3}
 .garcon-prod-desc{font-size:11px;color:#9ca3af;margin-top:2px}
 .garcon-prod-preco{font-size:12px;font-weight:700;color:#ea580c;margin-top:3px}
-.add-btn{width:34px;height:34px;border-radius:50%;background:#6366f1;color:#fff;border:none;font-size:22px;cursor:pointer;display:flex;align-items:center;justify-content:center;flex-shrink:0;font-weight:300}
+.add-btn{width:38px;height:38px;border-radius:50%;background:#ef4444;color:#fff;border:none;font-size:28px;cursor:pointer;display:flex;align-items:center;justify-content:center;flex-shrink:0;font-weight:300;line-height:1}
+#tab-btn-cardapio{color:#ef4444;border-color:#ef4444}
+#tab-btn-cardapio.active{color:#fff;background:#ef4444;border-color:#ef4444;box-shadow:0 4px 14px rgba(239,68,68,.35)}
+#tab-btn-cesta{color:#f59e0b;border-color:#f59e0b;font-size:13px;padding:10px 6px}
+#tab-btn-cesta.ativa{color:#fff;background:#f59e0b;border-color:#f59e0b;box-shadow:0 4px 14px rgba(245,158,11,.35)}
 /* Builder pizza */
 #garcon-bld-content{padding:12px}
 .garcon-bld-footer{background:#fff;border-top:1.5px solid #f0f0f0;padding:12px;position:sticky;bottom:0}
@@ -124,26 +128,32 @@ body{font-family:-apple-system,BlinkMacSystemFont,'Segoe UI',sans-serif;backgrou
 </head>
 <body>
 
-<!-- ── Notificação: pedidos prontos ───────────────────────────────────────── -->
+<!-- ── Painel de Notificações ─────────────────────────────────────────────── -->
 <div id="garcon-prontos-overlay" style="display:none;position:fixed;inset:0;background:rgba(0,0,0,.55);z-index:9000" onclick="fecharProntoOverlay()"></div>
-<div id="garcon-prontos-sheet" style="display:none;position:fixed;bottom:0;left:0;right:0;z-index:9001;padding:16px;max-height:70vh;overflow-y:auto;background:#fff;border-radius:24px 24px 0 0;box-shadow:0 -8px 40px rgba(0,0,0,.25)">
-  <div style="width:40px;height:4px;background:#e5e7eb;border-radius:99px;margin:0 auto 16px"></div>
-  <div style="display:flex;align-items:center;gap:10px;margin-bottom:16px">
-    <span style="font-size:28px">🍽️</span>
-    <div>
-      <p style="font-size:17px;font-weight:800;color:#1a202c;margin:0">Pedido(s) prontos!</p>
-      <p style="font-size:12px;color:#6b7280;margin:2px 0 0">Buscar na cozinha e entregar</p>
+<div id="garcon-prontos-sheet" style="display:none;position:fixed;bottom:0;left:0;right:0;z-index:9001;max-height:80vh;display:none;flex-direction:column;background:#fff;border-radius:24px 24px 0 0;box-shadow:0 -8px 40px rgba(0,0,0,.25)">
+  <div style="padding:12px 16px 0;flex-shrink:0">
+    <div style="width:40px;height:4px;background:#e5e7eb;border-radius:99px;margin:0 auto 12px"></div>
+    <div style="display:flex;align-items:center;justify-content:space-between;margin-bottom:14px">
+      <div style="display:flex;align-items:center;gap:10px">
+        <span style="font-size:24px">🔔</span>
+        <div>
+          <p style="font-size:17px;font-weight:800;color:#1a202c;margin:0">Notificações</p>
+          <p style="font-size:12px;color:#6b7280;margin:2px 0 0">Buscar na cozinha e entregar à mesa</p>
+        </div>
+      </div>
+      <button onclick="fecharProntoOverlay()" style="width:32px;height:32px;border-radius:50%;background:#f3f4f6;border:none;font-size:18px;cursor:pointer;display:flex;align-items:center;justify-content:center;color:#6b7280;flex-shrink:0">✕</button>
     </div>
   </div>
-  <div id="garcon-prontos-lista"></div>
+  <div id="garcon-prontos-lista" style="overflow-y:auto;padding:0 16px 24px;flex:1"></div>
 </div>
-
-<!-- Badge flutuante para pedidos prontos -->
-<button id="garcon-prontos-fab" onclick="abrirProntoSheet()" style="display:none;position:fixed;top:14px;right:16px;z-index:8999;background:#10b981;color:#fff;border:none;border-radius:99px;padding:8px 16px;font-size:13px;font-weight:800;cursor:pointer;box-shadow:0 4px 16px rgba(16,185,129,.5);animation:pulse-green 1.5s infinite">
-  🍽️ <span id="garcon-prontos-count">0</span> pronto(s)
-</button>
 <style>
-@keyframes pulse-green { 0%,100%{box-shadow:0 4px 16px rgba(16,185,129,.5)} 50%{box-shadow:0 4px 28px rgba(16,185,129,.8)} }
+@keyframes pulse-green { 0%,100%{box-shadow:0 0 0 0 rgba(16,185,129,.5)} 50%{box-shadow:0 0 0 6px rgba(16,185,129,.0)} }
+@keyframes bell-shake { 0%,100%{transform:rotate(0)} 20%{transform:rotate(-14deg)} 40%{transform:rotate(14deg)} 60%{transform:rotate(-8deg)} 80%{transform:rotate(8deg)} }
+.notif-bell { position:relative;background:#f3f4f6;border:none;width:36px;height:36px;border-radius:50%;font-size:17px;cursor:pointer;display:flex;align-items:center;justify-content:center;flex-shrink:0;transition:background .15s }
+.notif-bell:active { background:#e5e7eb }
+.notif-bell.ringing { animation:bell-shake .5s ease }
+.notif-bell-badge { position:absolute;top:-3px;right:-3px;background:#10b981;color:#fff;font-size:9px;font-weight:800;min-width:16px;height:16px;border-radius:99px;display:none;align-items:center;justify-content:center;padding:0 3px;border:2px solid #fff;animation:pulse-green 1.5s infinite }
+.notif-bell.has-notif .notif-bell-badge { display:flex }
 </style>
 
 <!-- ── Toast ─────────────────────────────────────────────────────────────────── -->
@@ -163,9 +173,8 @@ body{font-family:-apple-system,BlinkMacSystemFont,'Segoe UI',sans-serif;backgrou
       <span>Total da cesta</span>
       <strong id="basket-total-val">Gs 0</strong>
     </div>
-    <div class="basket-actions">
+    <div class="basket-actions" style="grid-template-columns:1fr">
       <button class="basket-btn-add" onclick="basketConfirmar(false)">➕ Adicionar ao pedido</button>
-      <button class="basket-btn-close" onclick="basketConfirmar(true)">✓ Adicionar e Fechar conta</button>
     </div>
   </div>
 </div>
@@ -206,6 +215,9 @@ body{font-family:-apple-system,BlinkMacSystemFont,'Segoe UI',sans-serif;backgrou
   <div class="app-header">
     <div class="garcon-dot" id="home-dot"></div>
     <span class="header-title" id="home-title">Mesas</span>
+    <button id="home-notif-bell" class="notif-bell" onclick="abrirProntoSheet()" title="Notificações">
+      🔔<span class="notif-bell-badge" id="home-notif-badge">0</span>
+    </button>
     <button onclick="logout()" style="background:#f3f4f6;border:none;padding:6px 12px;border-radius:20px;font-size:12px;font-weight:600;color:#4b5563;cursor:pointer">Sair</button>
   </div>
   <div class="body">
@@ -218,12 +230,16 @@ body{font-family:-apple-system,BlinkMacSystemFont,'Segoe UI',sans-serif;backgrou
   <div class="app-header">
     <button class="back-btn" onclick="voltarHome()">←</button>
     <span class="header-title" id="mesa-titulo">Mesa</span>
+    <button id="mesa-notif-bell" class="notif-bell" onclick="abrirProntoSheet()" title="Notificações" style="display:none">
+      🔔<span class="notif-bell-badge" id="mesa-notif-badge">0</span>
+    </button>
     <button onclick="solicitarFechamento()" id="btn-fechar-mesa" style="background:#10b981;color:#fff;border:none;padding:9px 14px;border-radius:8px;font-size:13px;font-weight:800;cursor:pointer;display:flex;align-items:center;gap:5px;line-height:1;white-space:nowrap">✓ Fechar Conta</button>
   </div>
   <div class="body">
     <div class="tabs">
-      <div class="tab active" onclick="mudarTab('pedido')">📋 Pedido</div>
-      <div class="tab" onclick="mudarTab('cardapio')">➕ Adicionar</div>
+      <div class="tab active" id="tab-btn-pedido" onclick="mudarTab('pedido')">📋 Pedido</div>
+      <div class="tab" id="tab-btn-cesta" onclick="abrirBasket()">🛒 Cesta<br><span id="cart-count" style="font-size:11px;font-weight:900"></span></div>
+      <div class="tab" id="tab-btn-cardapio" onclick="mudarTab('cardapio')">🍽️ Cardápio</div>
     </div>
     <!-- Tab: pedido -->
     <div id="tab-pedido" class="tab-pane active">
@@ -251,8 +267,9 @@ body{font-family:-apple-system,BlinkMacSystemFont,'Segoe UI',sans-serif;backgrou
       <div id="garcon-screen-home" style="flex:1;overflow-y:auto">
         <div id="garcon-cats-grid"></div>
       </div>
-      <div id="garcon-screen-lista" style="display:none;flex:1;overflow-y:auto">
-        <div id="garcon-lista-items" class="garcon-lista-items"></div>
+      <div id="garcon-screen-lista" style="display:none;flex:1;overflow-y:auto;position:relative">
+        <div id="garcon-lista-items" class="garcon-lista-items" style="padding-bottom:72px"></div>
+        <button onclick="garconAppBack()" style="position:fixed;bottom:24px;left:50%;transform:translateX(-50%);background:#ef4444;color:#fff;border:none;border-radius:12px;padding:14px 36px;font-size:14px;font-weight:700;cursor:pointer;box-shadow:0 4px 16px rgba(239,68,68,.35);z-index:200;white-space:nowrap">← Categorias</button>
       </div>
       <div id="garcon-screen-builder" style="display:none;flex-direction:column;flex:1;min-height:0">
         <div id="garcon-bld-content" style="flex:1;overflow-y:auto;padding:12px"></div>
@@ -262,10 +279,6 @@ body{font-family:-apple-system,BlinkMacSystemFont,'Segoe UI',sans-serif;backgrou
       </div>
     </div>
   </div>
-  <!-- Carrinho flutuante -->
-  <button id="cart-fab" onclick="abrirBasket()">
-    🛒 <span id="cart-count">0</span> iten(s) · Ver cesta
-  </button>
 </div>
 
 <script>
@@ -280,6 +293,7 @@ let moeda = 'Gs';
 let cardapio = [];
 let mesasAbertas = [];
 let mesaAtual = null; // { id, mesa, itens, total, ... }
+let mesasPedidos = []; // todos os pedidos abertos da mesa atual (ordenados por criação)
 let tabAtiva = 'pedido';
 
 // Mini-app state
@@ -289,6 +303,14 @@ let gAppPasso = 1;
 let gAppTemBorda = false;
 let gAppPizza = { tamanho:null, sabores:[], borda:false, saborBorda:null, precoBorda:0, maxSabores:2, bordaMista:false, bordaMistaSabores:[], saborPrincipal:null };
 let gCarrinho = []; // [{nome, preco, quantidade}]
+
+function salvarCarrinho() {
+  if (!mesaAtual?.id) return;
+  sessionStorage.setItem(`cart_${mesaAtual.id}`, JSON.stringify(gCarrinho));
+}
+function restaurarCarrinho(mesaId) {
+  try { return JSON.parse(sessionStorage.getItem(`cart_${mesaId}`) || '[]'); } catch { return []; }
+}
 
 // ── Init ──────────────────────────────────────────────────────────────────────
 (async () => {
@@ -380,7 +402,9 @@ async function renderMesas() {
 
   grid.innerHTML = '';
   slots.forEach(num => {
-    const ped = mesasAbertas.find(p => p.mesa === num);
+    const pedsMesa = mesasAbertas.filter(p => p.mesa === num);
+    // Preferir o pedido ainda não iniciado pela cozinha (CONFIRMADO); senão o primeiro
+    const ped = pedsMesa.find(p => p.status === 'CONFIRMADO') || pedsMesa[0];
     const div = document.createElement('div');
     if (ped) {
       const cor = ped.garconCor || '#e5e7eb';
@@ -412,9 +436,14 @@ async function renderMesas() {
   grid.appendChild(btnNova);
 }
 
-function pedirAbrirMesa(num) {
-  document.getElementById('inp-mesa-num').value = num;
-  document.getElementById('modal-nova-mesa').classList.add('open');
+async function pedirAbrirMesa(num) {
+  const res = await api('garcon/mesas', {
+    method: 'POST',
+    body: JSON.stringify({ mesa: num, garconId: garconLogado.id, garconNome: garconLogado.nome, garconCor: garconLogado.cor }),
+  });
+  if (res.data) { abrirMesa(res.data); }
+  else if (res.error === 'Mesa já aberta' && res.data) { abrirMesa(res.data); }
+  else toast(res.error || 'Erro ao abrir mesa');
 }
 
 function abrirModalMesa() {
@@ -443,7 +472,11 @@ async function confirmarNovaMesa() {
 // ── Mesa detalhe ──────────────────────────────────────────────────────────────
 function abrirMesa(ped) {
   mesaAtual = ped;
-  gCarrinho = [];
+  // Coleta todos os pedidos abertos para esta mesa, ordenados por criação
+  mesasPedidos = mesasAbertas.filter(p => p.mesa === ped.mesa);
+  if (!mesasPedidos.find(p => p.id === ped.id)) mesasPedidos.push(ped);
+  mesasPedidos.sort((a, b) => new Date(a.createdAt) - new Date(b.createdAt));
+  gCarrinho = restaurarCarrinho(ped.id);
   atualizarFab();
   document.getElementById('mesa-titulo').textContent = `🪑 Mesa ${ped.mesa}`;
   mudarTab('pedido');
@@ -453,44 +486,87 @@ function abrirMesa(ped) {
 }
 
 function voltarHome() {
+  salvarCarrinho();
   mesaAtual = null;
+  mesasPedidos = [];
   gCarrinho = [];
+  atualizarFab();
   showScreen('screen-home');
   renderMesas();
 }
 
+function _statusPedidoLabel(status) {
+  return { CONFIRMADO: 'Aguardando cozinha', PREPARANDO: 'Em preparo', PRONTO_PARA_RETIRADA: 'Pronto para retirada', AGUARDANDO_DESPACHO: 'Aguardando despacho' }[status] || status;
+}
+function _statusPedidoCor(status) {
+  return { CONFIRMADO: '#9ca3af', PREPARANDO: '#f59e0b', PRONTO_PARA_RETIRADA: '#10b981', AGUARDANDO_DESPACHO: '#6366f1' }[status] || '#9ca3af';
+}
+
 function renderPedidoAtual() {
   if (!mesaAtual) return;
-  const itens = Array.isArray(mesaAtual.itens) ? mesaAtual.itens : [];
   const lista = document.getElementById('lista-itens-mesa');
-  if (!itens.length) {
+  const peds = mesasPedidos.length ? mesasPedidos : [mesaAtual];
+
+  if (!peds.some(p => Array.isArray(p.itens) && p.itens.length)) {
     lista.innerHTML = '<p style="text-align:center;color:#9ca3af;padding:32px 16px;font-size:14px">Mesa sem itens ainda.<br>Adicione pelo cardápio →</p>';
-  } else {
-    lista.innerHTML = itens.map(i => `
-      <div class="item-row">
-        <div class="item-qty">${i.quantidade||1}</div>
-        <div class="item-nome">${i.nome}</div>
-        <div class="item-preco">${fmtPreco(i.preco * (i.quantidade||1))}</div>
-      </div>`).join('');
+    document.getElementById('mesa-total').textContent = fmtPreco(0);
+    return;
   }
-  document.getElementById('mesa-total').textContent = fmtPreco(mesaAtual.total || 0);
+
+  const renderItens = (itens) => itens.map(i => `
+    <div class="item-row">
+      <div class="item-qty">${i.quantidade||1}</div>
+      <div class="item-nome">${i.nome}</div>
+      <div class="item-preco">${fmtPreco(i.preco * (i.quantidade||1))}</div>
+    </div>`).join('');
+
+  if (peds.length === 1) {
+    lista.innerHTML = renderItens(Array.isArray(peds[0].itens) ? peds[0].itens : []);
+  } else {
+    lista.innerHTML = peds.map(ped => {
+      const itens = Array.isArray(ped.itens) ? ped.itens : [];
+      const cor = _statusPedidoCor(ped.status);
+      const label = _statusPedidoLabel(ped.status);
+      const num = ped.numeroDia ? `#${ped.numeroDia}` : '';
+      return `
+        <div style="margin-bottom:4px">
+          <div style="display:flex;align-items:center;gap:6px;padding:8px 12px 4px;background:#f9fafb;border-radius:10px 10px 0 0;border-bottom:1.5px solid #f0f0f0">
+            <span style="font-size:12px;font-weight:800;color:#1a202c">${num}</span>
+            <span style="display:inline-block;width:7px;height:7px;border-radius:50%;background:${cor};flex-shrink:0"></span>
+            <span style="font-size:11px;font-weight:600;color:${cor}">${label}</span>
+          </div>
+          ${itens.length ? renderItens(itens) : '<p style="text-align:center;color:#d1d5db;padding:12px;font-size:12px">sem itens</p>'}
+        </div>`;
+    }).join('');
+  }
+
+  const totalGeral = peds.reduce((s, p) => s + (p.total || 0), 0);
+  document.getElementById('mesa-total').textContent = fmtPreco(totalGeral);
 }
 
 function mudarTab(tab) {
   tabAtiva = tab;
-  document.querySelectorAll('.tab').forEach((t, i) => t.classList.toggle('active', (i === 0 && tab === 'pedido') || (i === 1 && tab === 'cardapio')));
+  document.getElementById('tab-btn-pedido').classList.toggle('active', tab === 'pedido');
+  document.getElementById('tab-btn-cardapio').classList.toggle('active', tab === 'cardapio');
   document.getElementById('tab-pedido').style.display = tab === 'pedido' ? 'block' : 'none';
   const tabCard = document.getElementById('tab-cardapio');
   tabCard.style.display = tab === 'cardapio' ? 'flex' : 'none';
-  if (tab === 'cardapio') tabCard.style.flexDirection = 'column';
+  if (tab === 'cardapio') { tabCard.style.flexDirection = 'column'; tabCard.style.overflow = 'hidden'; }
+  if (tab === 'pedido') renderPedidoAtual();
 }
 
 async function solicitarFechamento() {
   if (!mesaAtual) return;
-  const itens = Array.isArray(mesaAtual.itens) ? mesaAtual.itens : [];
-  if (!itens.length && !gCarrinho.length) { toast('Mesa sem itens'); return; }
+  const totalItens = mesasPedidos.reduce((s, p) => s + (Array.isArray(p.itens) ? p.itens.length : 0), 0);
+  if (!totalItens && !gCarrinho.length) {
+    if (!confirm(`Mesa ${mesaAtual.mesa} sem itens. Deseja fechar a mesa?`)) return;
+    const res = await api(`garcon/mesas/${mesaAtual.id}/cancelar`, { method: 'POST' });
+    if (res.ok) { toast(`Mesa ${mesaAtual.mesa} fechada`); voltarHome(); }
+    else toast(res.error || 'Erro ao fechar mesa');
+    return;
+  }
   if (!confirm(`Solicitar fechamento da Mesa ${mesaAtual.mesa}?`)) return;
-  await confirmarCarrinho(true); // garante que itens do carrinho sejam enviados primeiro
+  await confirmarCarrinho(true);
   const res = await api(`garcon/mesas/${mesaAtual.id}/solicitar-fechamento`, {
     method: 'POST',
     body: JSON.stringify({ garconId: garconLogado.id, garconNome: garconLogado.nome, garconCor: garconLogado.cor }),
@@ -501,10 +577,13 @@ async function solicitarFechamento() {
 
 // ── Carrinho flutuante ────────────────────────────────────────────────────────
 function atualizarFab() {
-  const fab = document.getElementById('cart-fab');
   const total = gCarrinho.reduce((s, i) => s + i.quantidade, 0);
-  if (total > 0) { fab.style.display = 'flex'; document.getElementById('cart-count').textContent = total; }
-  else { fab.style.display = 'none'; fecharBasket(); }
+  const countEl = document.getElementById('cart-count');
+  const cestaTab = document.getElementById('tab-btn-cesta');
+  if (countEl) countEl.textContent = total > 0 ? `${total} iten(s)` : '';
+  if (cestaTab) cestaTab.classList.toggle('ativa', total > 0);
+  if (!total) fecharBasket();
+  salvarCarrinho();
 }
 
 // ── Basket Sheet ──────────────────────────────────────────────────────────────
@@ -562,11 +641,22 @@ async function confirmarCarrinho(silencioso=false) {
   });
   if (res.ok) {
     mesaAtual = res.data;
+    // Atualiza ou insere o pedido retornado na lista local
+    const idx = mesasPedidos.findIndex(p => p.id === res.data.id);
+    if (idx >= 0) mesasPedidos[idx] = res.data;
+    else mesasPedidos.push(res.data);
     gCarrinho = [];
     atualizarFab();
-    if (!silencioso) { toast(`✅ ${itensEnviados.length} iten(s) adicionado(s)!`); mudarTab('pedido'); renderPedidoAtual(); }
+    renderPedidoAtual();
+    if (res.novoPedido) {
+      toast('⚠️ Preparo já iniciado — novo pedido criado para a mesa!', 4000);
+      mudarTab('pedido');
+    } else if (!silencioso) {
+      toast(`✅ ${itensEnviados.length} iten(s) adicionado(s)!`);
+      mudarTab('pedido');
+    }
   } else {
-    if (!silencioso) toast(res.error || 'Erro ao adicionar itens');
+    toast(res.error || 'Erro ao adicionar itens');
   }
 }
 
@@ -757,6 +847,12 @@ function _gBldFooterScrollMode(enable, threshold=250) {
       content.onscroll = null;
     }
   };
+  requestAnimationFrame(() => {
+    if (content.scrollHeight <= content.clientHeight + 10) {
+      footer.style.display = 'block';
+      content.onscroll = null;
+    }
+  });
 }
 
 function garconRenderTamStep(ehPizza) {
@@ -1062,13 +1158,35 @@ async function carregarPedidosProntos() {
   }
 }
 
+function _updateNotifBells(count) {
+  // Home bell
+  const homeBell = document.getElementById('home-notif-bell');
+  const homeBadge = document.getElementById('home-notif-badge');
+  if (homeBell) {
+    homeBell.classList.toggle('has-notif', count > 0);
+    if (homeBadge) homeBadge.textContent = count;
+    if (count > 0) { homeBell.classList.add('ringing'); setTimeout(() => homeBell.classList.remove('ringing'), 600); }
+  }
+  // Mesa bell
+  const mesaBell = document.getElementById('mesa-notif-bell');
+  const mesaBadge = document.getElementById('mesa-notif-badge');
+  if (mesaBell) {
+    mesaBell.style.display = count > 0 ? 'flex' : 'none';
+    mesaBell.classList.toggle('has-notif', count > 0);
+    if (mesaBadge) mesaBadge.textContent = count;
+    if (count > 0) { mesaBell.classList.add('ringing'); setTimeout(() => mesaBell.classList.remove('ringing'), 600); }
+  }
+}
+
 function renderPedidosProntos() {
-  const fab = document.getElementById('garcon-prontos-fab');
+  const count = pedidosProntos.length;
+  _updateNotifBells(count);
   const lista = document.getElementById('garcon-prontos-lista');
-  const count = document.getElementById('garcon-prontos-count');
-  if (fab) { fab.style.display = pedidosProntos.length ? 'flex' : 'none'; }
-  if (count) count.textContent = pedidosProntos.length;
   if (!lista) return;
+  if (count === 0) {
+    lista.innerHTML = '<p style="text-align:center;color:#9ca3af;font-size:14px;padding:32px 0">Nenhuma notificação pendente 🎉</p>';
+    return;
+  }
   lista.innerHTML = pedidosProntos.map(ped => {
     const itens = Array.isArray(ped.itens) ? ped.itens : [];
     const num = ped.numeroDia ? `#${ped.numeroDia}` : '';
@@ -1077,14 +1195,14 @@ function renderPedidosProntos() {
         <span style="font-size:22px">🍽️</span>
         <div>
           <p style="font-size:16px;font-weight:800;color:#065f46;margin:0">Mesa ${ped.mesa} ${num ? '<span style="font-size:12px;font-weight:600;color:#6b7280">' + num + '</span>' : ''}</p>
-          <p style="font-size:12px;color:#6b7280;margin:0">${itens.length} item${itens.length!==1?'s':''}</p>
+          <p style="font-size:12px;color:#6b7280;margin:0">${itens.length} item${itens.length!==1?'s':''} · pronto para servir</p>
         </div>
       </div>
       <div style="margin-bottom:12px;padding:10px;background:#fff;border-radius:10px">
         ${itens.map(i => `<p style="font-size:13px;font-weight:600;color:#1a202c;margin:2px 0"><span style="color:#10b981;font-weight:800">${i.quantidade||1}×</span> ${i.nome}</p>`).join('')}
       </div>
       <button onclick="garconServirMesa('${ped.id}', this)" style="width:100%;padding:13px;background:#10b981;color:#fff;border:none;border-radius:12px;font-size:15px;font-weight:800;cursor:pointer;font-family:inherit">
-        ✅ Servir à Mesa ${ped.mesa}
+        ✅ Entregue — Mesa ${ped.mesa}
       </button>
     </div>`;
   }).join('');
@@ -1106,8 +1224,9 @@ async function garconServirMesa(pedidoId, btn) {
 }
 
 function abrirProntoSheet() {
+  renderPedidosProntos();
   document.getElementById('garcon-prontos-overlay').style.display = 'block';
-  document.getElementById('garcon-prontos-sheet').style.display = 'block';
+  document.getElementById('garcon-prontos-sheet').style.display = 'flex';
 }
 
 function fecharProntoOverlay() {

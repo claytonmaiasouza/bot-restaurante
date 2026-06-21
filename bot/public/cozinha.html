@@ -187,6 +187,11 @@ function origemTag(p) {
 function resolverEstacaoItem(itemNome) {
   if (!itemMap.length) return 'GERAL';
   const n = itemNome.toLowerCase().trim();
+  // Itens de pizza do garçom têm formato "Pizza TAMANHO: sabores" — resolver direto
+  if (n.startsWith('pizza ') && n.includes(':')) {
+    const pizzaEntry = itemMap.find(e => e.estacaoTipo === 'PIZZA');
+    if (pizzaEntry) return 'PIZZA';
+  }
   let best = null;
   let bestLen = 0;
   for (const entry of itemMap) {
@@ -212,19 +217,19 @@ function filtrarItensEstacao(itens, pedido) {
   // ── Tipos principais (novos) ────────────────────────────────────────────────
   if (tipo === 'PIZZA_DELIVERY') {
     if (!delivery) return [];
-    return itens.filter(i => { const t = resolverEstacaoItem(i.nome); return t === 'PIZZA' || t === 'GERAL'; });
+    return itens.filter(i => resolverEstacaoItem(i.nome) === 'PIZZA');
   }
   if (tipo === 'PIZZA_LOCAL') {
     if (delivery) return [];
-    return itens.filter(i => { const t = resolverEstacaoItem(i.nome); return t === 'PIZZA' || t === 'GERAL'; });
+    return itens.filter(i => resolverEstacaoItem(i.nome) === 'PIZZA');
   }
   if (tipo === 'LANCHE_DELIVERY') {
     if (!delivery) return [];
-    return itens.filter(i => { const t = resolverEstacaoItem(i.nome); return t === 'LANCHE' || t === 'GERAL'; });
+    return itens.filter(i => resolverEstacaoItem(i.nome) === 'LANCHE');
   }
   if (tipo === 'LANCHE_LOCAL') {
     if (delivery) return [];
-    return itens.filter(i => { const t = resolverEstacaoItem(i.nome); return t === 'LANCHE' || t === 'GERAL'; });
+    return itens.filter(i => resolverEstacaoItem(i.nome) === 'LANCHE');
   }
   if (tipo === 'BAR_LOCAL') {
     if (delivery) return [];
@@ -239,11 +244,11 @@ function filtrarItensEstacao(itens, pedido) {
   if (tipo === 'LOCAL') return delivery ? [] : itens;
   if (tipo === 'LOCAL_PIZZA') {
     if (delivery) return [];
-    return itens.filter(i => { const t = resolverEstacaoItem(i.nome); return t === 'PIZZA' || t === 'GERAL'; });
+    return itens.filter(i => resolverEstacaoItem(i.nome) === 'PIZZA');
   }
   if (tipo === 'LOCAL_LANCHE') {
     if (delivery) return [];
-    return itens.filter(i => { const t = resolverEstacaoItem(i.nome); return t === 'LANCHE' || t === 'GERAL'; });
+    return itens.filter(i => resolverEstacaoItem(i.nome) === 'LANCHE');
   }
   if (tipo === 'LOCAL_BAR') {
     if (delivery) return [];
@@ -253,7 +258,7 @@ function filtrarItensEstacao(itens, pedido) {
   return itens.filter(i => {
     const t = resolverEstacaoItem(i.nome);
     if (tipo === 'BAR') return t === 'BAR';
-    return t === tipo || t === 'GERAL';
+    return t === tipo;
   });
 }
 
@@ -389,9 +394,12 @@ function criarCard(p) {
   div.setAttribute('data-pedido', p.id);
   div.innerHTML = `
     <div class="flex items-start justify-between mb-3">
-      <div class="flex items-center gap-2 flex-wrap">
-        <span class="text-2xl font-black leading-none">#${numPedido(p)}</span>
-        ${origemTag(p)}
+      <div class="flex flex-col gap-1">
+        <div class="flex items-center gap-2 flex-wrap">
+          <span class="text-2xl font-black leading-none">#${numPedido(p)}</span>
+          ${origemTag(p)}
+        </div>
+        ${p.garconNome ? `<div class="flex items-center gap-1.5"><span style="display:inline-block;width:9px;height:9px;border-radius:50%;background:${p.garconCor||'#6366f1'};flex-shrink:0"></span><span class="text-xs text-slate-400 font-medium">${p.garconNome}</span></div>` : ''}
       </div>
       <span class="text-sm font-semibold ${urgencyClass(p.createdAt)} flex-shrink-0 ml-2" id="tempo-${p.id}">${elapsed(p.createdAt)}</span>
     </div>
@@ -551,6 +559,8 @@ async function carregarListaEstacoes() {
       return;
     }
     sel.innerHTML = data.map(e => `<option value="${e.id}" data-cor="${e.cor}" data-tipo="${e.tipo}">${e.nome}</option>`).join('');
+    const presel = params.get('estacao');
+    if (presel && data.find(e => e.id === presel)) sel.value = presel;
   } catch {}
 }
 
@@ -673,9 +683,12 @@ function criarCardHistorico(p) {
   div.className = 'bg-slate-800 border border-slate-700 rounded-xl p-3';
   div.innerHTML = `
     <div class="flex items-start justify-between mb-2">
-      <div class="flex items-center gap-2 flex-wrap">
-        <span class="font-black text-lg leading-none">#${num}</span>
-        ${origemTag(p)}
+      <div class="flex flex-col gap-0.5">
+        <div class="flex items-center gap-2 flex-wrap">
+          <span class="font-black text-lg leading-none">#${num}</span>
+          ${origemTag(p)}
+        </div>
+        ${p.garconNome ? `<div class="flex items-center gap-1.5"><span style="display:inline-block;width:8px;height:8px;border-radius:50%;background:${p.garconCor||'#6366f1'};flex-shrink:0"></span><span class="text-xs text-slate-500 font-medium">${p.garconNome}</span></div>` : ''}
       </div>
       <span class="text-xs text-slate-500 flex-shrink-0 ml-1">${hora}</span>
     </div>

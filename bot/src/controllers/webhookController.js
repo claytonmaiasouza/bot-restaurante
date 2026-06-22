@@ -9,6 +9,9 @@ const { buscarContextoFidelidade } = require("../services/cardapioService");
 const { PrismaClient } = require("@prisma/client");
 const _prisma = new PrismaClient();
 
+// Sessões que já receberam fotos do cardápio nesta conversa — impede reenvio automático duplicado
+const _sessoesFotosEnviadas = new Set();
+
 // ── Detecção de idioma ────────────────────────────────────────────────────────
 
 function detectarIdioma(mensagens) {
@@ -686,7 +689,8 @@ async function receberMensagem(req, res) {
     await enviarMensagem(remoteJid, resposta, instanceName);
 
     // ── g) Enviar fotos do cardápio quando Claude sinalizar ───────────────────
-    if (mostrarFotos && restaurante.cardapioPdfUrl) {
+    // Guard: envia apenas uma vez por sessão via sinal automático do Claude
+    if (mostrarFotos && restaurante.cardapioPdfUrl && !_sessoesFotosEnviadas.has(sessao.id)) {
       let fotos = null;
       try {
         const parsed = JSON.parse(restaurante.cardapioPdfUrl);
@@ -694,10 +698,12 @@ async function receberMensagem(req, res) {
       } catch { /* single URL */ }
 
       if (fotos) {
+        _sessoesFotosEnviadas.add(sessao.id);
         for (const url of fotos) {
           await enviarImagem(remoteJid, url, "", instanceName);
         }
       } else if (/\.(jpg|jpeg|png|webp)$/i.test(restaurante.cardapioPdfUrl)) {
+        _sessoesFotosEnviadas.add(sessao.id);
         await enviarImagem(remoteJid, restaurante.cardapioPdfUrl, "", instanceName);
       }
     }

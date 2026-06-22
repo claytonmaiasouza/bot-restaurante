@@ -6546,6 +6546,7 @@ function balcaoAbrirFechamento(pedidoId) {
   div.style.cssText = 'position:fixed;inset:0;background:rgba(0,0,0,.6);z-index:200;display:flex;align-items:center;justify-content:center;padding:20px';
   div.innerHTML = `
     <div style="background:#fff;border-radius:24px;width:100%;max-width:440px;max-height:90vh;overflow-y:auto;box-shadow:0 20px 60px rgba(0,0,0,.3)">
+      <!-- Cabeçalho fixo -->
       <div style="padding:20px 24px 16px;border-bottom:2px solid #f0f0f0;display:flex;align-items:center;justify-content:space-between">
         <div>
           <p style="font-size:20px;font-weight:900;color:#1a202c;margin:0">${p.clienteNome || 'Balcão'}</p>
@@ -6553,6 +6554,7 @@ function balcaoAbrirFechamento(pedidoId) {
         </div>
         <button onclick="fecharModalBalcaoFechamento()" style="width:36px;height:36px;border-radius:50%;background:#f3f4f6;border:none;cursor:pointer;font-size:18px;display:flex;align-items:center;justify-content:center">✕</button>
       </div>
+      <!-- Itens + total -->
       <div style="padding:16px 24px">
         ${linhasItens}
         <div style="display:flex;justify-content:space-between;align-items:baseline;padding:12px 0 4px;border-top:2px solid #f0f0f0;margin-top:4px">
@@ -6560,17 +6562,29 @@ function balcaoAbrirFechamento(pedidoId) {
           <span style="font-size:26px;font-weight:900;color:#1a202c">${formatarPreco(p.total, moeda)}</span>
         </div>
       </div>
-      <div id="balcao-fecha-corpo" style="padding:0 24px 24px">
+      <!-- Painel 1: pagamento + botões -->
+      <div id="balcao-painel-1" style="padding:0 24px 24px">
         <select id="balcao-fecha-pagamento" style="width:100%;border:2px solid #e5e7eb;border-radius:12px;padding:11px 14px;font-size:15px;margin-bottom:14px;box-sizing:border-box;outline:none;font-family:inherit;color:#374151;background:#fff">
           <option value="">💳 Forma de pagamento...</option>
           ${opts}
         </select>
         <div style="display:flex;gap:10px">
           <button onclick="balcaoImprimirFechamento('${pedidoId}')" style="flex:1;background:#6366f1;color:#fff;font-size:14px;font-weight:700;padding:12px;border-radius:12px;border:none;cursor:pointer;font-family:inherit">🖨️ Imprimir</button>
-          <button onclick="_balcaoConfirmarFechamento('${pedidoId}')" style="flex:2;background:linear-gradient(135deg,#10b981,#059669);color:#fff;font-size:15px;font-weight:800;padding:12px;border-radius:12px;border:none;cursor:pointer;font-family:inherit;box-shadow:0 4px 14px rgba(16,185,129,.35)">✅ Fechar conta</button>
+          <button onclick="_balcaoIrParaConfirmacao('${pedidoId}')" style="flex:2;background:linear-gradient(135deg,#10b981,#059669);color:#fff;font-size:15px;font-weight:800;padding:12px;border-radius:12px;border:none;cursor:pointer;font-family:inherit;box-shadow:0 4px 14px rgba(16,185,129,.35)">✅ Fechar conta</button>
         </div>
       </div>
-      <div id="balcao-pos-fechamento" style="display:none;padding:0 24px 24px;flex-direction:column;gap:10px">
+      <!-- Painel 2: confirmação de recebimento -->
+      <div id="balcao-painel-2" style="display:none;padding:0 24px 24px;text-align:center">
+        <div id="balcao-conf-icon" style="font-size:48px;margin-bottom:12px">💰</div>
+        <p id="balcao-conf-titulo" style="font-size:18px;font-weight:800;color:#1a202c;margin:0 0 8px"></p>
+        <p id="balcao-conf-msg" style="font-size:14px;color:#6b7280;margin:0 0 20px;line-height:1.5"></p>
+        <div style="display:flex;gap:10px">
+          <button onclick="_balcaoVoltarPainel1()" style="flex:1;background:#f3f4f6;color:#374151;font-size:14px;font-weight:700;padding:12px;border-radius:12px;border:none;cursor:pointer;font-family:inherit">← Voltar</button>
+          <button id="balcao-btn-confirmar-pgto" onclick="_balcaoExecutarFechamento('${pedidoId}')" style="flex:2;background:#10b981;color:#fff;font-size:15px;font-weight:800;padding:12px;border-radius:12px;border:none;cursor:pointer;font-family:inherit;box-shadow:0 4px 14px rgba(16,185,129,.3)">✅ Confirmar</button>
+        </div>
+      </div>
+      <!-- Painel 3: pós-fechamento -->
+      <div id="balcao-painel-3" style="display:none;padding:0 24px 24px;flex-direction:column;gap:10px">
         <button onclick="abrirModalFacturaBalcao()" style="width:100%;background:#a855f7;color:#fff;font-size:14px;font-weight:700;padding:12px;border-radius:12px;border:none;cursor:pointer;font-family:inherit">🧾 Emitir Factura Legal</button>
         <button onclick="fecharModalBalcaoFechamento()" style="width:100%;background:#f3f4f6;color:#374151;font-size:14px;font-weight:700;padding:12px;border-radius:12px;border:none;cursor:pointer;font-family:inherit">Fechar</button>
       </div>
@@ -6627,25 +6641,53 @@ ${metodoPagamento ? `<p class="center" style="margin-top:6px">Pagamento: ${metod
 </body></html>`;
 }
 
-function _balcaoConfirmarFechamento(pedidoId) {
+let _balcaoPedidoIdFechando = null;
+let _balcaoMetodoPagtoFechando = null;
+
+function _balcaoIrParaConfirmacao(pedidoId) {
   const metodoPagamento = document.getElementById('balcao-fecha-pagamento')?.value || null;
-  const itens = Array.isArray(pedidos.find(p => p.id === pedidoId)?.itens) ? pedidos.find(p => p.id === pedidoId).itens : [];
-  const total = pedidos.find(p => p.id === pedidoId)?.total || 0;
-  const clienteNome = pedidos.find(p => p.id === pedidoId)?.clienteNome || 'Balcão';
-  const numeroDia = pedidos.find(p => p.id === pedidoId)?.numeroDia;
-  // Gera e salva ticket antes da confirmação
-  const html = gerarTicketHtmlBalcao(clienteNome, numeroDia, itens, total, metodoPagamento);
+  const p = pedidos.find(x => x.id === pedidoId);
+  if (!p) return;
+  // Guarda para uso no confirmar
+  _balcaoPedidoIdFechando = pedidoId;
+  _balcaoMetodoPagtoFechando = metodoPagamento;
+  // Gera ticket agora (antes de confirmar)
+  const itens = Array.isArray(p.itens) ? p.itens : [];
+  const html = gerarTicketHtmlBalcao(p.clienteNome || 'Balcão', p.numeroDia, itens, p.total, metodoPagamento);
   _ultimoTicketHtml = html;
   _ultimaContaItens = itens;
-  _ultimaContaTotal = total;
+  _ultimaContaTotal = p.total;
   _ultimaContaMesa = null;
   _ultimaContaMetodo = metodoPagamento;
   _ultimaContaPedidoIds = [pedidoId];
-  // Abre confirmação de pagamento — mesmo modal das mesas
-  _abrirConfirmacaoPagamento(metodoPagamento, () => _balcaoExecutarFechamento(pedidoId, metodoPagamento));
+  // Monta texto de confirmação igual ao das mesas
+  const configs = {
+    dinheiro:      { icon: '💵', titulo: 'Dinheiro recebido?',          msg: 'Confirme o recebimento do dinheiro no caixa antes de fechar a comanda.' },
+    cartão:        { icon: '💳', titulo: 'Via da maquininha?',           msg: 'Solicite a via da maquininha de cartão ao cliente antes de fechar.' },
+    cartao:        { icon: '💳', titulo: 'Via da maquininha?',           msg: 'Solicite a via da maquininha de cartão ao cliente antes de fechar.' },
+    transferência: { icon: '📲', titulo: 'Comprovante de transferência?', msg: 'Solicite o comprovante de transferência ao cliente antes de fechar.' },
+    transferencia: { icon: '📲', titulo: 'Comprovante de transferência?', msg: 'Solicite o comprovante de transferência ao cliente antes de fechar.' },
+  };
+  const key = (metodoPagamento || '').toLowerCase().normalize('NFD').replace(/[̀-ͯ]/g, '');
+  const cfg = configs[key] || { icon: '💰', titulo: 'Confirmar pagamento', msg: 'Confirme o recebimento do pagamento antes de fechar a comanda.' };
+  document.getElementById('balcao-conf-icon').textContent = cfg.icon;
+  document.getElementById('balcao-conf-titulo').textContent = cfg.titulo;
+  document.getElementById('balcao-conf-msg').textContent = cfg.msg;
+  // Troca para painel 2
+  document.getElementById('balcao-painel-1').style.display = 'none';
+  document.getElementById('balcao-painel-2').style.display = 'block';
 }
 
-async function _balcaoExecutarFechamento(pedidoId, metodoPagamento) {
+function _balcaoVoltarPainel1() {
+  document.getElementById('balcao-painel-2').style.display = 'none';
+  document.getElementById('balcao-painel-1').style.display = 'block';
+}
+
+async function _balcaoExecutarFechamento() {
+  const pedidoId = _balcaoPedidoIdFechando;
+  const metodoPagamento = _balcaoMetodoPagtoFechando;
+  const btn = document.getElementById('balcao-btn-confirmar-pgto');
+  if (btn) { btn.disabled = true; btn.textContent = '⏳...'; }
   try {
     const res = await fetch(`/admin/pedidos/balcao/${pedidoId}/fechar`, {
       method: 'POST',
@@ -6655,6 +6697,7 @@ async function _balcaoExecutarFechamento(pedidoId, metodoPagamento) {
     if (!res.ok) {
       const err = await res.json().catch(() => ({}));
       mostrarToast(err.error || 'Erro ao fechar conta.');
+      if (btn) { btn.disabled = false; btn.textContent = '✅ Confirmar'; }
       return;
     }
     const json = await res.json();
@@ -6663,7 +6706,7 @@ async function _balcaoExecutarFechamento(pedidoId, metodoPagamento) {
     if (idx >= 0) pedidos[idx] = pedidoAtualizado;
     _ultimaContaMetodo = pedidoAtualizado.metodoPagamento || metodoPagamento;
     _ultimaContaPedidoIds = [pedidoId];
-    // Salva ticket no pedido para reimpressão
+    // Salva ticket no pedido para reimpressão futura
     if (_ultimoTicketHtml) {
       fetch(`/admin/pedidos/${pedidoId}/ticket`, {
         method: 'PUT',
@@ -6671,14 +6714,14 @@ async function _balcaoExecutarFechamento(pedidoId, metodoPagamento) {
         body: JSON.stringify({ ticketHtml: _ultimoTicketHtml }),
       }).catch(() => {});
     }
-    // Transiciona modal para pós-fechamento (igual às mesas)
-    const corpo = document.getElementById('balcao-fecha-corpo');
-    const pos = document.getElementById('balcao-pos-fechamento');
-    if (corpo) corpo.style.display = 'none';
-    if (pos) pos.style.display = 'flex';
+    // Vai para painel 3: pós-fechamento
+    document.getElementById('balcao-painel-2').style.display = 'none';
+    const p3 = document.getElementById('balcao-painel-3');
+    if (p3) { p3.style.display = 'flex'; }
     mostrarToast('✅ Conta fechada!');
   } catch {
     mostrarToast('Erro de rede.');
+    if (btn) { btn.disabled = false; btn.textContent = '✅ Confirmar'; }
   }
 }
 

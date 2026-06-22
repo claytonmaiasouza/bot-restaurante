@@ -455,7 +455,7 @@
         <p class="text-sm text-gray-500 text-center mb-6" id="modal-confirm-pag-msg">Confirme o recebimento do pagamento.</p>
         <div class="flex gap-3">
           <button onclick="_cancelarConfirmacaoPagamento()" class="flex-1 bg-gray-100 hover:bg-gray-200 text-gray-700 font-semibold py-2.5 rounded-xl text-sm transition">Cancelar</button>
-          <button onclick="_confirmarPagamentoMesa()" class="flex-1 bg-emerald-500 hover:bg-emerald-600 text-white font-bold py-2.5 rounded-xl text-sm transition">✅ Confirmar</button>
+          <button onclick="_confirmarPagamento()" class="flex-1 bg-emerald-500 hover:bg-emerald-600 text-white font-bold py-2.5 rounded-xl text-sm transition">✅ Confirmar</button>
         </div>
       </div>
     </div>
@@ -5819,36 +5819,42 @@ async function fecharContaMesa() {
   _ultimaContaMetodo = metodoPagamento;
 
   // Mostra confirmação baseada no método de pagamento antes de finalizar
-  _abrirConfirmacaoPagamento(metodoPagamento);
+  _abrirConfirmacaoPagamento(metodoPagamento, () => {
+    document.getElementById('mesa-btns-normais').classList.add('hidden');
+    document.getElementById('mesa-pos-fechamento').classList.remove('hidden');
+  });
 }
 
-let _resolveConfirmacaoPagamento = null;
+let _confirmacaoPagamentoCb = null;
 
-function _abrirConfirmacaoPagamento(metodo) {
+function _abrirConfirmacaoPagamento(metodo, callback) {
   const configs = {
-    dinheiro:      { icon: '💵', titulo: 'Dinheiro recebido?',         msg: 'Confirme o recebimento do dinheiro no caixa antes de liberar a mesa.' },
-    cartao:        { icon: '💳', titulo: 'Via da maquininha?',          msg: 'Solicite a via da maquininha de cartão ao cliente antes de liberar a mesa.' },
-    credito:       { icon: '💳', titulo: 'Via da maquininha?',          msg: 'Solicite a via da maquininha de cartão ao cliente antes de liberar a mesa.' },
-    debito:        { icon: '💳', titulo: 'Via da maquininha?',          msg: 'Solicite a via da maquininha de cartão ao cliente antes de liberar a mesa.' },
-    transferencia: { icon: '📲', titulo: 'Comprovante de transferência?', msg: 'Solicite o comprovante de transferência ao cliente antes de liberar a mesa.' },
-    pix:           { icon: '📲', titulo: 'Comprovante de Pix?',         msg: 'Solicite o comprovante de Pix ao cliente antes de liberar a mesa.' },
+    dinheiro:      { icon: '💵', titulo: 'Dinheiro recebido?',         msg: 'Confirme o recebimento do dinheiro no caixa antes de liberar.' },
+    cartao:        { icon: '💳', titulo: 'Via da maquininha?',          msg: 'Solicite a via da maquininha de cartão ao cliente antes de liberar.' },
+    credito:       { icon: '💳', titulo: 'Via da maquininha?',          msg: 'Solicite a via da maquininha de cartão ao cliente antes de liberar.' },
+    debito:        { icon: '💳', titulo: 'Via da maquininha?',          msg: 'Solicite a via da maquininha de cartão ao cliente antes de liberar.' },
+    transferencia: { icon: '📲', titulo: 'Comprovante de transferência?', msg: 'Solicite o comprovante de transferência ao cliente antes de liberar.' },
+    pix:           { icon: '📲', titulo: 'Comprovante de Pix?',         msg: 'Solicite o comprovante de Pix ao cliente antes de liberar.' },
   };
   const key = (metodo || '').toLowerCase().normalize('NFD').replace(/[̀-ͯ]/g, '');
-  const cfg = configs[key] || { icon: '💰', titulo: 'Confirmar pagamento', msg: 'Confirme o recebimento do pagamento antes de liberar a mesa.' };
+  const cfg = configs[key] || { icon: '💰', titulo: 'Confirmar pagamento', msg: 'Confirme o recebimento do pagamento antes de liberar.' };
 
+  _confirmacaoPagamentoCb = callback || null;
   document.getElementById('modal-confirm-pag-icon').textContent = cfg.icon;
   document.getElementById('modal-confirm-pag-titulo').textContent = cfg.titulo;
   document.getElementById('modal-confirm-pag-msg').textContent = cfg.msg;
   document.getElementById('modal-confirm-pagamento').classList.remove('hidden');
 }
 
-function _confirmarPagamentoMesa() {
+function _confirmarPagamento() {
   document.getElementById('modal-confirm-pagamento').classList.add('hidden');
-  document.getElementById('mesa-btns-normais').classList.add('hidden');
-  document.getElementById('mesa-pos-fechamento').classList.remove('hidden');
+  const cb = _confirmacaoPagamentoCb;
+  _confirmacaoPagamentoCb = null;
+  if (cb) cb();
 }
 
 function _cancelarConfirmacaoPagamento() {
+  _confirmacaoPagamentoCb = null;
   document.getElementById('modal-confirm-pagamento').classList.add('hidden');
 }
 
@@ -6031,11 +6037,11 @@ function balcaoMostrarInicio() {
       </div>`;
     }).join('');
     content.innerHTML = `
+      <div style="text-align:center;padding-bottom:4px">${novoPedidoBtn}</div>
       <div>
         <p style="font-size:13px;font-weight:700;color:#6b7280;text-transform:uppercase;letter-spacing:.5px;margin:0 0 14px">Comandas ativas (${ativos.length})</p>
         <div style="display:grid;grid-template-columns:repeat(auto-fill,minmax(240px,1fr));gap:12px">${cards}</div>
-      </div>
-      <div style="text-align:center;padding:16px 0">${novoPedidoBtn}</div>`;
+      </div>`;
   } else {
     content.setAttribute('style', 'flex:1;overflow-y:auto;background:#f6f7fb;display:flex;flex-direction:column;justify-content:center;align-items:center;padding:20px');
     content.innerHTML = `
@@ -6538,7 +6544,6 @@ function balcaoAbrirFechamento(pedidoId) {
   const div = document.createElement('div');
   div.id = 'modal-balcao-fechamento';
   div.style.cssText = 'position:fixed;inset:0;background:rgba(0,0,0,.6);z-index:200;display:flex;align-items:center;justify-content:center;padding:20px';
-  div.onclick = e => { if (e.target === div) fecharModalBalcaoFechamento(); };
   div.innerHTML = `
     <div style="background:#fff;border-radius:24px;width:100%;max-width:440px;max-height:90vh;overflow-y:auto;box-shadow:0 20px 60px rgba(0,0,0,.3)">
       <div style="padding:20px 24px 16px;border-bottom:2px solid #f0f0f0;display:flex;align-items:center;justify-content:space-between">
@@ -6555,16 +6560,19 @@ function balcaoAbrirFechamento(pedidoId) {
           <span style="font-size:26px;font-weight:900;color:#1a202c">${formatarPreco(p.total, moeda)}</span>
         </div>
       </div>
-      <div style="padding:0 24px 24px">
+      <div id="balcao-fecha-corpo" style="padding:0 24px 24px">
         <select id="balcao-fecha-pagamento" style="width:100%;border:2px solid #e5e7eb;border-radius:12px;padding:11px 14px;font-size:15px;margin-bottom:14px;box-sizing:border-box;outline:none;font-family:inherit;color:#374151;background:#fff">
           <option value="">💳 Forma de pagamento...</option>
           ${opts}
         </select>
-        <div style="display:flex;gap:10px;margin-bottom:10px">
+        <div style="display:flex;gap:10px">
           <button onclick="balcaoImprimirFechamento('${pedidoId}')" style="flex:1;background:#6366f1;color:#fff;font-size:14px;font-weight:700;padding:12px;border-radius:12px;border:none;cursor:pointer;font-family:inherit">🖨️ Imprimir</button>
-          <button id="btn-balcao-fechar-${pedidoId}" onclick="balcaoExecutarFechamento('${pedidoId}')" style="flex:2;background:linear-gradient(135deg,#10b981,#059669);color:#fff;font-size:15px;font-weight:800;padding:12px;border-radius:12px;border:none;cursor:pointer;font-family:inherit;box-shadow:0 4px 14px rgba(16,185,129,.35)">✅ Fechar conta</button>
+          <button onclick="_balcaoConfirmarFechamento('${pedidoId}')" style="flex:2;background:linear-gradient(135deg,#10b981,#059669);color:#fff;font-size:15px;font-weight:800;padding:12px;border-radius:12px;border:none;cursor:pointer;font-family:inherit;box-shadow:0 4px 14px rgba(16,185,129,.35)">✅ Fechar conta</button>
         </div>
-        <button onclick="balcaoAbrirFacturaFechamento('${pedidoId}')" style="width:100%;background:#a855f7;color:#fff;font-size:13px;font-weight:700;padding:10px;border-radius:12px;border:none;cursor:pointer;font-family:inherit">🧾 Emitir Factura Legal</button>
+      </div>
+      <div id="balcao-pos-fechamento" style="display:none;padding:0 24px 24px;flex-direction:column;gap:10px">
+        <button onclick="abrirModalFacturaBalcao()" style="width:100%;background:#a855f7;color:#fff;font-size:14px;font-weight:700;padding:12px;border-radius:12px;border:none;cursor:pointer;font-family:inherit">🧾 Emitir Factura Legal</button>
+        <button onclick="fecharModalBalcaoFechamento()" style="width:100%;background:#f3f4f6;color:#374151;font-size:14px;font-weight:700;padding:12px;border-radius:12px;border:none;cursor:pointer;font-family:inherit">Fechar</button>
       </div>
     </div>`;
   document.body.appendChild(div);
@@ -6572,6 +6580,7 @@ function balcaoAbrirFechamento(pedidoId) {
 
 function fecharModalBalcaoFechamento() {
   document.getElementById('modal-balcao-fechamento')?.remove();
+  if (pedidosViewAtual === 'balcao' && balcaoTela === 'inicio') { balcaoMostrarInicio(); renderizarPedidos(); carregarStats(); }
 }
 
 function balcaoImprimirFechamento(pedidoId) {
@@ -6618,10 +6627,25 @@ ${metodoPagamento ? `<p class="center" style="margin-top:6px">Pagamento: ${metod
 </body></html>`;
 }
 
-async function balcaoExecutarFechamento(pedidoId) {
+function _balcaoConfirmarFechamento(pedidoId) {
   const metodoPagamento = document.getElementById('balcao-fecha-pagamento')?.value || null;
-  const btn = document.getElementById(`btn-balcao-fechar-${pedidoId}`);
-  if (btn) { btn.disabled = true; btn.textContent = '⏳...'; }
+  const itens = Array.isArray(pedidos.find(p => p.id === pedidoId)?.itens) ? pedidos.find(p => p.id === pedidoId).itens : [];
+  const total = pedidos.find(p => p.id === pedidoId)?.total || 0;
+  const clienteNome = pedidos.find(p => p.id === pedidoId)?.clienteNome || 'Balcão';
+  const numeroDia = pedidos.find(p => p.id === pedidoId)?.numeroDia;
+  // Gera e salva ticket antes da confirmação
+  const html = gerarTicketHtmlBalcao(clienteNome, numeroDia, itens, total, metodoPagamento);
+  _ultimoTicketHtml = html;
+  _ultimaContaItens = itens;
+  _ultimaContaTotal = total;
+  _ultimaContaMesa = null;
+  _ultimaContaMetodo = metodoPagamento;
+  _ultimaContaPedidoIds = [pedidoId];
+  // Abre confirmação de pagamento — mesmo modal das mesas
+  _abrirConfirmacaoPagamento(metodoPagamento, () => _balcaoExecutarFechamento(pedidoId, metodoPagamento));
+}
+
+async function _balcaoExecutarFechamento(pedidoId, metodoPagamento) {
   try {
     const res = await fetch(`/admin/pedidos/balcao/${pedidoId}/fechar`, {
       method: 'POST',
@@ -6631,37 +6655,34 @@ async function balcaoExecutarFechamento(pedidoId) {
     if (!res.ok) {
       const err = await res.json().catch(() => ({}));
       mostrarToast(err.error || 'Erro ao fechar conta.');
-      if (btn) { btn.disabled = false; btn.textContent = '✅ Fechar conta'; }
       return;
     }
     const json = await res.json();
     const pedidoAtualizado = json.data;
     const idx = pedidos.findIndex(p => p.id === pedidoId);
     if (idx >= 0) pedidos[idx] = pedidoAtualizado;
-    _ultimaContaItens = Array.isArray(pedidoAtualizado.itens) ? pedidoAtualizado.itens : [];
-    _ultimaContaTotal = pedidoAtualizado.total;
-    _ultimaContaMesa = null;
-    _ultimaContaMetodo = pedidoAtualizado.metodoPagamento;
+    _ultimaContaMetodo = pedidoAtualizado.metodoPagamento || metodoPagamento;
     _ultimaContaPedidoIds = [pedidoId];
-    fecharModalBalcaoFechamento();
+    // Salva ticket no pedido para reimpressão
+    if (_ultimoTicketHtml) {
+      fetch(`/admin/pedidos/${pedidoId}/ticket`, {
+        method: 'PUT',
+        headers: { ...getHeaders(), 'Content-Type': 'application/json' },
+        body: JSON.stringify({ ticketHtml: _ultimoTicketHtml }),
+      }).catch(() => {});
+    }
+    // Transiciona modal para pós-fechamento (igual às mesas)
+    const corpo = document.getElementById('balcao-fecha-corpo');
+    const pos = document.getElementById('balcao-pos-fechamento');
+    if (corpo) corpo.style.display = 'none';
+    if (pos) pos.style.display = 'flex';
     mostrarToast('✅ Conta fechada!');
-    balcaoMostrarInicio();
-    renderizarPedidos();
-    carregarStats();
   } catch {
     mostrarToast('Erro de rede.');
-    if (btn) { btn.disabled = false; btn.textContent = '✅ Fechar conta'; }
   }
 }
 
-function balcaoAbrirFacturaFechamento(pedidoId) {
-  const p = pedidos.find(x => x.id === pedidoId);
-  if (!p) return;
-  _ultimaContaItens = Array.isArray(p.itens) ? p.itens : [];
-  _ultimaContaTotal = p.total;
-  _ultimaContaMesa = null;
-  _ultimaContaMetodo = p.metodoPagamento;
-  _ultimaContaPedidoIds = [p.id];
+function abrirModalFacturaBalcao() {
   fecharModalBalcaoFechamento();
   abrirModalFactura();
 }

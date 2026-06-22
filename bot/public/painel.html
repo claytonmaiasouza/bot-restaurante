@@ -10,6 +10,7 @@
     .card-new { animation: slideDown 0.3s ease; }
     @keyframes slideDown { from { opacity:0; transform:translateY(-12px); } to { opacity:1; transform:translateY(0); } }
     @keyframes cl-blink { 0%,100%{opacity:1} 50%{opacity:.35} }
+    @keyframes fechamento-pulse { 0%,100%{transform:scale(1);box-shadow:0 0 0 0 rgba(16,185,129,.5)} 60%{transform:scale(1.25);box-shadow:0 0 0 7px rgba(16,185,129,0)} }
     .cozinha-local-blink { animation: cl-blink 1s infinite; }
     ::-webkit-scrollbar { width: 8px; height: 8px; }
     ::-webkit-scrollbar-thumb { background: #94a3b8; border-radius: 9999px; }
@@ -446,6 +447,19 @@
       <div id="fila-lista" class="space-y-3"></div>
     </div>
 
+    <!-- Modal Confirmação Pagamento Mesa -->
+    <div id="modal-confirm-pagamento" class="hidden fixed inset-0 bg-black/50 z-[60] flex items-center justify-center p-4">
+      <div class="bg-white rounded-2xl shadow-xl w-full max-w-sm p-6">
+        <div class="text-4xl text-center mb-3" id="modal-confirm-pag-icon">💵</div>
+        <h3 class="font-bold text-gray-800 text-center text-lg mb-2" id="modal-confirm-pag-titulo">Confirmar pagamento</h3>
+        <p class="text-sm text-gray-500 text-center mb-6" id="modal-confirm-pag-msg">Confirme o recebimento do pagamento.</p>
+        <div class="flex gap-3">
+          <button onclick="_cancelarConfirmacaoPagamento()" class="flex-1 bg-gray-100 hover:bg-gray-200 text-gray-700 font-semibold py-2.5 rounded-xl text-sm transition">Cancelar</button>
+          <button onclick="_confirmarPagamentoMesa()" class="flex-1 bg-emerald-500 hover:bg-emerald-600 text-white font-bold py-2.5 rounded-xl text-sm transition">✅ Confirmar</button>
+        </div>
+      </div>
+    </div>
+
     <!-- Modal Mesa -->
     <div id="modal-mesa" class="fixed inset-0 z-50 hidden flex items-center justify-center p-4 bg-black/50">
       <div class="bg-white rounded-2xl shadow-2xl w-full flex flex-col" style="max-width:1200px;height:92vh;max-height:92vh">
@@ -526,6 +540,10 @@
                 <option value="Cartão">💳 Cartão</option>
                 <option value="Transferência">📲 Transferência</option>
               </select>
+              <button id="btn-imprimir-ticket" onclick="imprimirTicketMesa()"
+                style="width:100%;background:#6366f1;color:#fff;font-size:14px;font-weight:700;padding:11px;border-radius:12px;border:none;cursor:pointer;font-family:inherit;margin-bottom:8px">
+                🖨️ Imprimir Ticket
+              </button>
               <div id="mesa-btns-normais" class="flex gap-2">
                 <button onclick="salvarPedidoMesa()"
                   style="flex:1;background:#2B7DD4;color:#fff;font-size:14px;font-weight:700;padding:12px;border-radius:12px;border:none;cursor:pointer;font-family:inherit;transition:background .15s"
@@ -539,20 +557,11 @@
                 </button>
               </div>
               <div id="mesa-pos-fechamento" class="hidden space-y-2 mt-2">
-                <div class="flex items-center gap-2 text-sm text-green-700 bg-green-50 rounded-xl px-3 py-2">
-                  <span>✅</span><span>Conta fechada e impressa!</span>
-                </div>
-                <div class="flex gap-2">
-                  <button onclick="reimprimirTicketMesa()"
-                    class="flex-1 bg-gray-100 hover:bg-gray-200 text-gray-700 text-xs font-semibold py-2 rounded-xl transition">
-                    🖨️ Reimprimir
-                  </button>
-                  <button onclick="abrirModalFactura()"
-                    class="flex-1 bg-purple-500 hover:bg-purple-600 text-white text-xs font-semibold py-2 rounded-xl transition">
-                    🧾 Factura Legal
-                  </button>
-                </div>
-                <button onclick="liberarMesa()"
+                <button onclick="abrirModalFactura()"
+                  class="w-full bg-purple-500 hover:bg-purple-600 text-white text-xs font-semibold py-2 rounded-xl transition">
+                  🧾 Factura Legal
+                </button>
+                <button id="btn-liberar-mesa" onclick="liberarMesa()"
                   class="w-full bg-orange-500 hover:bg-orange-600 text-white text-sm font-semibold py-2.5 rounded-xl transition">
                   🧹 Limpar comanda e liberar mesa
                 </button>
@@ -2491,6 +2500,7 @@
               <th class="px-4 py-3 text-xs font-semibold text-gray-500">Condição</th>
               <th class="px-4 py-3 text-xs font-semibold text-gray-500 text-right">Total</th>
               <th class="px-4 py-3 text-xs font-semibold text-gray-500 text-right">IVA 10%</th>
+              <th class="px-4 py-3 text-xs font-semibold text-gray-500 text-center">🖨️</th>
             </tr>
           </thead>
           <tbody id="facturas-tbody"></tbody>
@@ -2548,6 +2558,10 @@
           </select>
           <button onclick="carregarHistorial()"
             class="bg-gray-100 hover:bg-gray-200 text-gray-700 text-xs font-semibold px-3 py-1.5 rounded-lg transition">↺</button>
+          <button id="hist-btn-ordem" onclick="toggleHistorialOrdem()"
+            class="bg-white border border-gray-200 hover:bg-gray-50 text-gray-600 text-xs font-semibold px-3 py-1.5 rounded-lg transition flex items-center gap-1">
+            <span id="hist-ordem-label">↓ Mais recentes</span>
+          </button>
         </div>
       </div>
 
@@ -4151,8 +4165,8 @@ function renderizarMesas() {
   mesasData.forEach(({ mesa, pedido }) => {
     const livre = !pedido;
     const pronta = pedido?.status === 'PRONTO_PARA_RETIRADA';
-    // Verifica se há pedido de fechamento pendente para esta mesa
-    const temFechamento = pedido && Object.values(mesasFechamentoPendente).some(f => f.mesa === mesa);
+    // Verifica se há pedido de fechamento pendente para esta mesa (socket em tempo real ou dado do servidor)
+    const temFechamento = pedido && (pedido.fechamentoSolicitado || Object.values(mesasFechamentoPendente).some(f => f.mesa === mesa));
     const wrapper = document.createElement('div');
     wrapper.style.cssText = 'position:relative';
     const btn = document.createElement('button');
@@ -4181,7 +4195,7 @@ function renderizarMesas() {
     wrapper.appendChild(btn);
     if (temFechamento) {
       const badge = document.createElement('div');
-      badge.style.cssText = 'position:absolute;top:-6px;right:-6px;background:#ef4444;color:#fff;font-size:12px;font-weight:900;width:22px;height:22px;border-radius:50%;display:flex;align-items:center;justify-content:center;box-shadow:0 2px 6px rgba(239,68,68,.5);z-index:1';
+      badge.style.cssText = 'position:absolute;top:-6px;right:-6px;background:#10b981;color:#fff;font-size:12px;font-weight:900;width:22px;height:22px;border-radius:50%;display:flex;align-items:center;justify-content:center;box-shadow:0 2px 6px rgba(16,185,129,.5);z-index:1;animation:fechamento-pulse 1.4s ease-in-out infinite';
       badge.textContent = '!';
       wrapper.appendChild(badge);
     }
@@ -4200,11 +4214,11 @@ function renderizarMesaHistorico(historico) {
     return;
   }
   const moeda = getMoeda() || 'Gs';
-  el.innerHTML = historico.map(p => {
+  _historicoTickets = historico.map(p => p.ticketHtml || null);
+  el.innerHTML = historico.map((p, idx) => {
     const dt = new Date(p.createdAt).toLocaleString('pt-BR', { day: '2-digit', month: '2-digit', hour: '2-digit', minute: '2-digit' });
     const resumo = Array.isArray(p.itens) ? p.itens.slice(0, 2).map(i => `${i.quantidade}x ${i.nome}`).join(', ') + (p.itens.length > 2 ? '…' : '') : '';
-    const reprintBtn = p.ticketHtml ? `<button onclick="(function(){var w=window.open('','_blank','width=420,height=620');if(w){w.document.write(${JSON.stringify(p.ticketHtml)});w.document.close();}})()"
-        class="text-blue-500 hover:text-blue-700 underline text-xs ml-2">🖨️</button>` : '';
+    const reprintBtn = p.ticketHtml ? `<button onclick="_reimprimirHistoricoMesa(${idx})" class="text-blue-500 hover:text-blue-700 underline text-xs ml-2">🖨️</button>` : '';
     return `<div class="text-xs py-1.5 border-t border-gray-100 first:border-0 first:pt-0">
       <div class="flex justify-between text-gray-700">
         <span>${dt}</span>
@@ -4213,6 +4227,14 @@ function renderizarMesaHistorico(historico) {
       ${resumo ? `<div class="text-gray-400 truncate mt-0.5">${resumo}</div>` : ''}
     </div>`;
   }).join('');
+}
+
+let _historicoTickets = [];
+function _reimprimirHistoricoMesa(idx) {
+  const html = _historicoTickets[idx];
+  if (!html) return;
+  const win = window.open('', '_blank', 'width=420,height=620');
+  if (win) { win.document.write(html); win.document.close(); }
 }
 
 function abrirMesaDireta() {
@@ -4866,15 +4888,26 @@ function renderizarMesaCarrinho() {
   }
   mesaCarrinho.forEach((item, idx) => {
     const div = document.createElement('div');
-    div.className = 'flex items-center gap-2';
+    div.className = 'flex items-start gap-2 py-1 border-b border-gray-50 last:border-0';
+    // Separa sabores do nome principal (formato: "Nome: Sabor1 / Sabor2 / ...")
+    const colonIdx = item.nome.indexOf(':');
+    let nomeHtml;
+    if (colonIdx !== -1) {
+      const nomePrincipal = item.nome.slice(0, colonIdx);
+      const sabores = item.nome.slice(colonIdx + 1).trim().split(' / ');
+      nomeHtml = `<span class="text-sm text-gray-800 font-medium">${nomePrincipal}</span>` +
+        `<div class="flex flex-wrap gap-1 mt-0.5">${sabores.map(s => `<span class="text-xs bg-orange-50 text-orange-700 rounded px-1.5 py-0.5">${s.trim()}</span>`).join('')}</div>`;
+    } else {
+      nomeHtml = `<span class="text-sm text-gray-800">${item.nome}</span>`;
+    }
     div.innerHTML = `
-      <div class="flex items-center border border-gray-200 rounded-lg overflow-hidden shrink-0">
+      <div class="flex items-center border border-gray-200 rounded-lg overflow-hidden shrink-0 mt-0.5">
         <button onclick="_alterarQtdMesa(${idx},-1)" class="px-2 py-1 text-gray-500 hover:bg-gray-100 transition text-sm">−</button>
         <span class="text-sm font-bold w-6 text-center">${item.quantidade}</span>
         <button onclick="_alterarQtdMesa(${idx},1)" class="px-2 py-1 text-gray-500 hover:bg-gray-100 transition text-sm">+</button>
       </div>
-      <span class="flex-1 text-sm text-gray-800 truncate">${item.nome}</span>
-      <span class="text-sm font-semibold text-gray-700 shrink-0">${formatarPreco(item.preco * item.quantidade, moeda)}</span>`;
+      <div class="flex-1 min-w-0">${nomeHtml}</div>
+      <span class="text-sm font-semibold text-gray-700 shrink-0 mt-0.5">${formatarPreco(item.preco * item.quantidade, moeda)}</span>`;
     lista.appendChild(div);
   });
   const total = mesaCarrinho.reduce((s, i) => s + i.preco * i.quantidade, 0);
@@ -4997,6 +5030,7 @@ let _ultimaContaItens = [];
 let _ultimaContaTotal = 0;
 let _ultimaContaMesa = null;
 let _ultimaContaMetodo = null;
+let _ultimaContaPedidoIds = [];
 
 function reimprimirTicketMesa() {
   if (!_ultimoTicketHtml) { mostrarToast('Nenhum ticket disponível para reimprimir.'); return; }
@@ -5319,12 +5353,14 @@ async function emitirFacturaAvulsa() {
   }
   const total = _avulsaItens.reduce((s, i) => s + i.preco * i.quantidade, 0);
   // Salva temporariamente nos globais para reutilizar emitirFactura()
-  const _backupItens  = _ultimaContaItens;
-  const _backupTotal  = _ultimaContaTotal;
-  const _backupMesa   = _ultimaContaMesa;
-  _ultimaContaItens   = _avulsaItens.map(i => ({ ...i }));
-  _ultimaContaTotal   = total;
-  _ultimaContaMesa    = null;
+  const _backupItens      = _ultimaContaItens;
+  const _backupTotal      = _ultimaContaTotal;
+  const _backupMesa       = _ultimaContaMesa;
+  const _backupPedidoIds  = _ultimaContaPedidoIds;
+  _ultimaContaItens      = _avulsaItens.map(i => ({ ...i }));
+  _ultimaContaTotal      = total;
+  _ultimaContaMesa       = null;
+  _ultimaContaPedidoIds  = [];
   // Copia dados do modal avulsa para o modal de factura para emitirFactura() ler
   document.getElementById('fact-senhor').value     = document.getElementById('avulsa-senhor').value;
   document.getElementById('fact-direc').value      = document.getElementById('avulsa-direc').value;
@@ -5334,9 +5370,10 @@ async function emitirFacturaAvulsa() {
   fecharModalFacturaAvulsa();
   await emitirFactura();
   // Restaura globais
-  _ultimaContaItens = _backupItens;
-  _ultimaContaTotal = _backupTotal;
-  _ultimaContaMesa  = _backupMesa;
+  _ultimaContaItens     = _backupItens;
+  _ultimaContaTotal     = _backupTotal;
+  _ultimaContaMesa      = _backupMesa;
+  _ultimaContaPedidoIds = _backupPedidoIds;
 }
 
 function _numPorExtenso(num) {
@@ -5703,7 +5740,7 @@ body {
   const win = window.open('', '_blank', 'width=840,height=760');
   if (win) { win.document.write(html); win.document.close(); }
 
-  // Salvar no banco para auditoria
+  // Salvar no banco para auditoria (inclui html para reimpressão)
   fetch('/admin/facturas/salvar', {
     method: 'POST',
     headers: { ...getHeaders(), 'Content-Type': 'application/json' },
@@ -5722,8 +5759,17 @@ body {
       iva10,
       origem: _ultimaContaMesa ? 'PEDIDO' : 'AVULSA',
       mesa: _ultimaContaMesa || null,
+      html,
     })
   }).catch(() => {});
+
+  if (_ultimaContaPedidoIds.length) {
+    fetch('/admin/pedidos/marcar-factura', {
+      method: 'PUT',
+      headers: { ...getHeaders(), 'Content-Type': 'application/json' },
+      body: JSON.stringify({ pedidoIds: _ultimaContaPedidoIds, facturaNumero: fdata.numero }),
+    }).catch(() => {});
+  }
 }
 
 async function fecharContaMesa() {
@@ -5731,10 +5777,9 @@ async function fecharContaMesa() {
 
   const btn = document.getElementById('btn-fechar-conta');
   const textoOriginal = btn ? btn.innerHTML : '';
-  if (btn) { btn.disabled = true; btn.textContent = '⏳ Salvando...'; }
+  if (btn) { btn.disabled = true; btn.textContent = '⏳ Gerando ticket...'; }
 
   try {
-    // Salva quaisquer itens novos pendentes (cria sub-pedido NOVO se necessário)
     await _persistirPedidoMesa();
   } catch (err) {
     alert('Erro ao salvar pedido: ' + err.message);
@@ -5747,54 +5792,144 @@ async function fecharContaMesa() {
   const params = new URLSearchParams();
   if (restauranteAtual) params.set('restauranteId', restauranteAtual);
 
-  // Fecha todos os pedidos ativos da mesa de uma vez
+  // Busca todos os itens e total sem fechar/marcar como pago
   let res;
   try {
-    res = await fetch(`/admin/mesas/${mesaNum}/fechar?${params}`, {
-      method: 'POST',
-      headers: { ...getHeaders(), 'Content-Type': 'application/json' },
-      body: JSON.stringify({ metodoPagamento }),
-    });
+    res = await fetch(`/admin/mesas/${mesaNum}/resumo?${params}`, { headers: getHeaders() });
   } catch (err) {
     if (btn) { btn.disabled = false; btn.innerHTML = textoOriginal; }
-    mostrarToast('Erro de rede ao fechar a mesa. Tente novamente.');
+    mostrarToast('Erro de rede. Tente novamente.');
     return;
   }
 
   if (!res.ok) {
     if (btn) { btn.disabled = false; btn.innerHTML = textoOriginal; }
-    mostrarToast('Erro ao fechar a mesa. Tente novamente.');
+    mostrarToast('Erro ao gerar ticket. Tente novamente.');
     return;
   }
 
-  const { total, itens, pedidoIds } = await res.json();
+  const { total, itens } = await res.json();
   if (btn) { btn.disabled = false; btn.innerHTML = textoOriginal; }
-  const ticketHtml = imprimirContaMesa(mesaNum, itens.length ? itens : mesaCarrinho, total, metodoPagamento);
-  _ultimoTicketHtml = ticketHtml;
-  _ultimaContaItens = itens.length ? itens : mesaCarrinho;
+
+  const itensFinal = itens.length ? itens : mesaCarrinho;
+  _ultimoTicketHtml = gerarTicketHtmlMesa(mesaNum, itensFinal, total, metodoPagamento);
+  _ultimaContaItens = itensFinal;
   _ultimaContaTotal = total;
   _ultimaContaMesa = mesaNum;
   _ultimaContaMetodo = metodoPagamento;
-  // Save ticket HTML to all closed orders for reprinting
-  if (ticketHtml && pedidoIds?.length) {
+
+  // Mostra confirmação baseada no método de pagamento antes de finalizar
+  _abrirConfirmacaoPagamento(metodoPagamento);
+}
+
+let _resolveConfirmacaoPagamento = null;
+
+function _abrirConfirmacaoPagamento(metodo) {
+  const configs = {
+    dinheiro:      { icon: '💵', titulo: 'Dinheiro recebido?',         msg: 'Confirme o recebimento do dinheiro no caixa antes de liberar a mesa.' },
+    cartao:        { icon: '💳', titulo: 'Via da maquininha?',          msg: 'Solicite a via da maquininha de cartão ao cliente antes de liberar a mesa.' },
+    credito:       { icon: '💳', titulo: 'Via da maquininha?',          msg: 'Solicite a via da maquininha de cartão ao cliente antes de liberar a mesa.' },
+    debito:        { icon: '💳', titulo: 'Via da maquininha?',          msg: 'Solicite a via da maquininha de cartão ao cliente antes de liberar a mesa.' },
+    transferencia: { icon: '📲', titulo: 'Comprovante de transferência?', msg: 'Solicite o comprovante de transferência ao cliente antes de liberar a mesa.' },
+    pix:           { icon: '📲', titulo: 'Comprovante de Pix?',         msg: 'Solicite o comprovante de Pix ao cliente antes de liberar a mesa.' },
+  };
+  const key = (metodo || '').toLowerCase().normalize('NFD').replace(/[̀-ͯ]/g, '');
+  const cfg = configs[key] || { icon: '💰', titulo: 'Confirmar pagamento', msg: 'Confirme o recebimento do pagamento antes de liberar a mesa.' };
+
+  document.getElementById('modal-confirm-pag-icon').textContent = cfg.icon;
+  document.getElementById('modal-confirm-pag-titulo').textContent = cfg.titulo;
+  document.getElementById('modal-confirm-pag-msg').textContent = cfg.msg;
+  document.getElementById('modal-confirm-pagamento').classList.remove('hidden');
+}
+
+function _confirmarPagamentoMesa() {
+  document.getElementById('modal-confirm-pagamento').classList.add('hidden');
+  document.getElementById('mesa-btns-normais').classList.add('hidden');
+  document.getElementById('mesa-pos-fechamento').classList.remove('hidden');
+}
+
+function _cancelarConfirmacaoPagamento() {
+  document.getElementById('modal-confirm-pagamento').classList.add('hidden');
+}
+
+async function liberarMesa() {
+  const mesaNum = _ultimaContaMesa || Number(document.getElementById('mesa-num').value);
+  const metodoPagamento = document.getElementById('mesa-pagamento')?.value || _ultimaContaMetodo || null;
+  const params = new URLSearchParams();
+  if (restauranteAtual) params.set('restauranteId', restauranteAtual);
+
+  const btnLib = document.getElementById('btn-liberar-mesa');
+  if (btnLib) { btnLib.disabled = true; btnLib.textContent = '⏳ Liberando...'; }
+
+  let pedidoIds = [];
+  try {
+    const res = await fetch(`/admin/mesas/${mesaNum}/fechar?${params}`, {
+      method: 'POST',
+      headers: { ...getHeaders(), 'Content-Type': 'application/json' },
+      body: JSON.stringify({ metodoPagamento }),
+    });
+    if (!res.ok) {
+      if (btnLib) { btnLib.disabled = false; btnLib.textContent = '🧹 Limpar comanda e liberar mesa'; }
+      mostrarToast('Erro ao liberar mesa. Tente novamente.');
+      return;
+    }
+    const data = await res.json();
+    pedidoIds = data.pedidoIds || [];
+    _ultimaContaPedidoIds = pedidoIds;
+  } catch (err) {
+    if (btnLib) { btnLib.disabled = false; btnLib.textContent = '🧹 Limpar comanda e liberar mesa'; }
+    mostrarToast('Erro de rede ao liberar mesa.');
+    return;
+  }
+
+  // Se método de pagamento mudou, regenerar ticket HTML (sem imprimir)
+  if (metodoPagamento !== _ultimaContaMetodo && _ultimaContaItens?.length) {
+    _ultimaContaMetodo = metodoPagamento;
+    _ultimoTicketHtml = gerarTicketHtmlMesa(mesaNum, _ultimaContaItens, _ultimaContaTotal, metodoPagamento);
+    mostrarToast(`Método alterado para ${metodoPagamento || '—'}. Reimprima o ticket se necessário.`, 4000);
+  }
+
+  // Salvar ticket HTML nos pedidos para reimpressão futura
+  if (_ultimoTicketHtml && pedidoIds.length) {
     pedidoIds.forEach(id => {
       fetch(`/admin/pedidos/${id}/ticket`, {
         method: 'PUT',
         headers: { ...getHeaders(), 'Content-Type': 'application/json' },
-        body: JSON.stringify({ ticketHtml }),
+        body: JSON.stringify({ ticketHtml: _ultimoTicketHtml }),
       }).catch(() => {});
     });
   }
-  document.getElementById('mesa-btns-normais').classList.add('hidden');
-  document.getElementById('mesa-pos-fechamento').classList.remove('hidden');
-  document.getElementById('mesa-pagamento').disabled = true;
-  carregarMesas();
-}
 
-function liberarMesa() {
   fecharModalMesa();
   carregarMesas();
   carregarPedidos();
+}
+
+async function imprimirTicketMesa() {
+  const mesaNum = Number(document.getElementById('mesa-num').value);
+  if (!mesaNum) return;
+  const metodoPagamento = document.getElementById('mesa-pagamento')?.value || null;
+  const params = new URLSearchParams();
+  if (restauranteAtual) params.set('restauranteId', restauranteAtual);
+
+  const btn = document.getElementById('btn-imprimir-ticket');
+  if (btn) { btn.disabled = true; btn.textContent = '⏳ Gerando...'; }
+
+  try {
+    const res = await fetch(`/admin/mesas/${mesaNum}/resumo?${params}`, { headers: getHeaders() });
+    if (!res.ok) { mostrarToast('Nenhum pedido ativo para esta mesa.'); return; }
+    const { total, itens } = await res.json();
+    const ticketHtml = imprimirContaMesa(mesaNum, itens.length ? itens : mesaCarrinho, total, metodoPagamento);
+    _ultimoTicketHtml = ticketHtml;
+    _ultimaContaItens = itens.length ? itens : mesaCarrinho;
+    _ultimaContaTotal = total;
+    _ultimaContaMesa = mesaNum;
+    _ultimaContaMetodo = metodoPagamento;
+  } catch (e) {
+    mostrarToast('Erro ao imprimir ticket.');
+  } finally {
+    if (btn) { btn.disabled = false; btn.innerHTML = '🖨️ Imprimir Ticket'; }
+  }
 }
 
 // ── Balcão POS ────────────────────────────────────────────────────────────────
@@ -5857,20 +5992,62 @@ function balcaoMostrarInicio() {
   if (footer) footer.style.display = 'none';
   const content = document.getElementById('balcao-content');
   if (!content) return;
-  content.setAttribute('style', 'flex:1;overflow-y:auto;background:#f6f7fb;display:flex;flex-direction:column;justify-content:center;align-items:center;padding:20px');
-  content.innerHTML = `
-    <div style="width:fit-content;margin:auto;display:flex;flex-direction:column;align-items:center;gap:28px;text-align:center">
+
+  const ativos = pedidos.filter(p => p.origem === 'BALCAO' && !p.pago && p.status !== 'CANCELADO')
+    .sort((a, b) => new Date(b.createdAt) - new Date(a.createdAt));
+  const moeda = getMoeda() || 'Gs';
+
+  const novoPedidoBtn = `<button onclick="balcaoMostrarCategorias()" style="padding:14px 40px;background:#2B7DD4;color:#fff;font-size:17px;font-weight:800;border:none;border-radius:16px;cursor:pointer;box-shadow:0 4px 16px rgba(43,125,212,.35);font-family:inherit;transition:transform .1s,box-shadow .1s"
+    onmouseover="this.style.transform='translateY(-2px)';this.style.boxShadow='0 8px 24px rgba(43,125,212,.45)'"
+    onmouseout="this.style.transform='';this.style.boxShadow='0 4px 16px rgba(43,125,212,.35)'">
+    ＋ Novo Pedido
+  </button>`;
+
+  if (ativos.length) {
+    content.setAttribute('style', 'flex:1;overflow-y:auto;background:#f6f7fb;padding:20px;display:flex;flex-direction:column;gap:20px');
+    const statusInfo = s => ({ 'CONFIRMADO': { cor: '#3b82f6', label: 'Confirmado' }, 'PREPARANDO': { cor: '#f59e0b', label: 'Preparando' }, 'PRONTO_PARA_RETIRADA': { cor: '#10b981', label: '✔ Pronto!' } }[s] || { cor: '#9ca3af', label: s });
+    const cards = ativos.map(p => {
+      const itens = Array.isArray(p.itens) ? p.itens : [];
+      const isPronto = p.status === 'PRONTO_PARA_RETIRADA';
+      const si = statusInfo(p.status);
+      const numFmt = p.numeroDia ? String(p.numeroDia).padStart(3, '0') : p.id.slice(-4);
+      const tags = itens.slice(0, 4).map(i => `<span style="display:inline-block;background:#f3f4f6;border-radius:6px;padding:1px 7px;margin:1px 2px 1px 0;font-size:11px">${i.quantidade || 1}× ${i.nome}</span>`).join('') + (itens.length > 4 ? `<span style="color:#9ca3af;font-size:11px"> +${itens.length - 4} mais</span>` : '');
+      return `<div style="background:#fff;border-radius:18px;padding:18px;box-shadow:${isPronto ? '0 0 0 3px #10b981,0 6px 24px rgba(16,185,129,.18)' : '0 2px 10px rgba(0,0,0,.08)'};border:2px solid ${isPronto ? '#10b981' : '#f0f0f0'}">
+        <div style="display:flex;align-items:flex-start;justify-content:space-between;margin-bottom:6px">
+          <div style="flex:1;min-width:0">
+            <p style="font-size:18px;font-weight:900;color:#1a202c;margin:0 0 2px;overflow:hidden;text-overflow:ellipsis;white-space:nowrap">${p.clienteNome || 'Balcão'}</p>
+            <p style="font-size:11px;color:#9ca3af;margin:0">Pedido #${numFmt}</p>
+          </div>
+          <span style="font-size:11px;font-weight:700;background:${si.cor}22;color:${si.cor};border-radius:99px;padding:3px 10px;flex-shrink:0;margin-left:8px">${si.label}</span>
+        </div>
+        <div style="margin:10px 0 12px;line-height:1.8">${tags}</div>
+        <div style="display:flex;align-items:center;justify-content:space-between">
+          <span style="font-size:20px;font-weight:900;color:#1a202c">${formatarPreco(p.total, moeda)}</span>
+          <button onclick="balcaoAbrirFechamento('${p.id}')" style="background:${isPronto ? 'linear-gradient(135deg,#10b981,#059669)' : '#2B7DD4'};color:#fff;font-size:13px;font-weight:800;padding:9px 18px;border-radius:12px;border:none;cursor:pointer;font-family:inherit;box-shadow:0 3px 10px rgba(0,0,0,.15);transition:transform .1s"
+            onmouseover="this.style.transform='translateY(-1px)'" onmouseout="this.style.transform=''">
+            🖨️ Fechar conta
+          </button>
+        </div>
+      </div>`;
+    }).join('');
+    content.innerHTML = `
       <div>
-        <span style="font-size:72px;display:block;line-height:1">🏪</span>
-        <p style="font-size:24px;font-weight:900;color:#1a202c;margin:16px 0 6px;letter-spacing:-.5px">Balcão</p>
-        <p style="font-size:15px;color:#9ca3af;margin:0">Atendimento presencial</p>
+        <p style="font-size:13px;font-weight:700;color:#6b7280;text-transform:uppercase;letter-spacing:.5px;margin:0 0 14px">Comandas ativas (${ativos.length})</p>
+        <div style="display:grid;grid-template-columns:repeat(auto-fill,minmax(240px,1fr));gap:12px">${cards}</div>
       </div>
-      <button onclick="balcaoMostrarCategorias()" style="padding:18px 52px;background:#2B7DD4;color:#fff;font-size:20px;font-weight:800;border:none;border-radius:18px;cursor:pointer;box-shadow:0 6px 20px rgba(43,125,212,.35);font-family:inherit;letter-spacing:-.3px;transition:transform .1s,box-shadow .1s"
-        onmouseover="this.style.transform='translateY(-2px)';this.style.boxShadow='0 10px 28px rgba(43,125,212,.45)'"
-        onmouseout="this.style.transform='';this.style.boxShadow='0 6px 20px rgba(43,125,212,.35)'">
-        ＋ Novo Pedido
-      </button>
-    </div>`;
+      <div style="text-align:center;padding:16px 0">${novoPedidoBtn}</div>`;
+  } else {
+    content.setAttribute('style', 'flex:1;overflow-y:auto;background:#f6f7fb;display:flex;flex-direction:column;justify-content:center;align-items:center;padding:20px');
+    content.innerHTML = `
+      <div style="width:fit-content;margin:auto;display:flex;flex-direction:column;align-items:center;gap:28px;text-align:center">
+        <div>
+          <span style="font-size:72px;display:block;line-height:1">🏪</span>
+          <p style="font-size:24px;font-weight:900;color:#1a202c;margin:16px 0 6px;letter-spacing:-.5px">Balcão</p>
+          <p style="font-size:15px;color:#9ca3af;margin:0">Atendimento presencial</p>
+        </div>
+        ${novoPedidoBtn}
+      </div>`;
+  }
 }
 
 function balcaoMostrarCategorias() {
@@ -6328,6 +6505,9 @@ async function balcaoCheckout() {
       }),
     });
     if (!res.ok) { mostrarToast('Erro ao confirmar pedido.'); return; }
+    const json = await res.json();
+    const novoPedido = json.data;
+    if (novoPedido && !pedidos.find(p => p.id === novoPedido.id)) pedidos.push(novoPedido);
     mostrarToast('✅ Pedido de balcão criado!');
     balcaoCarrinho = [];
     if (document.getElementById('balcao-cliente')) document.getElementById('balcao-cliente').value = '';
@@ -6336,6 +6516,154 @@ async function balcaoCheckout() {
     balcaoMostrarInicio();
   } catch { mostrarToast('Erro de rede.'); }
   finally { if (btn) { btn.disabled = false; btn.textContent = '✅ Confirmar Pedido'; } }
+}
+
+function balcaoAbrirFechamento(pedidoId) {
+  const p = pedidos.find(x => x.id === pedidoId);
+  if (!p) return;
+  const moeda = getMoeda() || 'Gs';
+  const itens = Array.isArray(p.itens) ? p.itens : [];
+  const numFmt = p.numeroDia ? String(p.numeroDia).padStart(3, '0') : p.id.slice(-4);
+  const metodoAtual = p.metodoPagamento || '';
+  const linhasItens = itens.map(i =>
+    `<div style="display:flex;justify-content:space-between;align-items:center;padding:7px 0;border-bottom:1px solid #f3f4f6">
+      <span style="font-size:13px;color:#374151">${i.quantidade || 1}× ${i.nome}</span>
+      <span style="font-size:13px;font-weight:700;color:#ea580c">${formatarPreco(i.preco * (i.quantidade || 1), moeda)}</span>
+    </div>`
+  ).join('');
+  const opts = ['Dinheiro', 'Cartão', 'Transferência'].map(m =>
+    `<option value="${m}" ${metodoAtual === m ? 'selected' : ''}>${m === 'Dinheiro' ? '💵' : m === 'Cartão' ? '💳' : '📲'} ${m}</option>`
+  ).join('');
+  document.getElementById('modal-balcao-fechamento')?.remove();
+  const div = document.createElement('div');
+  div.id = 'modal-balcao-fechamento';
+  div.style.cssText = 'position:fixed;inset:0;background:rgba(0,0,0,.6);z-index:200;display:flex;align-items:center;justify-content:center;padding:20px';
+  div.onclick = e => { if (e.target === div) fecharModalBalcaoFechamento(); };
+  div.innerHTML = `
+    <div style="background:#fff;border-radius:24px;width:100%;max-width:440px;max-height:90vh;overflow-y:auto;box-shadow:0 20px 60px rgba(0,0,0,.3)">
+      <div style="padding:20px 24px 16px;border-bottom:2px solid #f0f0f0;display:flex;align-items:center;justify-content:space-between">
+        <div>
+          <p style="font-size:20px;font-weight:900;color:#1a202c;margin:0">${p.clienteNome || 'Balcão'}</p>
+          <p style="font-size:12px;color:#9ca3af;margin:4px 0 0">Pedido #${numFmt}</p>
+        </div>
+        <button onclick="fecharModalBalcaoFechamento()" style="width:36px;height:36px;border-radius:50%;background:#f3f4f6;border:none;cursor:pointer;font-size:18px;display:flex;align-items:center;justify-content:center">✕</button>
+      </div>
+      <div style="padding:16px 24px">
+        ${linhasItens}
+        <div style="display:flex;justify-content:space-between;align-items:baseline;padding:12px 0 4px;border-top:2px solid #f0f0f0;margin-top:4px">
+          <span style="font-size:14px;font-weight:600;color:#6b7280">Total</span>
+          <span style="font-size:26px;font-weight:900;color:#1a202c">${formatarPreco(p.total, moeda)}</span>
+        </div>
+      </div>
+      <div style="padding:0 24px 24px">
+        <select id="balcao-fecha-pagamento" style="width:100%;border:2px solid #e5e7eb;border-radius:12px;padding:11px 14px;font-size:15px;margin-bottom:14px;box-sizing:border-box;outline:none;font-family:inherit;color:#374151;background:#fff">
+          <option value="">💳 Forma de pagamento...</option>
+          ${opts}
+        </select>
+        <div style="display:flex;gap:10px;margin-bottom:10px">
+          <button onclick="balcaoImprimirFechamento('${pedidoId}')" style="flex:1;background:#6366f1;color:#fff;font-size:14px;font-weight:700;padding:12px;border-radius:12px;border:none;cursor:pointer;font-family:inherit">🖨️ Imprimir</button>
+          <button id="btn-balcao-fechar-${pedidoId}" onclick="balcaoExecutarFechamento('${pedidoId}')" style="flex:2;background:linear-gradient(135deg,#10b981,#059669);color:#fff;font-size:15px;font-weight:800;padding:12px;border-radius:12px;border:none;cursor:pointer;font-family:inherit;box-shadow:0 4px 14px rgba(16,185,129,.35)">✅ Fechar conta</button>
+        </div>
+        <button onclick="balcaoAbrirFacturaFechamento('${pedidoId}')" style="width:100%;background:#a855f7;color:#fff;font-size:13px;font-weight:700;padding:10px;border-radius:12px;border:none;cursor:pointer;font-family:inherit">🧾 Emitir Factura Legal</button>
+      </div>
+    </div>`;
+  document.body.appendChild(div);
+}
+
+function fecharModalBalcaoFechamento() {
+  document.getElementById('modal-balcao-fechamento')?.remove();
+}
+
+function balcaoImprimirFechamento(pedidoId) {
+  const p = pedidos.find(x => x.id === pedidoId);
+  if (!p) return;
+  const itens = Array.isArray(p.itens) ? p.itens : [];
+  const metodoPagamento = document.getElementById('balcao-fecha-pagamento')?.value || p.metodoPagamento || '';
+  const html = gerarTicketHtmlBalcao(p.clienteNome || 'Balcão', p.numeroDia, itens, p.total, metodoPagamento);
+  const win = window.open('', '_blank', 'width=420,height=620');
+  if (win) { win.document.write(html); win.document.close(); }
+  _ultimoTicketHtml = html;
+}
+
+function gerarTicketHtmlBalcao(clienteNome, numeroDia, itens, total, metodoPagamento) {
+  const moeda = getMoeda() || 'Gs';
+  const agora = new Date().toLocaleString('pt-BR', { day: '2-digit', month: '2-digit', year: 'numeric', hour: '2-digit', minute: '2-digit' });
+  const nomeRest = document.getElementById('sidebar-restaurante-label')?.textContent || 'Restaurante';
+  const numFmt = numeroDia ? String(numeroDia).padStart(3, '0') : '---';
+  const linhas = itens.map(i =>
+    `<div class="row"><span>${i.quantidade || 1}x ${i.nome}</span><span>${formatarPreco(i.preco * (i.quantidade || 1), moeda)}</span></div>`
+  ).join('');
+  return `<!DOCTYPE html><html><head><meta charset="UTF-8"><title>Balcão - ${clienteNome}</title>
+<style>
+  body{font-family:monospace;max-width:300px;margin:0 auto;padding:10px;font-size:12px}
+  h2{text-align:center;font-size:15px;margin:4px 0}
+  .center{text-align:center;margin:2px 0}
+  .sep{border-top:1px dashed #000;margin:7px 0}
+  .row{display:flex;justify-content:space-between;margin:2px 0}
+  .total{font-weight:bold;font-size:14px}
+  @media print{html,body{width:80mm;margin:0}}
+</style></head><body>
+<h2>${nomeRest}</h2>
+<p class="center" style="font-size:10px">${agora}</p>
+<div class="sep"></div>
+<div class="row"><strong>🏪 Balcão — ${clienteNome}</strong></div>
+<div class="row"><span>Pedido #${numFmt}</span></div>
+<div class="sep"></div>
+${linhas}
+<div class="sep"></div>
+<div class="row total"><span>TOTAL</span><span>${formatarPreco(total, moeda)}</span></div>
+${metodoPagamento ? `<p class="center" style="margin-top:6px">Pagamento: ${metodoPagamento}</p>` : ''}
+<p class="center" style="font-size:10px;margin-top:14px">Obrigado pela visita!</p>
+<script>window.onload=function(){window.print();}<\/script>
+</body></html>`;
+}
+
+async function balcaoExecutarFechamento(pedidoId) {
+  const metodoPagamento = document.getElementById('balcao-fecha-pagamento')?.value || null;
+  const btn = document.getElementById(`btn-balcao-fechar-${pedidoId}`);
+  if (btn) { btn.disabled = true; btn.textContent = '⏳...'; }
+  try {
+    const res = await fetch(`/admin/pedidos/balcao/${pedidoId}/fechar`, {
+      method: 'POST',
+      headers: { ...getHeaders(), 'Content-Type': 'application/json' },
+      body: JSON.stringify({ metodoPagamento }),
+    });
+    if (!res.ok) {
+      const err = await res.json().catch(() => ({}));
+      mostrarToast(err.error || 'Erro ao fechar conta.');
+      if (btn) { btn.disabled = false; btn.textContent = '✅ Fechar conta'; }
+      return;
+    }
+    const json = await res.json();
+    const pedidoAtualizado = json.data;
+    const idx = pedidos.findIndex(p => p.id === pedidoId);
+    if (idx >= 0) pedidos[idx] = pedidoAtualizado;
+    _ultimaContaItens = Array.isArray(pedidoAtualizado.itens) ? pedidoAtualizado.itens : [];
+    _ultimaContaTotal = pedidoAtualizado.total;
+    _ultimaContaMesa = null;
+    _ultimaContaMetodo = pedidoAtualizado.metodoPagamento;
+    _ultimaContaPedidoIds = [pedidoId];
+    fecharModalBalcaoFechamento();
+    mostrarToast('✅ Conta fechada!');
+    balcaoMostrarInicio();
+    renderizarPedidos();
+    carregarStats();
+  } catch {
+    mostrarToast('Erro de rede.');
+    if (btn) { btn.disabled = false; btn.textContent = '✅ Fechar conta'; }
+  }
+}
+
+function balcaoAbrirFacturaFechamento(pedidoId) {
+  const p = pedidos.find(x => x.id === pedidoId);
+  if (!p) return;
+  _ultimaContaItens = Array.isArray(p.itens) ? p.itens : [];
+  _ultimaContaTotal = p.total;
+  _ultimaContaMesa = null;
+  _ultimaContaMetodo = p.metodoPagamento;
+  _ultimaContaPedidoIds = [p.id];
+  fecharModalBalcaoFechamento();
+  abrirModalFactura();
 }
 
 function toggleHistoricoMesa() {
@@ -7002,9 +7330,10 @@ function _oferecerFacturaPedido(pedido) {
   const totalFmt = formatarPreco(pedido.total || 0, moeda);
   const origem = pedido.origem === 'MESA' ? `Mesa ${pedido.mesa}` : pedido.origem === 'BALCAO' ? 'Balcão' : 'WhatsApp/Web';
   // Reutiliza modal de factura legal já existente
-  _ultimaContaItens = pedido.itens.map(i => ({ ...i }));
-  _ultimaContaTotal = pedido.total || 0;
-  _ultimaContaMesa = pedido.mesa || null;
+  _ultimaContaItens     = pedido.itens.map(i => ({ ...i }));
+  _ultimaContaTotal     = pedido.total || 0;
+  _ultimaContaMesa      = pedido.mesa || null;
+  _ultimaContaPedidoIds = pedido.id ? [pedido.id] : [];
   // Modal de confirmação de emissão de factura
   const dlg = document.createElement('div');
   dlg.id = '_factura-oferta-dlg';
@@ -7056,12 +7385,19 @@ function resolverBalcaoPronto(pedidoId) {
 
 function resolverFechamento(pedidoId) {
   document.getElementById(`fechamento-notif-${pedidoId}`)?.remove();
-  delete mesasFechamentoPendente[pedidoId];
+  // NÃO remove de mesasFechamentoPendente aqui — badge do grid só some ao liberar a mesa
   painelNotificacoes = painelNotificacoes.filter(n => n.id !== pedidoId);
   _marcarHistoricoResolvido(pedidoId);
   atualizarBadgeNotif();
   if (pedidosViewAtual === 'notificacoes') renderNotificacoes();
-  if (pedidosViewAtual === 'mesas') renderizarMesas();
+}
+
+async function irParaMesaFechamento(pedidoId, mesa) {
+  resolverFechamento(pedidoId);
+  mostrarSecao('pedidos');
+  setPedidosView('mesas');
+  await carregarMesas();
+  abrirMesa(mesa);
 }
 
 function atualizarBadgeNotif() {
@@ -7168,7 +7504,7 @@ function renderHistoricoNotif() {
       if (!resolvido) acao = `<button onclick="confirmarDevolucao('${n.id}')" class="text-xs bg-green-600 hover:bg-green-700 text-white font-bold px-3 py-1.5 rounded-lg transition">✅ Confirmar</button>`;
     } else if (n.tipo === 'fechamento') {
       icon = '🧾'; titulo = `Fechar conta — ${n.numFmt}`; subtitulo = `${n.garconNome} • ${formatarPreco(n.total, moeda)}`;
-      if (!resolvido) acao = `<button onclick="resolverFechamento('${n.id}')" class="text-xs bg-indigo-500 hover:bg-indigo-600 text-white font-bold px-3 py-1.5 rounded-lg transition">✅ Ciente</button>`;
+      if (!resolvido) acao = `<div class="flex gap-1.5"><button onclick="irParaMesaFechamento('${n.id}',${n.mesa})" class="text-xs bg-green-500 hover:bg-green-600 text-white font-bold px-3 py-1.5 rounded-lg transition">🪑 Abrir</button><button onclick="resolverFechamento('${n.id}')" class="text-xs bg-indigo-500 hover:bg-indigo-600 text-white font-bold px-3 py-1.5 rounded-lg transition">✅ Ciente</button></div>`;
     } else if (n.tipo === 'balcao_pronto') {
       icon = '🍽️'; titulo = `Balcão #${n.numFmt} pronto`; subtitulo = (n.itens||[]).slice(0,2).map(i=>`${i.quantidade}x ${i.nome}`).join(', ');
       if (!resolvido) acao = `<button onclick="resolverBalcaoPronto('${n.id}')" class="text-xs bg-blue-500 hover:bg-blue-600 text-white font-bold px-3 py-1.5 rounded-lg transition">✅ Ciente</button>`;
@@ -7317,6 +7653,7 @@ function iniciarSocket() {
     renderizarPedidos();
     carregarStats();
     if (pedidosViewAtual === 'mesas') carregarMesas();
+    if (pedidosViewAtual === 'balcao' && balcaoTela === 'inicio') balcaoMostrarInicio();
     if (pedidosViewAtual === 'fila') carregarFilaLocal();
     else if ((pedido.origem === 'MESA' || pedido.origem === 'BALCAO') && !['ENTREGUE','SERVIDO','CANCELADO'].includes(pedido.status)) {
       if (!pedidosFilaLocal.find(p => p.id === pedido.id)) {
@@ -7334,6 +7671,7 @@ function iniciarSocket() {
     if (idx >= 0) pedidos[idx] = pedido;
     atualizarCardNaTela(pedido);
     if (pedidosViewAtual === 'mesas') carregarMesas();
+    if (pedidosViewAtual === 'balcao' && balcaoTela === 'inicio') balcaoMostrarInicio();
     if (pedidosViewAtual === 'fila') carregarFilaLocal();
     else {
       const fi = pedidosFilaLocal.findIndex(p => p.id === pedido.id);
@@ -7416,11 +7754,14 @@ function iniciarSocket() {
     }
   });
 
-  socket.on('caixa:troco-solicitado', ({ pedidoId, numeroDia, motoboyId, motoboyNome, metodoPagamento }) => {
+  socket.on('caixa:troco-solicitado', ({ pedidoId, numeroDia, motoboyId, motoboyNome, metodoPagamento, total, trocoPara }) => {
     const container = document.getElementById('troco-notificacoes');
     if (!container) return;
     document.getElementById(`troco-notif-${pedidoId}`)?.remove();
     const numFmt = numeroDia ? `D${numeroDia}` : pedidoId.substring(0, 6).toUpperCase();
+    const moeda = getMoeda();
+    const fmtV = v => formatarPreco(v, moeda);
+    const trocoAPreparar = (trocoPara && total) ? (trocoPara - total) : null;
     const div = document.createElement('div');
     div.id = `troco-notif-${pedidoId}`;
     div.className = 'pointer-events-auto bg-amber-50 border-2 border-amber-400 rounded-2xl shadow-xl p-4 flex items-center justify-between gap-3 animate-pulse';
@@ -7430,7 +7771,9 @@ function iniciarSocket() {
         <div>
           <p class="font-bold text-amber-900 text-sm">Troco solicitado — Pedido #${numFmt}</p>
           <p class="text-amber-700 text-xs font-medium">${motoboyNome || 'Motoboy'} precisa de troco</p>
-          <p class="text-amber-800 text-sm">${(metodoPagamento || '').replace(/dinheiro\s*[-–]\s*troco\s+para\s+/i, 'Troco para: ')}</p>
+          ${trocoPara ? `<p class="text-amber-800 text-sm">Cliente vai pagar: <strong>${fmtV(trocoPara)}</strong></p>` : `<p class="text-amber-800 text-sm">${(metodoPagamento || '').replace(/dinheiro\s*[-–]\s*troco\s+para\s+/i, 'Troco para: ').replace(/efectivo\s*[-–]\s*cambio\s+(?:para|de)\s+/i, 'Cambio para: ')}</p>`}
+          ${trocoAPreparar && trocoAPreparar > 0 ? `<p class="text-amber-900 text-sm font-bold">💰 Troco a preparar: ${fmtV(trocoAPreparar)}</p>` : ''}
+          ${total ? `<p class="text-amber-600 text-xs">Total do pedido: ${fmtV(total)}</p>` : ''}
         </div>
       </div>
       <div class="flex flex-col items-end gap-1.5 flex-shrink-0">
@@ -7472,13 +7815,19 @@ function iniciarSocket() {
     const div = document.createElement('div');
     div.id = `devolucao-notif-${pedidoId}`;
     div.className = 'pointer-events-auto bg-green-50 border-2 border-green-500 rounded-2xl shadow-xl p-4 flex items-center justify-between gap-3';
+    const moedaDev = getMoeda();
+    const fmtDev = v => formatarPreco(v, moedaDev);
+    const matchTrocoDev = (metodoPagamento || '').match(/(?:troco|cambio)\s+(?:para|de)\s+[^\d]*([0-9][0-9.,]*)/i);
+    const trocoParaDev = matchTrocoDev ? (parseInt(matchTrocoDev[1].replace(/[^\d]/g, ''), 10) || null) : null;
+    const trocoEntregue = (trocoParaDev && total) ? (trocoParaDev - total) : null;
     div.innerHTML = `
       <div class="flex items-center gap-3">
         <span class="text-3xl">💰</span>
         <div>
           <p class="font-bold text-green-900 text-sm">Motoboy retornou — Pedido #${numFmt}</p>
           <p class="text-green-700 text-xs font-medium">${motoboyNome || 'Motoboy'} quer devolver o dinheiro</p>
-          <p class="text-green-800 text-sm">${mp}</p>
+          ${total ? `<p class="text-green-800 text-sm font-bold">💵 Montante a receber: ${fmtDev(total)}</p>` : `<p class="text-green-800 text-sm">${mp}</p>`}
+          ${trocoEntregue && trocoEntregue > 0 ? `<p class="text-green-700 text-xs">Troco entregue ao cliente: ${fmtDev(trocoEntregue)}</p>` : ''}
         </div>
       </div>
       <div class="flex flex-col items-end gap-1.5 flex-shrink-0">
@@ -7513,7 +7862,7 @@ function iniciarSocket() {
     const container = document.getElementById('troco-notificacoes');
     if (!container) return;
     document.getElementById(`fechamento-notif-${pedidoId}`)?.remove();
-    const numFmt = numeroDia ? `M${numeroDia}` : `Mesa ${mesa}`;
+    const numFmt = `Mesa ${mesa}`;
     const cor = garconCor || '#6366f1';
     const div = document.createElement('div');
     div.id = `fechamento-notif-${pedidoId}`;
@@ -7533,6 +7882,10 @@ function iniciarSocket() {
       <div class="flex flex-col items-end gap-1.5 flex-shrink-0">
         <button onclick="fecharNotifFlutuante('fechamento-notif-${pedidoId}')"
           class="pointer-events-auto text-gray-400 hover:text-gray-600 text-xs font-semibold transition leading-none self-end" title="Fechar notificação">✕ fechar</button>
+        <button onclick="irParaMesaFechamento('${pedidoId}', ${mesa})"
+          class="pointer-events-auto bg-green-500 hover:bg-green-600 text-white font-bold px-4 py-2.5 rounded-xl text-sm whitespace-nowrap transition active:scale-95">
+          🪑 Abrir mesa
+        </button>
         <button onclick="resolverFechamento('${pedidoId}')"
           class="pointer-events-auto bg-indigo-500 hover:bg-indigo-600 text-white font-bold px-4 py-2.5 rounded-xl text-sm whitespace-nowrap transition active:scale-95">
           ✅ Ciente
@@ -7551,6 +7904,14 @@ function iniciarSocket() {
     if (pedidosViewAtual === 'mesas') renderizarMesas();
     tocarSom();
     mostrarToast(`🧾 Mesa ${mesa} quer fechar a conta!`);
+  });
+
+  socket.on('mesa:fechamento-resolvido', ({ mesa }) => {
+    // Limpa badge do grid quando a mesa for efetivamente liberada
+    for (const [key, val] of Object.entries(mesasFechamentoPendente)) {
+      if (val.mesa === mesa) delete mesasFechamentoPendente[key];
+    }
+    carregarMesas();
   });
 
   socket.on('conversa:atualizada', ({ id, botPausado }) => {
@@ -12650,6 +13011,15 @@ function toggleVentasMenu() {
 
 // ── Facturas Emitidas ─────────────────────────────────────────────────────────
 
+let _facturasData = [];
+
+function reimprimirFactura(idx) {
+  const f = _facturasData[idx];
+  if (!f?.html) return;
+  const win = window.open('', '_blank', 'width=840,height=760');
+  if (win) { win.document.write(f.html); win.document.close(); }
+}
+
 async function carregarFacturas() {
   const moeda = getMoeda() || 'Gs';
   const inicio = document.getElementById('facturas-inicio')?.value || '';
@@ -12658,7 +13028,7 @@ async function carregarFacturas() {
   const vazio  = document.getElementById('facturas-vazio');
   const totLinha = document.getElementById('facturas-total-linha');
   if (!tbody) return;
-  tbody.innerHTML = '<tr><td colspan="8" class="text-center py-8 text-gray-400 text-sm">Carregando...</td></tr>';
+  tbody.innerHTML = '<tr><td colspan="9" class="text-center py-8 text-gray-400 text-sm">Carregando...</td></tr>';
   if (vazio) vazio.classList.add('hidden');
   const params = new URLSearchParams({ limite: '200' });
   if (restauranteAtual) params.set('restauranteId', restauranteAtual);
@@ -12666,8 +13036,9 @@ async function carregarFacturas() {
   if (fim)    params.set('fim', fim);
   try {
     const res = await fetch(`/admin/facturas/historico?${params}`, { headers: getHeaders() });
-    if (!res.ok) { tbody.innerHTML = '<tr><td colspan="8" class="text-center py-8 text-red-400 text-sm">Erro ao carregar.</td></tr>'; return; }
+    if (!res.ok) { tbody.innerHTML = '<tr><td colspan="9" class="text-center py-8 text-red-400 text-sm">Erro ao carregar.</td></tr>'; return; }
     const { facturas, total } = await res.json();
+    _facturasData = facturas;
     tbody.innerHTML = '';
     if (!facturas.length) {
       if (vazio) vazio.classList.remove('hidden');
@@ -12675,7 +13046,7 @@ async function carregarFacturas() {
       return;
     }
     let somaTotal = 0;
-    facturas.forEach(f => {
+    facturas.forEach((f, idx) => {
       somaTotal += f.total || 0;
       const dt = new Date(f.createdAt).toLocaleString('es-PY', { day: '2-digit', month: '2-digit', year: '2-digit', hour: '2-digit', minute: '2-digit' });
       const origemLabel = f.mesa ? `Mesa ${f.mesa}` : f.origem || '—';
@@ -12690,7 +13061,8 @@ async function carregarFacturas() {
         <td class="px-4 py-2.5 text-xs"><span class="px-2 py-0.5 rounded-full text-xs font-semibold ${f.mesa ? 'bg-amber-50 text-amber-700' : 'bg-blue-50 text-blue-700'}">${origemLabel}</span></td>
         <td class="px-4 py-2.5 text-xs text-gray-500">${condLabel}</td>
         <td class="px-4 py-2.5 text-xs font-bold text-gray-800 text-right">${formatarPreco(f.total, moeda)}</td>
-        <td class="px-4 py-2.5 text-xs text-gray-500 text-right">${formatarPreco(f.iva10, moeda)}</td>`;
+        <td class="px-4 py-2.5 text-xs text-gray-500 text-right">${formatarPreco(f.iva10, moeda)}</td>
+        <td class="px-4 py-2.5 text-xs text-center">${f.html ? `<button onclick="reimprimirFactura(${idx})" class="text-purple-500 hover:text-purple-700 font-bold" title="Reimprimir factura">🖨️</button>` : '<span class="text-gray-300">—</span>'}</td>`;
       tbody.appendChild(tr);
     });
     if (totLinha) totLinha.textContent = `${total} factura${total !== 1 ? 's' : ''} · Total: ${formatarPreco(somaTotal, moeda)}`;
@@ -12702,7 +13074,16 @@ async function carregarFacturas() {
 // ── Historial de Pedidos ─────────────────────────────────────────────────────
 
 let historialPagina = 1;
+let historialOrdem = 'desc'; // 'desc' = mais recentes primeiro
 const HIST_LIMITE = 50;
+
+function toggleHistorialOrdem() {
+  historialOrdem = historialOrdem === 'desc' ? 'asc' : 'desc';
+  const label = document.getElementById('hist-ordem-label');
+  if (label) label.textContent = historialOrdem === 'desc' ? '↓ Mais recentes' : '↑ Mais antigos';
+  historialPagina = 1;
+  carregarHistorial();
+}
 
 function iniciarVentasHistorial() {
   // Define período inicial como "hoje" se os campos estiverem vazios
@@ -12756,7 +13137,7 @@ async function carregarHistorial() {
   const fim     = document.getElementById('hist-fim')?.value || '';
   const status  = document.getElementById('hist-status')?.value || '';
 
-  const params = new URLSearchParams({ restauranteId: rid, limite: HIST_LIMITE, pagina: historialPagina });
+  const params = new URLSearchParams({ restauranteId: rid, limite: HIST_LIMITE, pagina: historialPagina, ordem: historialOrdem });
   if (inicio) params.set('inicio', inicio);
   if (fim)    params.set('fim', fim);
   if (status) params.set('status', status);

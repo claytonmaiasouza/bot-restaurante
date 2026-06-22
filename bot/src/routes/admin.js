@@ -183,7 +183,7 @@ router.get("/restaurantes", async (req, res) => {
 
 // ── GET /admin/pedidos?restauranteId=X&status=NOVO&pagina=1&inicio=&fim= ──────
 router.get("/pedidos", async (req, res) => {
-  const { status, pagina = 1, inicio, fim, limite: limiteQuery } = req.query;
+  const { status, pagina = 1, inicio, fim, limite: limiteQuery, ordem } = req.query;
   const restauranteId = resolverRestauranteId(req);
   const limite = limiteQuery ? Math.min(Number(limiteQuery), 200) : 50;
   const offset = (Number(pagina) - 1) * limite;
@@ -211,7 +211,7 @@ router.get("/pedidos", async (req, res) => {
     const [pedidos, total] = await prisma.$transaction([
       prisma.pedido.findMany({
         where,
-        orderBy: { createdAt: "asc" },
+        orderBy: { createdAt: ordem === "asc" ? "asc" : "desc" },
         skip: offset,
         take: limite,
         include: {
@@ -224,6 +224,24 @@ router.get("/pedidos", async (req, res) => {
     res.json({ data: pedidos, meta: { total, pagina: Number(pagina), limite, paginas: Math.ceil(total / limite) } });
   } catch (err) {
     res.status(500).json({ error: err.message });
+  }
+});
+
+// ── PUT /admin/pedidos/marcar-factura ────────────────────────────────────────
+router.put("/pedidos/marcar-factura", authMiddleware, async (req, res) => {
+  try {
+    const { pedidoIds, facturaNumero } = req.body;
+    if (!Array.isArray(pedidoIds) || !pedidoIds.length || !facturaNumero) {
+      return res.json({ ok: true });
+    }
+    await prisma.pedido.updateMany({
+      where: { id: { in: pedidoIds } },
+      data: { facturaNumero },
+    });
+    res.json({ ok: true });
+  } catch (e) {
+    console.error('[admin] erro ao marcar factura nos pedidos:', e.message);
+    res.status(500).json({ error: 'Erro ao marcar factura' });
   }
 });
 
@@ -271,10 +289,11 @@ router.patch("/pedidos/:id/status", async (req, res) => {
       return res.status(400).json({ error: "Abra o caixa antes de confirmar pedidos" });
     }
 
-    // Cartão e mesa: ao marcar ENTREGUE, confirma pagamento automaticamente
+    // Cartão/dinheiro balcão: ao marcar ENTREGUE, confirma pagamento automaticamente
+    // Mesa: pagamento só é confirmado ao fechar a mesa (POST /mesas/:num/fechar)
     // Dinheiro delivery: requer confirmação manual do retorno do motoboy ao caixa
     const isDinheiroDelivery = /dinheiro/i.test(atual.metodoPagamento || "") && atual.origem !== "MESA" && atual.localizacao !== "Retirada no balcão";
-    if (status === "ENTREGUE" && atual && !atual.pago && (isMaquininha(atual.metodoPagamento) || atual.origem === "MESA" || (/dinheiro/i.test(atual.metodoPagamento || "") && !isDinheiroDelivery))) {
+    if (status === "ENTREGUE" && atual && !atual.pago && atual.origem !== "MESA" && (isMaquininha(atual.metodoPagamento) || (/dinheiro/i.test(atual.metodoPagamento || "") && !isDinheiroDelivery))) {
       extraData.pago = true;
     }
 
@@ -2482,14 +2501,42 @@ router.get("/financeiro", async (req, res) => {
 router.get("/mesas", async (req, res) => {
   const restauranteId = resolverRestauranteId(req);
   const pedidosAtivos = await prisma.pedido.findMany({
-    where: { restauranteId, mesa: { not: null }, status: { notIn: ["ENTREGUE", "CANCELADO"] } },
+    where: { restauranteId, origem: "MESA", status: { notIn: ["CANCELADO"] }, NOT: { pago: true } },
     orderBy: { createdAt: "asc" },
   });
-  const mesas = Array.from({ length: 30 }, (_, i) => i + 1).map((num) => ({
-    mesa: num,
-    pedido: pedidosAtivos.find((p) => p.mesa === num) || null,
-  }));
+  // Por mesa, preferir pedido ativo (não ENTREGUE) sobre entregue
+  const mesaMap = {};
+  pedidosAtivos.forEach(p => {
+    if (!mesaMap[p.mesa] || (p.status !== 'ENTREGUE' && mesaMap[p.mesa].status === 'ENTREGUE')) {
+      mesaMap[p.mesa] = p;
+    }
+  });
+  const mesasAbertasNums = Object.keys(mesaMap).map(Number);
+  // Slots fixos 1-30 + mesas abertas acima de 30 (sem preencher vazios entre elas)
+  const mesasAltas = mesasAbertasNums.filter(n => n > 30).sort((a, b) => a - b);
+  const fecMap = req.app.get("mesasFechamento");
+  const toMesaObj = num => {
+    const pedido = mesaMap[num] || null;
+    return { mesa: num, pedido: pedido ? { ...pedido, fechamentoSolicitado: fecMap.has(`${restauranteId}:${num}`) } : null };
+  };
+  const mesas = [
+    ...Array.from({ length: 30 }, (_, i) => i + 1).map(num => toMesaObj(num)),
+    ...mesasAltas.map(num => toMesaObj(num)),
+  ];
   res.json({ mesas });
+});
+
+// GET /admin/mesas/:num/resumo — agrega itens e total sem fechar/marcar como pago
+router.get("/mesas/:num/resumo", async (req, res) => {
+  const restauranteId = resolverRestauranteId(req);
+  const mesa = Number(req.params.num);
+  const pedidos = await prisma.pedido.findMany({
+    where: { restauranteId, mesa, origem: "MESA", status: { notIn: ["CANCELADO"] }, NOT: { pago: true } },
+  });
+  if (!pedidos.length) return res.status(404).json({ error: "Nenhum pedido ativo para esta mesa" });
+  const todosItens = pedidos.flatMap(p => Array.isArray(p.itens) ? p.itens : []);
+  const total = todosItens.reduce((s, i) => s + i.preco * (i.quantidade || 1), 0);
+  res.json({ total, itens: todosItens, pedidoIds: pedidos.map(p => p.id) });
 });
 
 router.post("/pedidos/mesa", async (req, res) => {
@@ -2522,7 +2569,7 @@ router.post("/mesas/:num/fechar", async (req, res) => {
   const io = req.app.get("io");
 
   const pedidosAtivos = await prisma.pedido.findMany({
-    where: { restauranteId, mesa, status: { notIn: ["ENTREGUE", "CANCELADO"] } },
+    where: { restauranteId, mesa, origem: "MESA", status: { notIn: ["CANCELADO"] }, NOT: { pago: true } },
     include: { restaurante: { select: { slugWhatsapp: true } } },
   });
 
@@ -2545,6 +2592,12 @@ router.post("/mesas/:num/fechar", async (req, res) => {
     if (slug) io?.to(`restaurante:${slug}`).emit("pedido:status", { pedidoId: p.id, status: "ENTREGUE" });
   });
 
+  // Limpa fechamento pendente e notifica todos os clientes conectados
+  const fecMap = req.app.get("mesasFechamento");
+  fecMap.delete(`${restauranteId}:${mesa}`);
+  io?.to("admin").emit("mesa:fechamento-resolvido", { mesa });
+  if (slug) io?.to(`restaurante:${slug}`).emit("mesa:fechamento-resolvido", { mesa });
+
   res.json({ total: totalCombinado, itens: todosItens, pedidosEncerrados: pedidosAtivos.length, pedidoIds: pedidosAtivos.map(p => p.id) });
 });
 
@@ -2564,7 +2617,7 @@ router.get("/mesas/:num/historico", async (req, res) => {
   const restauranteId = resolverRestauranteId(req);
   const mesa = Number(req.params.num);
   const historico = await prisma.pedido.findMany({
-    where: { restauranteId, mesa, status: { in: ["ENTREGUE", "CANCELADO"] } },
+    where: { restauranteId, mesa, pago: true },
     orderBy: { createdAt: "desc" },
     take: 5,
   });
@@ -2952,6 +3005,41 @@ router.post("/pedidos/balcao", authMiddleware, async (req, res) => {
   res.json({ data: pedido });
 });
 
+router.post("/pedidos/balcao/:id/fechar", authMiddleware, async (req, res) => {
+  const { id } = req.params;
+  const { metodoPagamento } = req.body;
+  const io = req.app.get("io");
+
+  const pedido = await prisma.pedido.findUnique({
+    where: { id },
+    select: { restauranteId: true, origem: true, pago: true },
+  });
+  if (!pedido) return res.status(404).json({ error: "Pedido não encontrado" });
+  if (denegarOutroTenant(req, res, pedido.restauranteId)) return;
+  if (pedido.pago) return res.status(400).json({ error: "Pedido já fechado" });
+
+  const caixaAberto = await prisma.turnoCaixa.findFirst({
+    where: { restauranteId: pedido.restauranteId, status: "ABERTO" },
+  });
+  if (!caixaAberto) return res.status(400).json({ error: "Abra o caixa antes de fechar a conta" });
+
+  const upd = { status: "ENTREGUE", pago: true };
+  if (metodoPagamento) upd.metodoPagamento = metodoPagamento;
+
+  const updated = await prisma.pedido.update({
+    where: { id },
+    data: upd,
+    include: { restaurante: { select: { slugWhatsapp: true } } },
+  });
+
+  io?.to("admin").emit("pedido:atualizado", updated);
+  if (updated.restaurante?.slugWhatsapp) {
+    io?.to(`restaurante:${updated.restaurante.slugWhatsapp}`).emit("pedido:atualizado", updated);
+  }
+
+  res.json({ data: updated });
+});
+
 // ── Ticket reimpressão ────────────────────────────────────────────────────────
 router.put("/pedidos/:id/ticket", authMiddleware, async (req, res) => {
   const { ticketHtml } = req.body;
@@ -3041,7 +3129,7 @@ router.post('/facturas/salvar', authMiddleware, async (req, res) => {
   try {
     const rid = resolverRestauranteId(req);
     if (!rid) return res.status(400).json({ error: 'restauranteId obrigatório' });
-    const { numero, timbrado, cliNome, cliRuc, cliDirec, cliTel, condicion, itens, total, iva5, iva10, origem, mesa } = req.body;
+    const { numero, timbrado, cliNome, cliRuc, cliDirec, cliTel, condicion, itens, total, iva5, iva10, origem, mesa, html } = req.body;
     if (!numero || total == null) return res.status(400).json({ error: 'numero e total obrigatórios' });
     const factura = await prisma.factura.create({
       data: {
@@ -3059,6 +3147,7 @@ router.post('/facturas/salvar', authMiddleware, async (req, res) => {
         iva10: Number(iva10 || 0),
         origem: origem || 'PEDIDO',
         mesa: mesa != null ? Number(mesa) : null,
+        html: html || null,
       }
     });
     res.json(factura);

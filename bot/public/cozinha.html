@@ -409,7 +409,7 @@ function criarCard(p) {
         if (!pizza) {
           return `<div class="flex items-center gap-3 bg-slate-700/50 rounded-xl px-3 py-2">
             <span class="text-2xl font-black text-amber-400 leading-none w-8 text-center flex-shrink-0">${i.quantidade||1}×</span>
-            <span class="text-base font-bold text-white leading-tight">${i.nome}</span>
+            <span class="text-base font-bold text-white leading-tight">${nomeBase(i.nome)}</span>
           </div>`;
         }
         return `<div class="flex items-start gap-3 bg-slate-700/50 rounded-xl px-3 py-2.5">
@@ -493,6 +493,11 @@ async function carregar() {
 // Formato SITE/app:          "🍕 Pizza (Grande · 33% Calabresa + 33% Mussarela [· Borda X])"
 // Formato Balcão/Garçom/Mesa: "Pizza Grande (até 4 sabores): Sabor1 / Sabor2 [c/ Borda X]"
 // Formato WhatsApp agent:    "Pizza Pollo Catupiry - Grande [com borda Chocolate]"
+function nomeBase(nome) {
+  const idx = nome.indexOf(' - ');
+  return idx > 0 ? nome.substring(0, idx).trim() : nome;
+}
+
 function parsePizzaItem(nome) {
   // Formato SITE: separador · entre seções, + entre sabores
   if (nome.includes(' · ')) {
@@ -696,7 +701,7 @@ function criarCardHistorico(p) {
       ${itens.map(i => `
         <div class="flex gap-2 text-sm">
           <span class="font-bold text-amber-400 w-6 text-right flex-shrink-0">${i.quantidade||1}×</span>
-          <span class="text-slate-300 leading-tight">${i.nome}</span>
+          <span class="text-slate-300 leading-tight">${nomeBase(i.nome)}</span>
         </div>`).join('')}
     </div>
     <div class="flex items-center justify-between pt-2 border-t border-slate-700">

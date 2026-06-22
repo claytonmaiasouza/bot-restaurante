@@ -25,6 +25,7 @@ model Restaurante {
   cardapioPdfUrl      String?
   dadosTransferencia  String?     // Dados para PIX/transferência exibidos ao cliente
   instrucoes          String?     // Instruções livres para o agente IA (recheios de borda, regras de tamanho, etc.)
+  selfServiceUrl      String?     // URL customizada do self-service web (ex: bit.ly/restaurante) — sobrescreve a URL gerada
   instanceEvolution   String?     // Nome da instância na Evolution API (se diferente do slugWhatsapp)
   sessoes              Sessao[]
   pedidos              Pedido[]
@@ -71,6 +72,7 @@ model Factura {
   iva10         Float       @default(0)
   origem        String      @default("PEDIDO")
   mesa          Int?
+  html          String?
   createdAt     DateTime    @default(now())
 
   @@index([restauranteId])
@@ -170,6 +172,7 @@ model Pedido {
   preparoEstacoes Json?       @default("{}") // { "BEBIDAS": "PREPARANDO"|"PRONTO", ... } — estado por estação
   numeroDia       Int?        // sequencial diário reiniciado a cada dia por restaurante
   comprovanteUrl String?    // URL da foto do comprovante de pagamento enviado pelo cliente
+  facturaNumero  String?    // número da factura legal emitida para este pedido
   createdAt      DateTime   @default(now())
   updatedAt      DateTime   @updatedAt
 }

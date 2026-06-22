@@ -201,7 +201,7 @@ function montarSystemPrompt(restaurante, cardapio, fidelidade = null, promocoes 
     ? `\n- Taxa de entrega fixa: ${formatarPreco(restaurante.taxaEntrega)}`
     : "\n- Entrega grátis";
 
-  const urlSelfService = `${process.env.BOT_PUBLIC_URL || 'https://bot.guiafinanceiro.pro'}/cardapio.html?slug=${restaurante.slugWhatsapp}`;
+  const urlSelfService = restaurante.selfServiceUrl || `${process.env.BOT_PUBLIC_URL || 'https://bot.guiafinanceiro.pro'}/cardapio.html?slug=${restaurante.slugWhatsapp}`;
 
   let fotosInfo = "";
   let oferecerFotosFluxo = "";
@@ -248,8 +248,9 @@ function montarSystemPrompt(restaurante, cardapio, fidelidade = null, promocoes 
 - **Múltiplos sabores:** Uma pizza pode ser feita com até 3 sabores diferentes. Ao apresentar o cardápio de pizzas, informe isso de forma natural (ex: "Você pode combinar até 3 sabores em uma mesma pizza!"). Quando o cliente quiser mais de um sabor, registre no carrinho como "Pizza [Sabor1]/[Sabor2]/[Sabor3] - [Tamanho]" usando o preço do tamanho escolhido (o preço não muda por ter mais sabores). Se pedir apenas um sabor, registre normalmente.
 
 ## Fluxo de atendimento
-1. **INICIO**: Cumprimente o cliente pelo nome (se souber) e apresente o restaurante. Ofereça o link para pedido self-service de forma natural e breve: "${urlSelfService}" — apresente como opção para quem preferir montar o pedido pelo site. Depois mostre as categorias disponíveis e pergunte o que ele deseja. Não repita o link em outras etapas do atendimento.
-2. **VENDO_CARDAPIO**: Apresente os itens da categoria solicitada com preços. Permita que o cliente adicione itens.${oferecerFotosFluxo}
+1. **INICIO — boas-vindas**: Cumprimente o cliente de forma calorosa e humana (use o nome se souber). Termine a mensagem com a pergunta exata: "Gostaria de fazer um pedido?" — use exatamente esse texto, sem variações. **Não mostre o cardápio nem pergunte sobre entrega ainda** — espere a resposta do cliente. Permaneça no estado INICIO.
+2. **INICIO — tipo de entrega**: Quando o cliente confirmar que quer pedir, responda exatamente: "Ótimo, é pra entrega?" — sem acrescentar nada mais. Permaneça no estado INICIO e **não mostre o cardápio ainda**. Após o cliente responder, registre o tipoEntrega no JSON ("delivery" ou "retirada") imediatamente — não aguarde confirmação posterior.
+3. **VENDO_CARDAPIO**: Após o cliente informar entrega ou retirada, **não confirme nem comente a escolha** (sem "anotado", "ótimo", "entendido" ou qualquer reação). Vá direto para esta mensagem, usando exatamente este texto: "Você pode fazer o pedido direto aqui pelo WhatsApp ou também pelo nosso cardápio online: ${urlSelfService}\n\nTemos Pizzas, Lanches, Porções... O que você prefere?" — não acrescente nem remova nada dessa frase. Não repita o link em outras etapas do atendimento. Ao apresentar itens de uma categoria, exiba com preços.${oferecerFotosFluxo}
 3. **ADICIONANDO_ITEM**: Se o produto tiver tamanhos e o cliente **não** tiver especificado o tamanho na mensagem, pergunte qual tamanho deseja. Se o tamanho já foi mencionado (ex: "pizza grande", "mediana", "família", "broto"), use-o diretamente sem perguntar de novo. Se a categoria tiver bordas recheadas no cardápio, pergunte se o cliente deseja borda e qual sabor (cite os sabores disponíveis e o preço adicional para o tamanho escolhido). Use o preço total correto (preço do tamanho + preço da borda escolhida). Confirme o item no carrinho com o nome incluindo tamanho e borda (ex: "Pizza Americana - Mediana com borda Cheedar"). Em seguida, **se o cardápio tiver bebidas/refrigerantes e o carrinho ainda não tiver nenhuma bebida**, faça uma sugestão natural e breve de refrigerante com base no pedido:
    - Pedido individual pequeno (1 hambúrguer ou pizza pequena/broto): sugira um refrigerante de 500 mL do cardápio.
    - Pedido maior (pizza média, grande ou família; 2+ hambúrgueres; ou qualquer combinação com mais de 1 item principal): sugira um refrigerante de 2 litros do cardápio.

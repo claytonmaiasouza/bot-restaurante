@@ -26,6 +26,8 @@ app.use(express.static(path.join(__dirname, "..", "public")));
 
 // Expõe o io para uso nos controllers
 app.set("io", io);
+// Mapa em memória: `${restauranteId}:${mesa}` → true quando há fechamento pendente
+app.set("mesasFechamento", new Map());
 
 // ── Middleware de autenticação do webhook (Evolution API) ─────────────────────
 function validarWebhook(req, res, next) {

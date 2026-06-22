@@ -815,6 +815,7 @@
       <button class="btn-back" onclick="ir('sacola')">←</button>
       <h1>Seus dados</h1>
     </div>
+    <div id="ck-resumo" style="margin:12px 20px 0;background:var(--card);border-radius:16px;padding:14px 16px;font-size:13px;border:1.5px solid var(--border)"></div>
     <div class="ck-form">
       <div class="fg">
         <label>Seu nome</label>
@@ -953,6 +954,7 @@ function ir(tela) {
   document.getElementById(`s-${tela}`).classList.add('on');
   sync();
   if (tela === 'sacola') renderSacola();
+  if (tela === 'checkout') renderCkResumo();
   window.scrollTo(0, 0);
   if (tela === 'lista') {
     const bar = document.getElementById('lista-bot-action');
@@ -1668,6 +1670,26 @@ function verificarBebidasEFinalizar() {
 }
 
 // ── CHECKOUT ─────────────────────────────────────────────────────────────────
+function renderCkResumo() {
+  const el = document.getElementById('ck-resumo');
+  if (!el) return;
+  const taxa = G.entrega === 'retirada' ? 0 : (G.rest.taxaEntrega || 0);
+  const sub = G.cart.reduce((a, i) => a + i.preco * i.qt, 0);
+  const tot = sub + taxa;
+  el.innerHTML = G.cart.map(i =>
+    `<div style="display:flex;justify-content:space-between;gap:8px;padding:3px 0;color:var(--txt)">
+      <span>${i.qt}× ${i.desc ? `${i.nome} (${i.desc})` : i.nome}</span>
+      <span style="white-space:nowrap;font-weight:600">${fmt(i.preco * i.qt)}</span>
+    </div>`
+  ).join('') +
+  (taxa > 0 ? `<div style="display:flex;justify-content:space-between;padding:3px 0;color:var(--muted);font-size:12px"><span>Entrega</span><span>${fmt(taxa)}</span></div>` : '') +
+  `<div style="display:flex;justify-content:space-between;padding:8px 0 0;margin-top:6px;border-top:1px solid var(--border);font-weight:800;font-size:15px">
+    <span>Total</span><span>${fmt(tot)}</span>
+  </div>`;
+  // re-renderiza troco com total atualizado se dinheiro já estava selecionado
+  if (G.pagamento === 'dinheiro') renderTroco();
+}
+
 function renderCkPag() {
   const ops = [
     { id:'dinheiro', ico:'💵', label:'Dinheiro' },

@@ -141,18 +141,17 @@ function iniciarJobLembrete() {
 
       const sessoes = await prisma.sessao.findMany({
         where: {
-          estado: { notIn: ["FINALIZADO", "INICIO"] },
+          estado: { notIn: ["FINALIZADO", "INICIO", "CONFIRMANDO_PEDIDO", "AGUARDANDO_LOCALIZACAO"] },
           botPausado: false,
           lembreteEnviado: false,
           ultimaAtividade: { lt: limite },
+          pedido: { is: null },
         },
         include: { restaurante: true },
       });
 
       for (const sessao of sessoes) {
-        const msg =
-          `Olá${sessao.clienteNome ? `, ${sessao.clienteNome}` : ""}! 😊 Ainda está aí?\n\n` +
-          `Pode continuar com seu pedido quando quiser. Estamos aqui! 🍽️`;
+        const msg = `Olá, ainda está aí? Pode continuar seu pedido quando quiser...`;
 
         await enviarMensagem(
           sessao.clienteNumero,

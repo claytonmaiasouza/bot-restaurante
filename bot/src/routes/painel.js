@@ -269,7 +269,13 @@ router.get("/pedidos", validarToken, async (req, res) => {
         status: "ENTREGUE",
         pago: false,
         motoboyId: req.query.motoboyId,
-        metodoPagamento: { contains: "dinheiro", mode: "insensitive" },
+        OR: [
+          { metodoPagamento: { contains: "dinheiro", mode: "insensitive" } },
+          { metodoPagamento: { contains: "efectivo", mode: "insensitive" } },
+          { metodoPagamento: { contains: "troco", mode: "insensitive" } },
+          { metodoPagamento: { contains: "cambio", mode: "insensitive" } },
+          { metodoPagamento: { contains: "cash", mode: "insensitive" } },
+        ],
       },
       orderBy: { createdAt: "asc" },
       select: {
@@ -523,7 +529,10 @@ router.post("/pedidos/:id/solicitar-troco", validarToken, async (req, res) => {
   if (!pedido) return res.status(404).json({ error: "Pedido não encontrado" });
 
   const io = req.app.get("io");
-  const payload = { pedidoId: pedido.id, numeroDia: pedido.numeroDia, motoboyId, motoboyNome, metodoPagamento: pedido.metodoPagamento };
+  // Extrai valor numérico do "troco para X" da string de metodoPagamento
+  const matchTroco = (pedido.metodoPagamento || '').match(/(?:troco|cambio)\s+(?:para|de)\s+[^\d]*([0-9][0-9.,]*)/i);
+  const trocoPara = matchTroco ? (parseInt(matchTroco[1].replace(/[^\d]/g, ''), 10) || null) : null;
+  const payload = { pedidoId: pedido.id, numeroDia: pedido.numeroDia, motoboyId, motoboyNome, metodoPagamento: pedido.metodoPagamento, total: pedido.total, trocoPara };
   console.log(`[painel] troco solicitado por ${motoboyNome} — emitindo para restaurante:${req.painelSlug}`, payload);
   io?.to(`restaurante:${req.painelSlug}`).to("admin").emit("caixa:troco-solicitado", payload);
   res.json({ ok: true });
@@ -644,11 +653,13 @@ router.get("/garcon/mesas", validarToken, async (req, res) => {
   const rest = await prisma.restaurante.findFirst({ where: { slugWhatsapp: req.painelSlug, ativo: true }, select: { id: true, moeda: true } });
   if (!rest) return res.status(404).json({ error: "Restaurante não encontrado" });
   const pedidos = await prisma.pedido.findMany({
-    where: { restauranteId: rest.id, origem: "MESA", status: { notIn: ["ENTREGUE", "CANCELADO"] } },
+    where: { restauranteId: rest.id, origem: "MESA", status: { notIn: ["CANCELADO"] }, NOT: { pago: true } },
     select: { id: true, mesa: true, itens: true, total: true, status: true, numeroDia: true, garconId: true, garconNome: true, garconCor: true, createdAt: true },
     orderBy: [{ mesa: "asc" }, { createdAt: "asc" }],
   });
-  res.json({ data: pedidos, moeda: rest.moeda });
+  const fecMap = req.app.get("mesasFechamento");
+  const data = pedidos.map(p => ({ ...p, fechamentoSolicitado: fecMap.has(`${rest.id}:${p.mesa}`) }));
+  res.json({ data, moeda: rest.moeda });
 });
 
 // POST /painel/garcon/mesas — abre nova mesa
@@ -658,8 +669,9 @@ router.post("/garcon/mesas", validarToken, async (req, res) => {
   const rest = await prisma.restaurante.findFirst({ where: { slugWhatsapp: req.painelSlug, ativo: true }, select: { id: true } });
   if (!rest) return res.status(404).json({ error: "Restaurante não encontrado" });
   const existing = await prisma.pedido.findFirst({
-    where: { restauranteId: rest.id, mesa: Number(mesa), origem: "MESA", status: { notIn: ["ENTREGUE", "CANCELADO"] } },
+    where: { restauranteId: rest.id, mesa: Number(mesa), origem: "MESA", status: { notIn: ["CANCELADO"] }, NOT: { pago: true } },
     select: { id: true, mesa: true, itens: true, total: true, status: true, garconId: true, garconNome: true, garconCor: true },
+    orderBy: { createdAt: "asc" },
   });
   if (existing) return res.status(409).json({ error: "Mesa já aberta", data: existing });
   const sessao = await prisma.sessao.create({
@@ -688,10 +700,21 @@ router.post("/garcon/mesas/:pedidoId/itens", validarToken, async (req, res) => {
   });
   if (!pedido) return res.status(404).json({ error: "Pedido não encontrado" });
 
+  // Impede garçom de adicionar itens à mesa de outro garçom (verifica todos os pedidos não-cancelados e não-pagos)
+  if (garconId) {
+    const todosMesa = await prisma.pedido.findMany({
+      where: { restauranteId: pedido.restauranteId, mesa: pedido.mesa, origem: "MESA", status: { notIn: ["CANCELADO"] }, NOT: { pago: true } },
+      select: { garconId: true },
+    });
+    if (todosMesa.some(p => p.garconId && p.garconId !== garconId)) {
+      return res.status(403).json({ error: "Essa mesa pertence a outro garçom." });
+    }
+  }
+
   const io = req.app.get("io");
 
-  // Cozinha já iniciou o preparo — criar novo pedido para a mesa
-  if (["PREPARANDO", "PRONTO_PARA_RETIRADA", "AGUARDANDO_DESPACHO"].includes(pedido.status)) {
+  // Cozinha já iniciou ou pedido já entregue — criar novo pedido para a mesa
+  if (["PREPARANDO", "PRONTO_PARA_RETIRADA", "AGUARDANDO_DESPACHO", "ENTREGUE"].includes(pedido.status)) {
     const rest = await prisma.restaurante.findFirst({ where: { slugWhatsapp: req.painelSlug, ativo: true }, select: { id: true } });
     if (!rest) return res.status(404).json({ error: "Restaurante não encontrado" });
     const numeroDia = await proximoNumeroDia(rest.id).catch(() => null);
@@ -708,8 +731,8 @@ router.post("/garcon/mesas/:pedidoId/itens", validarToken, async (req, res) => {
         garconId: garconId || null, garconNome: garconNome || null, garconCor: garconCor || null,
       },
     });
-    io?.to("admin").emit("pedido:novo", novoPedido);
-    io?.to(`restaurante:${req.painelSlug}`).emit("pedido:novo", novoPedido);
+    io?.to("admin").emit("pedido:novo", { pedido: novoPedido });
+    io?.to(`restaurante:${req.painelSlug}`).emit("pedido:novo", { pedido: novoPedido });
     return res.json({ ok: true, data: novoPedido, novoPedido: true });
   }
 
@@ -719,8 +742,9 @@ router.post("/garcon/mesas/:pedidoId/itens", validarToken, async (req, res) => {
   if (!pedido.garconId && garconId) { data.garconId = garconId; data.garconNome = garconNome; data.garconCor = garconCor; }
   const updated = await prisma.pedido.update({ where: { id: req.params.pedidoId }, data });
   const eventoSocket = itensAtuais.length === 0 ? "pedido:novo" : "pedido:atualizado";
-  io?.to("admin").emit(eventoSocket, updated);
-  io?.to(`restaurante:${req.painelSlug}`).emit(eventoSocket, updated);
+  const socketPayload = eventoSocket === "pedido:novo" ? { pedido: updated } : updated;
+  io?.to("admin").emit(eventoSocket, socketPayload);
+  io?.to(`restaurante:${req.painelSlug}`).emit(eventoSocket, socketPayload);
   res.json({ ok: true, data: updated });
 });
 
@@ -733,6 +757,10 @@ router.post("/garcon/mesas/:pedidoId/solicitar-fechamento", validarToken, async 
   });
   if (!pedido) return res.status(404).json({ error: "Pedido não encontrado" });
   const io = req.app.get("io");
+  const fecMap = req.app.get("mesasFechamento");
+  // Busca restauranteId para chave do mapa
+  const pedFull = await prisma.pedido.findUnique({ where: { id: pedido.id }, select: { restauranteId: true } });
+  if (pedFull) fecMap.set(`${pedFull.restauranteId}:${pedido.mesa}`, true);
   io?.to("admin").to(`restaurante:${req.painelSlug}`).emit("garcon:solicitar-fechamento", {
     pedidoId: pedido.id, numeroDia: pedido.numeroDia, mesa: pedido.mesa,
     total: pedido.total, garconId, garconNome, garconCor,

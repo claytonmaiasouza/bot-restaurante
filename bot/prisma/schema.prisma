@@ -48,11 +48,27 @@ model Restaurante {
   faturaProximoNum   Int      @default(1)
   campanhas            CampanhaMarketing[]
   itensEstoque         ItemEstoque[]
+  receitaItens         ReceitaItem[]
   custosMensais        CustoMensal[]
   promocoes            Promocao[]
   estacoes             Estacao[]
   facturas             Factura[]
+  usuariosPainel       UsuarioPainel[]
   createdAt            DateTime    @default(now())
+}
+
+model UsuarioPainel {
+  id            String      @id @default(uuid())
+  nome          String
+  login         String
+  senhaHash     String
+  permissoes    Json        @default("[]")
+  restauranteId String
+  restaurante   Restaurante @relation(fields: [restauranteId], references: [id], onDelete: Cascade)
+  ativo         Boolean     @default(true)
+  createdAt     DateTime    @default(now())
+
+  @@unique([login, restauranteId])
 }
 
 model Factura {
@@ -91,6 +107,7 @@ model Categoria {
   visivelGarcom  Boolean     @default(true)
   estacaoTipo    String      @default("GERAL")  // GERAL | PIZZA | LANCHE | BAR | CAIXA
   canais         Json        @default("[\"SALAO\",\"DELIVERY\",\"WEB\"]")  // SALAO | DELIVERY | WEB
+  skuPrefixo     String      @default("")       // prefixo para geração automática de SKU (ex: PIZ, BEB)
   restauranteId  String
   restaurante   Restaurante @relation(fields: [restauranteId], references: [id], onDelete: Cascade)
   produtos      Produto[]
@@ -101,6 +118,7 @@ model Produto {
   id          String    @id @default(uuid())
   nome        String
   descricao   String?
+  sku         String?
   imagemUrl   String?
   preco       Float     @default(0)
   ativo          Boolean   @default(true)
@@ -108,6 +126,7 @@ model Produto {
   categoriaId String
   categoria   Categoria @relation(fields: [categoriaId], references: [id], onDelete: Cascade)
   tamanhos    Tamanho[]
+  receitaItens ReceitaItem[]
   createdAt   DateTime  @default(now())
 }
 
@@ -118,6 +137,7 @@ model Tamanho {
   precoComBorda Float?
   produtoId     String
   produto       Produto @relation(fields: [produtoId], references: [id], onDelete: Cascade)
+  receitaItens  ReceitaItem[]
 }
 
 model Sessao {
@@ -259,6 +279,7 @@ model ItemEstoque {
   restauranteId    String
   restaurante      Restaurante           @relation(fields: [restauranteId], references: [id], onDelete: Cascade)
   nome             String
+  sku              String?               // código SKU vinculado ao produto do cardápio (ex: PIZ-0001)
   categoria        String                // INGREDIENTE | BEBIDA | EMBALAGEM | LIMPEZA | OUTROS
   unidade          String                // kg, g, L, ml, un, cx, sc
   quantidadeAtual  Float                 @default(0)
@@ -267,6 +288,7 @@ model ItemEstoque {
   fornecedor       String?
   ativo            Boolean               @default(true)
   movimentacoes    MovimentacaoEstoque[]
+  receitaItens     ReceitaItem[]
   createdAt        DateTime              @default(now())
   updatedAt        DateTime              @updatedAt
 }
@@ -329,6 +351,20 @@ model Estacao {
   senhaHash     String?
   cor           String      @default("#6366f1")
   ativo         Boolean     @default(true)
+  createdAt     DateTime    @default(now())
+}
+
+model ReceitaItem {
+  id            String      @id @default(uuid())
+  restauranteId String
+  restaurante   Restaurante @relation(fields: [restauranteId], references: [id], onDelete: Cascade)
+  produtoId     String
+  produto       Produto     @relation(fields: [produtoId], references: [id], onDelete: Cascade)
+  tamanhoId     String?
+  tamanho       Tamanho?    @relation(fields: [tamanhoId], references: [id], onDelete: SetNull)
+  itemEstoqueId String
+  itemEstoque   ItemEstoque @relation(fields: [itemEstoqueId], references: [id], onDelete: Cascade)
+  quantidade    Float       // na mesma unidade do ItemEstoque
   createdAt     DateTime    @default(now())
 }
 

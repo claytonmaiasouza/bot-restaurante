@@ -12,7 +12,7 @@ const { authMiddleware } = require("../middleware/authMiddleware");
 const {
   buscarCardapioDB, buscarCardapioAdmin, criarCategoria, atualizarCategoria, deletarCategoria,
   criarProduto, atualizarProduto, deletarProduto, atualizarTamanho, deletarTamanho,
-  importarCardapio,
+  importarCardapio, gerarSkusBulk,
 } = require("../services/cardapioService");
 const { invalidarCache } = require("../services/tenantService");
 const bcrypt = require("bcryptjs");
@@ -152,7 +152,7 @@ router.use(authMiddleware);
 
 // ── Helper: restauranteId efetivo (JWT scope ou query param) ──────────────────
 function resolverRestauranteId(req) {
-  if (req.user.role === "restaurante") return req.user.restauranteId;
+  if (req.user.role === "restaurante" || req.user.role === "caixa") return req.user.restauranteId;
   return req.query.restauranteId || req.body?.restauranteId || null;
 }
 
@@ -168,7 +168,7 @@ function denegarOutroTenant(req, res, restauranteId) {
 // ── GET /admin/restaurantes ───────────────────────────────────────────────────
 router.get("/restaurantes", async (req, res) => {
   try {
-    const where = req.user.role === "restaurante" ? { id: req.user.restauranteId } : {};
+    const where = (req.user.role === "restaurante" || req.user.role === "caixa") ? { id: req.user.restauranteId } : {};
     const restaurantes = await prisma.restaurante.findMany({
       where,
       select: { id: true, nome: true, slugWhatsapp: true, donoWhatsapp: true, moeda: true, taxaEntrega: true, ativo: true, email: true, horarioAtendimento: true, cardapioPdfUrl: true, dadosTransferencia: true, instrucoes: true,
@@ -840,6 +840,27 @@ router.get("/metricas", async (req, res) => {
       });
     });
     const itensSorted = Object.values(itensMap).sort((a, b) => b.quantidade - a.quantidade);
+
+    // Enriquece itens com SKU via lookup no catálogo atual
+    if (restauranteId) {
+      const produtosComSku = await prisma.produto.findMany({
+        where: { categoria: { restauranteId }, sku: { not: null } },
+        select: { nome: true, sku: true },
+      });
+      const skuByNome = {};
+      produtosComSku.forEach(p => { skuByNome[p.nome.toLowerCase()] = p.sku; });
+      itensSorted.forEach(item => {
+        if (!item.sku) {
+          const nomeLower = item.nome.toLowerCase();
+          item.sku = skuByNome[nomeLower] || null;
+          if (!item.sku) {
+            const match = Object.keys(skuByNome).find(n => nomeLower.includes(n));
+            if (match) item.sku = skuByNome[match];
+          }
+        }
+      });
+    }
+
     const topItens = itensSorted.slice(0, 10);
     const bottomItens = [...itensSorted].sort((a, b) => a.quantidade - b.quantidade).slice(0, 5);
 
@@ -983,7 +1004,7 @@ router.delete("/conversas/:id", async (req, res) => {
     if (denegarOutroTenant(req, res, sessao.restauranteId)) return;
 
     const instanceName = sessao.restaurante.instanceEvolution || sessao.restaurante.slugWhatsapp;
-    const despedida = "Olá! 👋 Esta conversa foi encerrada pelo nosso atendimento. Caso precise de mais alguma coisa, é só nos chamar. Obrigado! 😊";
+    const despedida = "Esta conversa foi encerrada, qualquer coisa é só chamar, obrigado! 😊\n\nNosso cardápio online: https://tinyurl.com/donpedromenu";
     enviarMensagem(sessao.clienteNumero, despedida, instanceName).catch(e =>
       console.error("[admin] erro ao enviar despedida:", e.message)
     );
@@ -1713,16 +1734,30 @@ async function invalidarCachePorProdutoId(produtoId) {
   if (prod?.categoria) await invalidarCachePorRestauranteId(prod.categoria.restauranteId);
 }
 
+// POST /admin/cardapio/:restauranteId/gerar-skus
+router.post("/cardapio/:restauranteId/gerar-skus", async (req, res) => {
+  const { restauranteId } = req.params;
+  if (denegarOutroTenant(req, res, restauranteId)) return;
+  try {
+    const total = await gerarSkusBulk(restauranteId);
+    console.log(`[admin] gerar-skus: ${total} produto(s) atualizados para restaurante ${restauranteId}`);
+    res.json({ data: { total } });
+  } catch (err) {
+    console.error("[admin] POST gerar-skus", err.message);
+    res.status(500).json({ error: err.message });
+  }
+});
+
 // POST /admin/cardapio/:restauranteId/categorias
 router.post("/cardapio/:restauranteId/categorias", async (req, res) => {
   const { restauranteId } = req.params;
   if (req.user.role === "restaurante" && req.user.restauranteId !== restauranteId) {
     return res.status(403).json({ error: "Acesso negado" });
   }
-  const { nome, ordem, tamanhos, tipoTamanhos, bordas, estacaoTipo, canais } = req.body;
+  const { nome, ordem, tamanhos, tipoTamanhos, bordas, estacaoTipo, canais, skuPrefixo } = req.body;
   if (!nome) return res.status(400).json({ error: "nome é obrigatório" });
   try {
-    const cat = await criarCategoria(restauranteId, nome, ordem, tamanhos || [], tipoTamanhos || "simples", bordas || [], estacaoTipo || "GERAL", canais || ["SALAO", "DELIVERY", "WEB"]);
+    const cat = await criarCategoria(restauranteId, nome, ordem, tamanhos || [], tipoTamanhos || "simples", bordas || [], estacaoTipo || "GERAL", canais || ["SALAO", "DELIVERY", "WEB"], skuPrefixo || "");
     await invalidarCachePorRestauranteId(restauranteId);
     res.status(201).json({ data: cat });
   } catch (err) {
@@ -2307,7 +2342,7 @@ router.get("/estoque", async (req, res) => {
 
 router.post("/estoque", async (req, res) => {
   const restauranteId = resolverRestauranteId(req);
-  const { nome, categoria, unidade, quantidadeAtual, quantidadeMinima, precoUnitario, fornecedor } = req.body;
+  const { nome, categoria, unidade, quantidadeAtual, quantidadeMinima, precoUnitario, fornecedor, sku } = req.body;
   if (!restauranteId || !nome || !categoria || !unidade)
     return res.status(400).json({ error: "nome, categoria e unidade são obrigatórios" });
   const item = await prisma.itemEstoque.create({
@@ -2317,13 +2352,14 @@ router.post("/estoque", async (req, res) => {
       quantidadeMinima: Number(quantidadeMinima) || 0,
       precoUnitario: Number(precoUnitario) || 0,
       fornecedor: fornecedor || null,
+      sku: sku || null,
     },
   });
   res.json({ data: item });
 });
 
 router.put("/estoque/:id", async (req, res) => {
-  const { nome, categoria, unidade, quantidadeAtual, quantidadeMinima, precoUnitario, fornecedor } = req.body;
+  const { nome, categoria, unidade, quantidadeAtual, quantidadeMinima, precoUnitario, fornecedor, sku } = req.body;
   const existing = await prisma.itemEstoque.findUnique({ where: { id: req.params.id }, select: { restauranteId: true } });
   if (!existing) return res.status(404).json({ error: "Item não encontrado" });
   if (denegarOutroTenant(req, res, existing.restauranteId)) return;
@@ -2335,6 +2371,7 @@ router.put("/estoque/:id", async (req, res) => {
       quantidadeMinima: Number(quantidadeMinima),
       precoUnitario: Number(precoUnitario),
       fornecedor: fornecedor || null,
+      sku: sku || null,
     },
   });
   res.json({ data: item });
@@ -3181,6 +3218,251 @@ router.get('/facturas/historico', authMiddleware, async (req, res) => {
   } catch (e) {
     console.error('[admin] erro ao listar facturas:', e.message);
     res.status(500).json({ error: 'Erro ao listar facturas' });
+  }
+});
+
+// ── Usuários do Painel ────────────────────────────────────────────────────────
+
+// GET /admin/usuarios/:restauranteId
+router.get("/usuarios/:restauranteId", authMiddleware, async (req, res) => {
+  const { restauranteId } = req.params;
+  if (req.user.role === "caixa") return res.status(403).json({ error: "Acesso negado" });
+  if (req.user.role === "restaurante" && req.user.restauranteId !== restauranteId) {
+    return res.status(403).json({ error: "Acesso negado" });
+  }
+  try {
+    const usuarios = await prisma.usuarioPainel.findMany({
+      where: { restauranteId },
+      select: { id: true, nome: true, login: true, permissoes: true, ativo: true, createdAt: true },
+      orderBy: { createdAt: "asc" },
+    });
+    res.json(usuarios);
+  } catch (e) {
+    res.status(500).json({ error: e.message });
+  }
+});
+
+// POST /admin/usuarios
+router.post("/usuarios", authMiddleware, async (req, res) => {
+  if (req.user.role === "caixa") return res.status(403).json({ error: "Acesso negado" });
+  const { nome, login, senha, permissoes, restauranteId } = req.body;
+  const rid = req.user.role === "restaurante" ? req.user.restauranteId : restauranteId;
+  if (!nome || !login || !senha || !rid) {
+    return res.status(400).json({ error: "nome, login, senha e restauranteId são obrigatórios" });
+  }
+  if (senha.length < 4) return res.status(400).json({ error: "Senha deve ter no mínimo 4 caracteres" });
+  try {
+    const senhaHash = await bcrypt.hash(senha, 10);
+    const usuario = await prisma.usuarioPainel.create({
+      data: { nome, login: login.trim(), senhaHash, permissoes: permissoes || [], restauranteId: rid },
+      select: { id: true, nome: true, login: true, permissoes: true, ativo: true, createdAt: true },
+    });
+    res.status(201).json(usuario);
+  } catch (e) {
+    if (e.code === "P2002") return res.status(409).json({ error: "Este login já está em uso neste restaurante" });
+    res.status(500).json({ error: e.message });
+  }
+});
+
+// PUT /admin/usuarios/:id
+router.put("/usuarios/:id", authMiddleware, async (req, res) => {
+  if (req.user.role === "caixa") return res.status(403).json({ error: "Acesso negado" });
+  const { nome, login, senha, permissoes, ativo } = req.body;
+  try {
+    const existing = await prisma.usuarioPainel.findUnique({ where: { id: req.params.id } });
+    if (!existing) return res.status(404).json({ error: "Usuário não encontrado" });
+    if (req.user.role === "restaurante" && existing.restauranteId !== req.user.restauranteId) {
+      return res.status(403).json({ error: "Acesso negado" });
+    }
+    const data = {};
+    if (nome !== undefined) data.nome = nome;
+    if (login !== undefined) data.login = login.trim();
+    if (permissoes !== undefined) data.permissoes = permissoes;
+    if (ativo !== undefined) data.ativo = ativo;
+    if (senha) {
+      if (senha.length < 4) return res.status(400).json({ error: "Senha deve ter no mínimo 4 caracteres" });
+      data.senhaHash = await bcrypt.hash(senha, 10);
+    }
+    const usuario = await prisma.usuarioPainel.update({
+      where: { id: req.params.id },
+      data,
+      select: { id: true, nome: true, login: true, permissoes: true, ativo: true, createdAt: true },
+    });
+    res.json(usuario);
+  } catch (e) {
+    if (e.code === "P2002") return res.status(409).json({ error: "Este login já está em uso neste restaurante" });
+    res.status(500).json({ error: e.message });
+  }
+});
+
+// DELETE /admin/usuarios/:id
+router.delete("/usuarios/:id", authMiddleware, async (req, res) => {
+  if (req.user.role === "caixa") return res.status(403).json({ error: "Acesso negado" });
+  try {
+    const existing = await prisma.usuarioPainel.findUnique({ where: { id: req.params.id } });
+    if (!existing) return res.status(404).json({ error: "Usuário não encontrado" });
+    if (req.user.role === "restaurante" && existing.restauranteId !== req.user.restauranteId) {
+      return res.status(403).json({ error: "Acesso negado" });
+    }
+    await prisma.usuarioPainel.delete({ where: { id: req.params.id } });
+    res.json({ ok: true });
+  } catch (e) {
+    res.status(500).json({ error: e.message });
+  }
+});
+
+// ══ Receitas & CMV ═══════════════════════════════════════════════════════════
+
+// GET /admin/receitas/cmv?restauranteId=X — relatório CMV por produto (deve vir antes de /:id)
+router.get("/receitas/cmv", async (req, res) => {
+  const rid = resolverRestauranteId(req);
+  if (!rid) return res.status(400).json({ error: "restauranteId obrigatório" });
+  try {
+    const [categorias, receitaItens] = await Promise.all([
+      prisma.categoria.findMany({
+        where: { restauranteId: rid, ativo: true },
+        orderBy: { ordem: "asc" },
+        include: {
+          produtos: {
+            where: { ativo: true },
+            orderBy: { nome: "asc" },
+            include: { tamanhos: { orderBy: { preco: "asc" } } },
+          },
+        },
+      }),
+      prisma.receitaItem.findMany({
+        where: { restauranteId: rid },
+        include: { itemEstoque: { select: { precoUnitario: true, unidade: true } } },
+      }),
+    ]);
+
+    const receitaMap = {};
+    for (const ri of receitaItens) {
+      const key = `${ri.produtoId}::${ri.tamanhoId || "null"}`;
+      if (!receitaMap[key]) receitaMap[key] = [];
+      receitaMap[key].push(ri);
+    }
+
+    const calcCusto = (produtoId, tamanhoId) => {
+      const itens = receitaMap[`${produtoId}::${tamanhoId || "null"}`] || [];
+      return itens.reduce((s, ri) => s + ri.quantidade * (ri.itemEstoque?.precoUnitario || 0), 0);
+    };
+
+    const resultado = [];
+    for (const cat of categorias) {
+      for (const prod of cat.produtos) {
+        if (prod.tamanhos.length === 0) {
+          const custo = calcCusto(prod.id, null);
+          resultado.push({
+            categoriaId: cat.id, categoriaNome: cat.nome,
+            produtoId: prod.id, produtoNome: prod.nome,
+            tamanhoId: null, tamanhoNome: null,
+            preco: prod.preco, custo,
+            margem: prod.preco - custo,
+            cmvPct: prod.preco > 0 ? (custo / prod.preco) * 100 : null,
+            temReceita: (receitaMap[`${prod.id}::null`] || []).length > 0,
+          });
+        } else {
+          for (const tam of prod.tamanhos) {
+            const custo = calcCusto(prod.id, tam.id);
+            resultado.push({
+              categoriaId: cat.id, categoriaNome: cat.nome,
+              produtoId: prod.id, produtoNome: prod.nome,
+              tamanhoId: tam.id, tamanhoNome: tam.nome,
+              preco: tam.preco, custo,
+              margem: tam.preco - custo,
+              cmvPct: tam.preco > 0 ? (custo / tam.preco) * 100 : null,
+              temReceita: (receitaMap[`${prod.id}::${tam.id}`] || []).length > 0,
+            });
+          }
+        }
+      }
+    }
+
+    res.json({ data: resultado });
+  } catch (err) {
+    res.status(500).json({ error: err.message });
+  }
+});
+
+// GET /admin/receitas?restauranteId=X — lista todos os itens de receita
+router.get("/receitas", async (req, res) => {
+  const rid = resolverRestauranteId(req);
+  if (!rid) return res.status(400).json({ error: "restauranteId obrigatório" });
+  try {
+    const itens = await prisma.receitaItem.findMany({
+      where: { restauranteId: rid },
+      include: {
+        produto: { select: { id: true, nome: true } },
+        tamanho: { select: { id: true, nome: true, preco: true } },
+        itemEstoque: { select: { id: true, nome: true, unidade: true, precoUnitario: true, quantidadeAtual: true } },
+      },
+      orderBy: { createdAt: "asc" },
+    });
+    res.json({ data: itens });
+  } catch (err) {
+    res.status(500).json({ error: err.message });
+  }
+});
+
+// POST /admin/receitas — cria item de receita
+router.post("/receitas", async (req, res) => {
+  const rid = resolverRestauranteId(req);
+  if (!rid) return res.status(400).json({ error: "restauranteId obrigatório" });
+  const { produtoId, tamanhoId, itemEstoqueId, quantidade } = req.body;
+  if (!produtoId || !itemEstoqueId || quantidade === undefined) {
+    return res.status(400).json({ error: "produtoId, itemEstoqueId e quantidade são obrigatórios" });
+  }
+  try {
+    const item = await prisma.receitaItem.create({
+      data: {
+        restauranteId: rid,
+        produtoId,
+        tamanhoId: tamanhoId || null,
+        itemEstoqueId,
+        quantidade: parseFloat(quantidade),
+      },
+      include: {
+        produto: { select: { id: true, nome: true } },
+        tamanho: { select: { id: true, nome: true, preco: true } },
+        itemEstoque: { select: { id: true, nome: true, unidade: true, precoUnitario: true, quantidadeAtual: true } },
+      },
+    });
+    res.status(201).json({ data: item });
+  } catch (err) {
+    res.status(500).json({ error: err.message });
+  }
+});
+
+// PUT /admin/receitas/:id — atualiza quantidade
+router.put("/receitas/:id", async (req, res) => {
+  const { quantidade } = req.body;
+  if (quantidade === undefined) return res.status(400).json({ error: "quantidade obrigatória" });
+  try {
+    const item = await prisma.receitaItem.update({
+      where: { id: req.params.id },
+      data: { quantidade: parseFloat(quantidade) },
+      include: {
+        produto: { select: { id: true, nome: true } },
+        tamanho: { select: { id: true, nome: true, preco: true } },
+        itemEstoque: { select: { id: true, nome: true, unidade: true, precoUnitario: true, quantidadeAtual: true } },
+      },
+    });
+    res.json({ data: item });
+  } catch (err) {
+    if (err.code === "P2025") return res.status(404).json({ error: "Item de receita não encontrado" });
+    res.status(500).json({ error: err.message });
+  }
+});
+
+// DELETE /admin/receitas/:id — remove ingrediente da receita
+router.delete("/receitas/:id", async (req, res) => {
+  try {
+    await prisma.receitaItem.delete({ where: { id: req.params.id } });
+    res.json({ ok: true });
+  } catch (err) {
+    if (err.code === "P2025") return res.status(404).json({ error: "Item de receita não encontrado" });
+    res.status(500).json({ error: err.message });
   }
 });
 

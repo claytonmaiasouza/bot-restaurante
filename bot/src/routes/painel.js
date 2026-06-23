@@ -337,6 +337,72 @@ router.post("/pedidos/:id/iniciar", validarToken, async (req, res) => {
   res.json({ ok: true });
 });
 
+// Deduz ingredientes do estoque com base nas receitas dos itens do pedido
+async function deduzirIngredientesReceita(restauranteId, itensPedido) {
+  if (!itensPedido || itensPedido.length === 0) return;
+
+  // Carrega todos os produtos do restaurante para matching por nome
+  const produtos = await prisma.produto.findMany({
+    where: { categoria: { restauranteId } },
+    select: { id: true, nome: true, tamanhos: { select: { id: true, nome: true } } },
+  });
+
+  // Para cada item do pedido, tenta encontrar o produto correspondente
+  for (const item of itensPedido) {
+    const qtdPedido = item.quantidade || 1;
+    const nomePedido = (item.nome || "").trim();
+
+    // Tenta separar "Nome do Produto - Tamanho"
+    const separador = nomePedido.lastIndexOf(" - ");
+    const nomeProd = separador > 0 ? nomePedido.slice(0, separador).trim() : nomePedido;
+    const nomeTam  = separador > 0 ? nomePedido.slice(separador + 3).trim() : null;
+
+    // Busca produto por nome (insensível a maiúsculas)
+    const nomeProdLow = nomeProd.toLowerCase();
+    const produto = produtos.find(p => p.nome.toLowerCase() === nomeProdLow)
+      || produtos.find(p => nomeProdLow.includes(p.nome.toLowerCase()))
+      || produtos.find(p => p.nome.toLowerCase().includes(nomeProdLow));
+    if (!produto) continue;
+
+    // Resolve tamanhoId
+    let tamanhoId = null;
+    if (nomeTam && produto.tamanhos.length > 0) {
+      const nomeTamLow = nomeTam.toLowerCase();
+      const tam = produto.tamanhos.find(t => t.nome.toLowerCase() === nomeTamLow)
+        || produto.tamanhos.find(t => t.nome.toLowerCase().includes(nomeTamLow));
+      if (tam) tamanhoId = tam.id;
+    }
+
+    // Busca receita para este produto + tamanho
+    const receitaItens = await prisma.receitaItem.findMany({
+      where: { produtoId: produto.id, tamanhoId: tamanhoId },
+    });
+    if (receitaItens.length === 0) continue;
+
+    // Deduz estoque para cada ingrediente
+    for (const ri of receitaItens) {
+      const qtdDeduzir = ri.quantidade * qtdPedido;
+      await prisma.$transaction([
+        prisma.itemEstoque.update({
+          where: { id: ri.itemEstoqueId },
+          data: { quantidadeAtual: { decrement: qtdDeduzir } },
+        }),
+        prisma.movimentacaoEstoque.create({
+          data: {
+            restauranteId,
+            itemId: ri.itemEstoqueId,
+            tipo: "SAIDA",
+            quantidade: qtdDeduzir,
+            motivo: "PRODUCAO",
+            observacao: `Auto: ${nomePedido} x${qtdPedido}`,
+            criadoPor: "cozinha",
+          },
+        }),
+      ]);
+    }
+  }
+}
+
 // POST /painel/pedidos/:id/pronto — marca preparo concluído (por estação ou global)
 router.post("/pedidos/:id/pronto", validarToken, async (req, res) => {
   const estacaoTipo = req.body?.estacaoTipo;
@@ -431,6 +497,12 @@ router.post("/pedidos/:id/pronto", validarToken, async (req, res) => {
     data: updateData,
     select: { id: true, mesa: true, itens: true, numeroDia: true, garconId: true, status: true, localizacao: true, origem: true, total: true, metodoPagamento: true },
   });
+
+  // Baixa automática de estoque (assíncrono — não bloqueia resposta)
+  deduzirIngredientesReceita(atual.restauranteId, Array.isArray(atual.itens) ? atual.itens : []).catch(err =>
+    console.error(`[cozinha] erro ao deduzir estoque pedido ${req.params.id}:`, err.message)
+  );
+
   const io = req.app.get("io");
   io?.to("admin").emit("pedido:atualizado", pedido);
   io?.to(`restaurante:${req.painelSlug}`).emit("pedido:atualizado", pedido);

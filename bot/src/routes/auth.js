@@ -10,6 +10,7 @@ const JWT_SECRET = process.env.JWT_SECRET || process.env.ADMIN_TOKEN;
 const JWT_EXPIRY = "24h";
 
 // ── POST /auth/login ──────────────────────────────────────────────────────────
+// Aceita tanto proprietário (email) quanto usuário do painel (login)
 router.post("/login", async (req, res) => {
   const { email, senha } = req.body;
 
@@ -18,33 +19,64 @@ router.post("/login", async (req, res) => {
   }
 
   try {
+    // Tenta primeiro como proprietário do restaurante (por email)
     const restaurante = await prisma.restaurante.findUnique({
       where: { email: email.toLowerCase().trim() },
       select: { id: true, nome: true, slugWhatsapp: true, senhaHash: true, ativo: true, email: true, moeda: true },
     });
 
-    if (!restaurante || !restaurante.senhaHash) {
+    if (restaurante && restaurante.senhaHash) {
+      if (!restaurante.ativo) {
+        return res.status(403).json({ error: "Restaurante inativo" });
+      }
+      const senhaValida = await bcrypt.compare(senha, restaurante.senhaHash);
+      if (!senhaValida) {
+        return res.status(401).json({ error: "Credenciais inválidas" });
+      }
+      const token = jwt.sign(
+        { restauranteId: restaurante.id, slug: restaurante.slugWhatsapp, role: "restaurante", email: restaurante.email },
+        JWT_SECRET,
+        { expiresIn: JWT_EXPIRY }
+      );
+      return res.json({
+        token,
+        role: "restaurante",
+        restaurante: { id: restaurante.id, nome: restaurante.nome, slug: restaurante.slugWhatsapp, moeda: restaurante.moeda },
+      });
+    }
+
+    // Tenta como usuário do painel (por login — pode ser qualquer string, não precisa ser email)
+    const usuario = await prisma.usuarioPainel.findFirst({
+      where: { login: email.trim() },
+      include: { restaurante: { select: { id: true, nome: true, slugWhatsapp: true, moeda: true, ativo: true } } },
+    });
+
+    if (!usuario || !usuario.ativo) {
       return res.status(401).json({ error: "Credenciais inválidas" });
     }
-
-    if (!restaurante.ativo) {
+    if (!usuario.restaurante.ativo) {
       return res.status(403).json({ error: "Restaurante inativo" });
     }
-
-    const senhaValida = await bcrypt.compare(senha, restaurante.senhaHash);
+    const senhaValida = await bcrypt.compare(senha, usuario.senhaHash);
     if (!senhaValida) {
       return res.status(401).json({ error: "Credenciais inválidas" });
     }
-
     const token = jwt.sign(
-      { restauranteId: restaurante.id, slug: restaurante.slugWhatsapp, role: "restaurante", email: restaurante.email },
+      {
+        restauranteId: usuario.restauranteId,
+        slug: usuario.restaurante.slugWhatsapp,
+        role: "caixa",
+        usuarioId: usuario.id,
+        permissoes: usuario.permissoes,
+      },
       JWT_SECRET,
       { expiresIn: JWT_EXPIRY }
     );
-
-    res.json({
+    return res.json({
       token,
-      restaurante: { id: restaurante.id, nome: restaurante.nome, slug: restaurante.slugWhatsapp, moeda: restaurante.moeda },
+      role: "caixa",
+      usuario: { id: usuario.id, nome: usuario.nome, permissoes: usuario.permissoes },
+      restaurante: { id: usuario.restaurante.id, nome: usuario.restaurante.nome, slug: usuario.restaurante.slugWhatsapp, moeda: usuario.restaurante.moeda },
     });
   } catch (err) {
     res.status(500).json({ error: err.message });

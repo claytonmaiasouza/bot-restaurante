@@ -72,10 +72,12 @@ async function buscarCardapioAdmin(restauranteId) {
     ocultarMobile: cat.ocultarMobile || false,
     visivelGarcom: cat.visivelGarcom !== false,
     canais: Array.isArray(cat.canais) ? cat.canais : ["SALAO", "DELIVERY", "WEB"],
+    skuPrefixo: cat.skuPrefixo || '',
     produtos: cat.produtos.map((p) => ({
       id: p.id,
       nome: p.nome,
       descricao: p.descricao || null,
+      sku: p.sku || null,
       imagemUrl: p.imagemUrl || null,
       preco: p.tamanhos.length > 0 ? null : p.preco,
       ativo: p.ativo,
@@ -96,11 +98,44 @@ async function temCardapioDB(restauranteId) {
 }
 
 // ── CRUD Categorias ───────────────────────────────────────────────────────────
-async function criarCategoria(restauranteId, nome, ordem = 0, tamanhos = [], tipoTamanhos = "simples", bordas = [], estacaoTipo = "GERAL", canais = ["SALAO", "DELIVERY", "WEB"]) {
+async function criarCategoria(restauranteId, nome, ordem = 0, tamanhos = [], tipoTamanhos = "simples", bordas = [], estacaoTipo = "GERAL", canais = ["SALAO", "DELIVERY", "WEB"], skuPrefixo = "") {
   return prisma.categoria.create({
-    data: { restauranteId, nome, ordem, tamanhos, tipoTamanhos, bordas, estacaoTipo, canais },
+    data: { restauranteId, nome, ordem, tamanhos, tipoTamanhos, bordas, estacaoTipo, canais, skuPrefixo: skuPrefixo || "" },
     include: { produtos: true },
   });
+}
+
+async function gerarProximoSku(prefixo) {
+  if (!prefixo) return null;
+  const rows = await prisma.$queryRaw`
+    SELECT sku FROM "Produto"
+    WHERE sku LIKE ${prefixo + '-%'}
+    ORDER BY sku DESC
+    LIMIT 1
+  `;
+  if (!rows.length) return `${prefixo}-0001`;
+  const ultimo = rows[0].sku;
+  const partes = ultimo.split('-');
+  const numero = parseInt(partes[partes.length - 1], 10);
+  if (isNaN(numero)) return `${prefixo}-0001`;
+  return `${prefixo}-${String(numero + 1).padStart(4, '0')}`;
+}
+
+async function gerarSkusBulk(restauranteId) {
+  const categorias = await prisma.categoria.findMany({
+    where: { restauranteId, skuPrefixo: { not: "" } },
+    include: { produtos: { where: { sku: null }, select: { id: true } } },
+  });
+
+  let total = 0;
+  for (const cat of categorias) {
+    for (const prod of cat.produtos) {
+      const sku = await gerarProximoSku(cat.skuPrefixo);
+      await prisma.produto.update({ where: { id: prod.id }, data: { sku } });
+      total++;
+    }
+  }
+  return total;
 }
 
 async function atualizarCategoria(id, dados) {
@@ -118,11 +153,19 @@ async function deletarCategoria(id) {
 // ── CRUD Produtos ─────────────────────────────────────────────────────────────
 async function criarProduto(categoriaId, dados) {
   const { nome, descricao, preco, tamanhos } = dados;
+
+  let sku = dados.sku || null;
+  if (!sku) {
+    const cat = await prisma.categoria.findUnique({ where: { id: categoriaId }, select: { skuPrefixo: true } });
+    if (cat?.skuPrefixo) sku = await gerarProximoSku(cat.skuPrefixo);
+  }
+
   return prisma.produto.create({
     data: {
       categoriaId,
       nome,
       descricao: descricao || null,
+      sku,
       preco: preco || 0,
       tamanhos: tamanhos?.length
         ? { create: tamanhos.map((t) => ({ nome: t.nome, preco: t.preco, precoComBorda: t.precoComBorda || null })) }
@@ -133,11 +176,12 @@ async function criarProduto(categoriaId, dados) {
 }
 
 async function atualizarProduto(id, dados) {
-  const { nome, descricao, preco, ativo, visivelGarcom, tamanhos, imagemUrl } = dados;
+  const { nome, descricao, sku, preco, ativo, visivelGarcom, tamanhos, imagemUrl } = dados;
 
   const data = {};
   if (nome !== undefined) data.nome = nome;
   if (descricao !== undefined) data.descricao = descricao;
+  if (sku !== undefined) data.sku = sku || null;
   if (preco !== undefined) data.preco = preco;
   if (ativo !== undefined) data.ativo = ativo;
   if (visivelGarcom !== undefined) data.visivelGarcom = visivelGarcom;
@@ -238,6 +282,7 @@ module.exports = {
   temCardapioDB,
   criarCategoria,
   atualizarCategoria,
+  gerarSkusBulk,
   deletarCategoria,
   criarProduto,
   atualizarProduto,

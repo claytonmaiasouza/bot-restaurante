@@ -104,6 +104,25 @@ async function _enviarComRetryLid(path, payload, instanceName) {
   }
 }
 
+// ── Presence (digitando...) ───────────────────────────────────────────────────
+
+/**
+ * Envia indicador de presença (ex: "composing" = digitando).
+ * Falha silenciosa — presence é cosmética e não deve quebrar o fluxo.
+ */
+async function enviarPresence(numero, presence, instanceName, delay = 1000) {
+  try {
+    const jid = await resolverJid(numero, instanceName);
+    await evolutionClient.post(`/chat/sendPresence/${instanceName}`, {
+      number: jid,
+      presence,
+      delay,
+    });
+  } catch (err) {
+    console.log(`[evolution] presence "${presence}" falhou para ${numero}: ${err.message}`);
+  }
+}
+
 // ── Mensagens ─────────────────────────────────────────────────────────────────
 
 /**
@@ -114,7 +133,7 @@ async function enviarMensagem(numero, texto, instanceName) {
   try {
     const data = await _enviarComRetryLid(
       `/message/sendText/${instanceName}`,
-      { number: jid, text: texto },
+      { number: jid, text: texto, linkPreview: false },
       instanceName
     );
     return data;
@@ -388,6 +407,7 @@ async function baixarMidiaBase64(instanceName, mensagem) {
 
 module.exports = {
   // Mensagens
+  enviarPresence,
   enviarMensagem,
   enviarImagem,
   enviarDocumento,

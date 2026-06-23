@@ -183,10 +183,12 @@
 
         <li data-nav-key="metricas"><button id="nav-metricas" onclick="mostrarSecao('metricas')" class="sidebar-nav-item w-full text-left" data-i18n="nav.metricas">📊 Métricas</button></li>
         <li data-nav-key="estoque"><button id="nav-estoque" onclick="mostrarSecao('estoque')" class="sidebar-nav-item w-full text-left" data-i18n="nav.estoque">📦 Estoque</button></li>
+        <li data-nav-key="receitas"><button id="nav-receitas" onclick="mostrarSecao('receitas')" class="sidebar-nav-item w-full text-left">🧪 Receitas & CMV</button></li>
         <li data-nav-key="financeiro"><button id="nav-financeiro" onclick="mostrarSecao('financeiro')" class="sidebar-nav-item w-full text-left" data-i18n="nav.financeiro">💰 Financeiro</button></li>
         <li data-nav-key="cozinha"><button id="nav-cozinha-painel" onclick="mostrarSecao('cozinha-painel')" class="sidebar-nav-item w-full text-left">👨‍🍳 Cozinha</button></li>
 
         <li data-nav-key="configuracoes"><button id="nav-configuracoes" onclick="mostrarSecao('configuracoes')" class="sidebar-nav-item w-full text-left" data-i18n="nav.configuracoes">⚙️ Configurações</button></li>
+        <li data-nav-key="usuarios" id="nav-li-usuarios"><button id="nav-usuarios" onclick="mostrarSecao('usuarios')" class="sidebar-nav-item w-full text-left">👤 Usuários</button></li>
       </ul>
     </nav>
     <div class="px-3 py-4 border-t border-gray-200 flex flex-col gap-2 shrink-0">
@@ -997,6 +999,66 @@
       </div>
     </div>
 
+    <!-- Usuários do Painel -->
+    <div id="secao-usuarios" class="hidden px-6 pt-6 pb-8">
+      <div class="max-w-2xl">
+        <div class="flex items-center justify-between mb-4">
+          <h2 class="font-bold text-gray-800">👤 Usuários do Painel</h2>
+          <button onclick="abrirModalNovoUsuario()"
+            class="bg-blue-500 hover:bg-blue-600 text-white px-4 py-2 rounded-lg text-sm font-semibold transition">
+            + Novo usuário
+          </button>
+        </div>
+
+        <div id="usuarios-lista" class="flex flex-col gap-3"></div>
+        <p id="usuarios-vazio" class="text-sm text-gray-400 py-6 hidden">Nenhum usuário cadastrado.</p>
+      </div>
+    </div>
+
+    <!-- Modal Novo/Editar Usuário -->
+    <div id="modal-usuario" class="hidden fixed inset-0 bg-black/50 z-50 flex items-center justify-center p-4">
+      <div class="bg-white rounded-2xl shadow-xl w-full max-w-md p-6">
+        <h3 id="modal-usuario-titulo" class="font-bold text-gray-800 mb-4">Novo Usuário</h3>
+
+        <div class="flex flex-col gap-3">
+          <div>
+            <label class="text-xs text-gray-500 mb-1 block">Nome</label>
+            <input id="u-nome" type="text" placeholder="Ex: Maria Silva"
+              class="w-full border border-gray-300 rounded-lg px-3 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-blue-400">
+          </div>
+          <div>
+            <label class="text-xs text-gray-500 mb-1 block">Login <span class="text-gray-400">(usuário para entrar no sistema)</span></label>
+            <input id="u-login" type="text" placeholder="Ex: maria.caixa"
+              class="w-full border border-gray-300 rounded-lg px-3 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-blue-400">
+          </div>
+          <div>
+            <label id="u-senha-label" class="text-xs text-gray-500 mb-1 block">Senha</label>
+            <input id="u-senha" type="password" placeholder="Mínimo 4 caracteres"
+              class="w-full border border-gray-300 rounded-lg px-3 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-blue-400">
+          </div>
+
+          <div>
+            <label class="text-xs text-gray-500 mb-2 block">Permissões de acesso</label>
+            <div id="u-permissoes-grid" class="grid grid-cols-2 gap-2">
+              <!-- gerado por JS -->
+            </div>
+          </div>
+
+          <div id="u-ativo-row" class="hidden flex items-center gap-2">
+            <input id="u-ativo" type="checkbox" checked class="w-4 h-4 accent-blue-500">
+            <label for="u-ativo" class="text-sm text-gray-700">Usuário ativo</label>
+          </div>
+        </div>
+
+        <p id="u-erro" class="text-red-500 text-xs mt-2 hidden"></p>
+
+        <div class="flex gap-3 mt-5">
+          <button onclick="salvarUsuario()" class="flex-1 bg-blue-500 hover:bg-blue-600 text-white py-2.5 rounded-lg font-semibold text-sm transition">Salvar</button>
+          <button onclick="fecharModalUsuario()" class="flex-1 bg-gray-100 hover:bg-gray-200 text-gray-700 py-2.5 rounded-lg font-semibold text-sm transition">Cancelar</button>
+        </div>
+      </div>
+    </div>
+
     <!-- Garçons -->
     <div id="secao-garcons" class="hidden px-6 pt-6 pb-8">
       <div class="flex items-center justify-between mb-4">
@@ -1282,6 +1344,10 @@
             </div>
             <div><label class="text-xs text-gray-500 mb-1 block" data-i18n="est.form.forn">Fornecedor</label>
               <input id="est-form-forn" type="text" class="w-full border border-gray-300 rounded-lg px-3 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-orange-400"></div>
+            <div><label class="text-xs text-gray-500 mb-1 block">SKU <span class="text-gray-400">(código do produto no cardápio — ex: PIZ-0001)</span></label>
+              <input id="est-form-sku" type="text" maxlength="12" placeholder="PIZ-0001"
+                class="w-full border border-gray-300 rounded-lg px-3 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-orange-400 font-mono uppercase tracking-widest"
+                oninput="this.value=this.value.toUpperCase()"></div>
           </div>
           <p id="est-item-erro" class="hidden text-red-500 text-xs mt-2"></p>
           <div class="flex gap-2 mt-5">
@@ -1528,6 +1594,152 @@
         <div id="estoque-vazio" class="hidden py-16 text-center text-gray-400">
           <p class="text-3xl mb-2">📦</p>
           <p class="text-sm" data-i18n="est.vazio">Nenhum item no estoque. Adicione o primeiro!</p>
+        </div>
+      </div>
+    </div>
+
+    <!-- Receitas & CMV -->
+    <div id="secao-receitas" class="hidden px-6 pt-6 pb-8">
+      <div class="flex items-center justify-between mb-5 flex-wrap gap-3">
+        <div>
+          <h2 class="font-bold text-gray-800 text-lg">🧪 Receitas &amp; CMV</h2>
+          <p class="text-xs text-gray-400 mt-0.5">Configure os ingredientes de cada produto para calcular custo e margem de lucro</p>
+        </div>
+        <div class="flex gap-2">
+          <button onclick="mostrarAbaReceita('editor')" id="btn-aba-editor" class="text-xs font-semibold px-4 py-2 rounded-xl bg-orange-500 text-white transition">✏️ Editor de Receitas</button>
+          <button onclick="mostrarAbaReceita('cmv')" id="btn-aba-cmv" class="text-xs font-semibold px-4 py-2 rounded-xl bg-white text-gray-600 border border-gray-200 hover:border-orange-400 hover:text-orange-500 transition">📊 Tabela CMV</button>
+        </div>
+      </div>
+
+      <!-- ABA: Editor de Receitas -->
+      <div id="receita-aba-editor">
+        <div class="bg-white rounded-2xl shadow-sm p-4 mb-4">
+          <p class="text-xs text-gray-500 font-semibold uppercase tracking-wide mb-3">Selecione o produto</p>
+          <div class="flex gap-3 flex-wrap items-center">
+            <select id="receita-sel-categoria" class="text-sm border border-gray-200 rounded-lg px-3 py-2 focus:outline-none focus:ring-2 focus:ring-orange-400 min-w-[180px]" onchange="receitaCarregarProdutos()">
+              <option value="">— Categoria —</option>
+            </select>
+            <select id="receita-sel-produto" class="text-sm border border-gray-200 rounded-lg px-3 py-2 focus:outline-none focus:ring-2 focus:ring-orange-400 min-w-[220px]" onchange="receitaCarregarTamanhos()">
+              <option value="">— Produto —</option>
+            </select>
+            <select id="receita-sel-tamanho" class="text-sm border border-gray-200 rounded-lg px-3 py-2 focus:outline-none focus:ring-2 focus:ring-orange-400 min-w-[140px]" onchange="receitaCarregarItens()">
+              <option value="">— Tamanho —</option>
+            </select>
+          </div>
+        </div>
+
+        <div id="receita-custo-box" class="hidden bg-white rounded-2xl shadow-sm p-4 mb-4">
+          <div class="flex items-center justify-between flex-wrap gap-4">
+            <div>
+              <p class="text-xs text-gray-400 uppercase tracking-wide mb-0.5">Produto selecionado</p>
+              <p id="receita-produto-label" class="font-bold text-gray-800 text-base"></p>
+            </div>
+            <div class="flex gap-6 flex-wrap">
+              <div class="text-center">
+                <p class="text-xs text-gray-400 mb-0.5">Custo total</p>
+                <p id="receita-custo-val" class="text-xl font-bold text-red-500">—</p>
+              </div>
+              <div class="text-center">
+                <p class="text-xs text-gray-400 mb-0.5">Preço venda</p>
+                <p id="receita-preco-val" class="text-xl font-bold text-gray-800">—</p>
+              </div>
+              <div class="text-center">
+                <p class="text-xs text-gray-400 mb-0.5">Margem bruta</p>
+                <p id="receita-margem-val" class="text-xl font-bold text-green-600">—</p>
+              </div>
+              <div class="text-center">
+                <p class="text-xs text-gray-400 mb-0.5">CMV%</p>
+                <p id="receita-cmvpct-val" class="text-xl font-bold text-orange-500">—</p>
+              </div>
+            </div>
+          </div>
+        </div>
+
+        <div id="receita-itens-box" class="hidden">
+          <div class="bg-white rounded-2xl shadow-sm overflow-hidden mb-4">
+            <div class="px-4 py-3 border-b border-gray-100">
+              <p class="text-sm font-semibold text-gray-700">Ingredientes da Receita</p>
+            </div>
+            <div class="overflow-x-auto">
+              <table class="w-full text-sm">
+                <thead class="bg-gray-50 text-xs text-gray-400 uppercase">
+                  <tr>
+                    <th class="text-left px-4 py-3">Ingrediente</th>
+                    <th class="text-center px-4 py-3">Quantidade</th>
+                    <th class="text-center px-4 py-3">Unid.</th>
+                    <th class="text-right px-4 py-3">Custo unit.</th>
+                    <th class="text-right px-4 py-3">Custo item</th>
+                    <th class="px-4 py-3"></th>
+                  </tr>
+                </thead>
+                <tbody id="receita-itens-tbody" class="divide-y divide-gray-50"></tbody>
+              </table>
+            </div>
+            <div id="receita-itens-vazio" class="hidden py-8 text-center text-gray-400 text-sm">Nenhum ingrediente. Adicione abaixo.</div>
+          </div>
+          <div class="bg-white rounded-2xl shadow-sm p-4">
+            <p class="text-xs text-gray-500 font-semibold uppercase tracking-wide mb-3">+ Adicionar ingrediente</p>
+            <div class="flex gap-3 flex-wrap items-end">
+              <div>
+                <p class="text-xs text-gray-400 mb-1">Ingrediente (estoque)</p>
+                <select id="receita-add-estoque" class="text-sm border border-gray-200 rounded-lg px-3 py-2 focus:outline-none focus:ring-2 focus:ring-orange-400 min-w-[220px]">
+                  <option value="">— Selecione —</option>
+                </select>
+              </div>
+              <div>
+                <p class="text-xs text-gray-400 mb-1">Quantidade</p>
+                <input type="number" id="receita-add-qtd" step="0.001" min="0.001" placeholder="0.000"
+                  class="text-sm border border-gray-200 rounded-lg px-3 py-2 w-28 focus:outline-none focus:ring-2 focus:ring-orange-400">
+              </div>
+              <button onclick="receitaAdicionarIngrediente()" class="bg-orange-500 hover:bg-orange-600 text-white text-xs font-semibold px-4 py-2 rounded-xl transition" style="height:36px">Adicionar</button>
+            </div>
+          </div>
+        </div>
+
+        <div id="receita-selecione-msg" class="py-20 text-center text-gray-300">
+          <p class="text-5xl mb-3">🧪</p>
+          <p class="text-sm">Selecione categoria → produto → tamanho para ver ou editar a receita</p>
+        </div>
+      </div>
+
+      <!-- ABA: Tabela CMV -->
+      <div id="receita-aba-cmv" class="hidden">
+        <div class="grid grid-cols-3 gap-3 mb-4">
+          <div class="bg-white rounded-2xl shadow-sm p-4">
+            <p class="text-xs text-gray-400 mb-1">CMV Médio (produtos com receita)</p>
+            <p id="cmv-kpi-medio" class="text-2xl font-bold text-orange-500">—</p>
+          </div>
+          <div class="bg-white rounded-2xl shadow-sm p-4">
+            <p class="text-xs text-gray-400 mb-1">Com receita cadastrada</p>
+            <p id="cmv-kpi-com-receita" class="text-2xl font-bold text-green-600">—</p>
+          </div>
+          <div class="bg-white rounded-2xl shadow-sm p-4">
+            <p class="text-xs text-gray-400 mb-1">Sem receita cadastrada</p>
+            <p id="cmv-kpi-sem-receita" class="text-2xl font-bold text-gray-400">—</p>
+          </div>
+        </div>
+        <div class="bg-white rounded-2xl shadow-sm overflow-hidden">
+          <div class="flex items-center justify-between px-4 py-3 border-b border-gray-100">
+            <p class="text-sm font-semibold text-gray-700">CMV por produto</p>
+            <button onclick="carregarCmv()" class="text-xs text-orange-500 hover:text-orange-600 font-semibold">↺ Atualizar</button>
+          </div>
+          <div class="overflow-x-auto">
+            <table class="w-full text-sm">
+              <thead class="bg-gray-50 text-xs text-gray-400 uppercase sticky top-0">
+                <tr>
+                  <th class="text-left px-4 py-3">Categoria</th>
+                  <th class="text-left px-4 py-3">Produto</th>
+                  <th class="text-center px-4 py-3">Tamanho</th>
+                  <th class="text-right px-4 py-3">Preço venda</th>
+                  <th class="text-right px-4 py-3">Custo</th>
+                  <th class="text-right px-4 py-3">Margem</th>
+                  <th class="text-right px-4 py-3">CMV%</th>
+                  <th class="px-4 py-3 text-center">Receita</th>
+                </tr>
+              </thead>
+              <tbody id="cmv-tbody" class="divide-y divide-gray-50"></tbody>
+            </table>
+          </div>
         </div>
       </div>
     </div>
@@ -2746,6 +2958,10 @@
             class="bg-gray-100 hover:bg-gray-200 text-gray-700 text-sm font-semibold px-4 py-2 rounded-lg transition flex items-center gap-1.5">
             📄 <span data-i18n="card.importar-pdf">Importar PDF</span>
           </button>
+          <button id="btn-gerar-skus" onclick="gerarSkusAutomaticos()"
+            class="bg-blue-500 hover:bg-blue-600 text-white text-sm font-semibold px-4 py-2 rounded-lg transition flex items-center gap-1.5">
+            🏷️ Gerar SKUs
+          </button>
           <button onclick="abrirModalCategoria()"
             class="bg-orange-500 hover:bg-orange-600 text-white text-sm font-semibold px-4 py-2 rounded-lg transition" data-i18n="card.nova-cat">
             + Categoria
@@ -2848,6 +3064,13 @@
       </div>
       <input id="cat-nome" type="text" placeholder="Nome da categoria"
         class="w-full border border-gray-300 rounded-lg px-3 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-orange-400">
+      <div>
+        <label class="text-xs text-gray-500 mb-1 block">Prefixo SKU <span class="text-gray-400">(ex: PIZ, BEB, ING, BOR, ADC, MAS, COM, SOB)</span></label>
+        <input id="cat-sku-prefixo" type="text" maxlength="5" placeholder="Ex: PIZ"
+          class="w-40 border border-gray-300 rounded-lg px-3 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-orange-400 font-mono uppercase tracking-widest"
+          oninput="this.value=this.value.toUpperCase().replace(/[^A-Z]/g,'')">
+        <p class="text-xs text-gray-400 mt-1">SKUs gerados automaticamente ao cadastrar produtos. Deixe vazio para não usar SKU nesta categoria.</p>
+      </div>
       <input type="hidden" id="cat-id">
 
       <!-- Imagem da categoria -->
@@ -2969,6 +3192,10 @@
           class="w-full border border-gray-300 rounded-lg px-3 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-orange-400">
         <input id="prod-descricao" type="text" data-i18n-ph="card.prod-desc" placeholder="Descrição (opcional)"
           class="w-full border border-gray-300 rounded-lg px-3 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-orange-400">
+        <div id="prod-sku-display" class="hidden items-center gap-2 bg-blue-50 border border-blue-200 rounded-lg px-3 py-2">
+          <span class="text-xs text-blue-500 font-medium">SKU</span>
+          <span id="prod-sku-badge" class="text-sm font-mono font-bold text-blue-700 tracking-widest"></span>
+        </div>
 
         <!-- Foto do produto -->
         <div>
@@ -3596,9 +3823,11 @@ function getAcoes(status) {
 }
 
 let token = '';       // admin token
-let jwtToken = '';    // JWT do dono do restaurante
-let userRole = '';    // 'admin' | 'restaurante'
-let restauranteInfo = null; // { id, nome, slug } para role restaurante
+let jwtToken = '';    // JWT do dono do restaurante ou caixa
+let userRole = '';    // 'admin' | 'restaurante' | 'caixa'
+let userPermissoes = []; // permissoes do caixa: ['pedidos','caixa','conversas',...]
+let usuarioInfo = null;  // { id, nome } para role caixa
+let restauranteInfo = null; // { id, nome, slug } para role restaurante ou caixa
 let tabAtual = 'Todos';
 let restauranteAtual = '';
 let restaurantes = [];
@@ -3609,7 +3838,7 @@ let socket = null;
 
 // ── Auth helpers ──────────────────────────────────────────────────────────────
 function getHeaders(extra = {}) {
-  const base = userRole === 'restaurante'
+  const base = (userRole === 'restaurante' || userRole === 'caixa')
     ? { 'Authorization': `Bearer ${jwtToken}` }
     : { 'x-admin-token': token };
   return { ...base, ...extra };
@@ -3642,12 +3871,21 @@ async function entrarComEmail() {
   });
 
   if (res.ok) {
-    const { token: jwt, restaurante } = await res.json();
-    jwtToken = jwt;
-    userRole = 'restaurante';
-    restauranteInfo = restaurante;
-    localStorage.setItem('jwt_token', jwt);
-    localStorage.setItem('user_role', 'restaurante');
+    const data = await res.json();
+    jwtToken = data.token;
+    restauranteInfo = data.restaurante;
+    localStorage.setItem('jwt_token', data.token);
+    if (data.role === 'caixa') {
+      userRole = 'caixa';
+      userPermissoes = data.usuario?.permissoes || [];
+      usuarioInfo = data.usuario || null;
+      localStorage.setItem('user_role', 'caixa');
+      localStorage.setItem('user_permissoes', JSON.stringify(userPermissoes));
+    } else {
+      userRole = 'restaurante';
+      userPermissoes = [];
+      localStorage.setItem('user_role', 'restaurante');
+    }
     iniciarDashboard();
   } else {
     document.getElementById('login-erro').classList.remove('hidden');
@@ -3676,13 +3914,60 @@ function sair() {
   localStorage.removeItem('admin_token');
   localStorage.removeItem('jwt_token');
   localStorage.removeItem('user_role');
+  localStorage.removeItem('user_permissoes');
   location.reload();
 }
 
 function abrirLojaApp() {
   const rest = restaurantes.find(r => r.id === restauranteAtual);
-  if (!rest) { mostrarToast('Selecione um restaurante primeiro'); return; }
-  window.open(`/cardapio.html?slug=${rest.slugWhatsapp}`, '_blank');
+  const slug = rest?.slugWhatsapp || rest?.slug || restauranteInfo?.slugWhatsapp || restauranteInfo?.slug;
+  if (!slug) { mostrarToast('Selecione um restaurante primeiro'); return; }
+  window.open(`/cardapio.html?slug=${slug}`, '_blank');
+}
+
+// ── Permissões ────────────────────────────────────────────────────────────────
+// Mapa: nav-key do sidebar → permissão requerida (null = sempre visível)
+const PERMISSAO_NAV = {
+  pedidos:       'pedidos',
+  caixa:         'caixa',
+  conversas:     'conversas',
+  clientes:      'clientes',
+  cardapio:      'cardapio',
+  motoboys:      'motoboys',
+  garcons:       'garcons',
+  estacoes:      'estacoes',
+  crm:           'crm',
+  ventas:        'ventas',
+  metricas:      'metricas',
+  estoque:       'estoque',
+  financeiro:    'financeiro',
+  cozinha:       'cozinha',
+  configuracoes: 'configuracoes',
+  usuarios:      'usuarios',
+};
+
+function temPermissao(secao) {
+  if (userRole !== 'caixa') return true;
+  // mapeia seções de sub-ventas para a permissão 'ventas'
+  if (['ventas-historial','ventas-reportes','comprovantes','facturas'].includes(secao)) {
+    return userPermissoes.includes('ventas');
+  }
+  const perm = PERMISSAO_NAV[secao];
+  if (!perm) return true;
+  return userPermissoes.includes(perm);
+}
+
+function aplicarPermissoesSidebar() {
+  if (userRole !== 'caixa') return;
+  const ul = document.getElementById('sidebar-nav-ul');
+  if (!ul) return;
+  ul.querySelectorAll('li[data-nav-key]').forEach(li => {
+    const key = li.getAttribute('data-nav-key');
+    const perm = PERMISSAO_NAV[key];
+    if (perm && !userPermissoes.includes(perm)) {
+      li.style.display = 'none';
+    }
+  });
 }
 
 // ── Init ──────────────────────────────────────────────────────────────────────
@@ -3692,9 +3977,18 @@ async function iniciarDashboard() {
   document.getElementById('app').classList.remove('hidden');
   document.getElementById('app').style.display = 'flex';
 
-  if (userRole === 'restaurante') {
+  if (userRole === 'caixa') {
+    document.getElementById('user-label').textContent = usuarioInfo?.nome || restauranteInfo?.nome || '';
+    restauranteAtual = restauranteInfo?.id || '';
+    // Popula array restaurantes para que funções que usam restaurantes.find() funcionem
+    if (restauranteInfo) restaurantes = [restauranteInfo];
+    entrarNoPainel(restauranteInfo?.nome || '');
+    aplicarPermissoesSidebar();
+    await Promise.all([carregarPedidos(), carregarStats()]);
+  } else if (userRole === 'restaurante') {
     document.getElementById('user-label').textContent = restauranteInfo?.nome || '';
     restauranteAtual = restauranteInfo?.id || '';
+    if (restauranteInfo) restaurantes = [restauranteInfo];
     entrarNoPainel(restauranteInfo?.nome || '');
     await Promise.all([carregarPedidos(), carregarStats()]);
   } else {
@@ -5441,14 +5735,17 @@ async function emitirFactura() {
   const fmtGs = n => Math.round(n).toLocaleString('es-PY');
 
   // Máximo de linhas visíveis na folha pré-impressa (ajuste conforme o formulário físico)
-  const MAX_ROWS = 9;
+  const MAX_ROWS = 7;
 
   const linhasItens = _ultimaContaItens.slice(0, MAX_ROWS).map((item, idx) => {
     const subtotal = Math.round(item.preco * (item.quantidade || 1));
-    return `<div class="row">
-      <span class="tc">${idx + 1}</span>
+    // Exibe apenas "Pizza G" em vez de "Pizza G: Calabresa / Mussarela c/ Borda X"
+    const descFactura = item.nome.includes(': ') ? item.nome.split(': ')[0] : item.nome;
+    const skuItem = item.sku || lookupSkuByNome(item.nome) || '';
+    return `<div class="d-row">
+      <span class="tc" style="font-size:6pt;font-family:monospace;overflow:hidden;white-space:nowrap">${skuItem}</span>
       <span class="tc">${item.quantidade || 1}</span>
-      <span class="tl">${item.nome}</span>
+      <span class="tl">${descFactura}</span>
       <span class="tr">${fmtGs(item.preco)}</span>
       <span class="tr"></span>
       <span class="tr"></span>
@@ -5458,13 +5755,13 @@ async function emitirFactura() {
 
   const fillerCount = Math.max(0, MAX_ROWS - _ultimaContaItens.length);
   const fillerRows = Array(fillerCount).fill(
-    '<div class="row"><span></span><span></span><span></span><span></span><span></span><span></span><span></span></div>'
+    '<div class="d-row"><span></span><span></span><span></span><span></span><span></span><span></span><span></span></div>'
   ).join('');
 
   // ── Gera HTML com template visual (tela) + overlay de dados (impressão) ──
-  const numLinhas = Array(9).fill(0).map((_,i) =>
-    `<div style="position:absolute;top:${36.5 + i*4.6}mm;left:0;right:0;height:4.6mm;border-bottom:0.5px solid #e8e8e8;
-      display:grid;grid-template-columns:13mm 13mm 1fr 27mm 21mm 21mm 21mm;">
+  const numLinhas = Array(7).fill(0).map((_,i) =>
+    `<div style="position:absolute;top:${48.3 + i*5}mm;left:6.77mm;right:6.97mm;height:5mm;border-bottom:0.5px solid #e8e8e8;
+      display:grid;grid-template-columns:18mm 12mm 1fr 23mm 12mm 11mm 24mm;">
       <span style="border-right:0.5px solid #e8e8e8"></span>
       <span style="border-right:0.5px solid #e8e8e8"></span>
       <span style="border-right:0.5px solid #e8e8e8"></span>
@@ -5475,16 +5772,38 @@ async function emitirFactura() {
     </div>`
   ).join('');
 
+  const _adjTop      = parseFloat(localStorage.getItem('facturaAdjTop')      || '0');
+  const _adjLeft     = parseFloat(localStorage.getItem('facturaAdjLeft')     || '0');
+  const _padLeft     = parseFloat(localStorage.getItem('facturaPadLeft')     || '1.5');
+  const _padRight    = parseFloat(localStorage.getItem('facturaPadRight')    || '1.5');
+  const _cliTop      = parseFloat(localStorage.getItem('facturaCliTop')      || '0');
+  const _cliLeft     = parseFloat(localStorage.getItem('facturaCliLeft')     || '0');
+  const _cliPadL     = parseFloat(localStorage.getItem('facturaCliPadL')     || '0');
+  const _cliPadR     = parseFloat(localStorage.getItem('facturaCliPadR')     || '0');
+  const _itemsTop    = parseFloat(localStorage.getItem('facturaItemsTop')    || '0');
+  const _itemsLeft   = parseFloat(localStorage.getItem('facturaItemsLeft')   || '0');
+  const _itemsPadL   = parseFloat(localStorage.getItem('facturaItemsPadL')   || '1.5');
+  const _itemsPadR   = parseFloat(localStorage.getItem('facturaItemsPadR')   || '1.5');
+
   const html = `<!DOCTYPE html>
 <html>
 <head>
 <meta charset="UTF-8">
 <title>Factura ${seqNum}</title>
 <style>
-/* ─── Ajuste de calibração — altere se os dados estiverem deslocados na folha ─── */
 :root {
-  --adj-top:  0mm;   /* positivo desce, negativo sobe  */
-  --adj-left: 0mm;   /* positivo para direita, negativo para esquerda */
+  --adj-top:       ${_adjTop}mm;
+  --adj-left:      ${_adjLeft}mm;
+  --pad-left:      ${_padLeft}mm;
+  --pad-right:     ${_padRight}mm;
+  --cli-top:       ${_cliTop}mm;
+  --cli-left:      ${_cliLeft}mm;
+  --cli-pad-l:     ${_cliPadL}mm;
+  --cli-pad-r:     ${_cliPadR}mm;
+  --items-top:     ${_itemsTop}mm;
+  --items-left:    ${_itemsLeft}mm;
+  --items-pad-l:   ${_itemsPadL}mm;
+  --items-pad-r:   ${_itemsPadR}mm;
 }
 * { margin:0; padding:0; box-sizing:border-box; }
 body {
@@ -5561,14 +5880,14 @@ body {
   position:absolute; top:29mm; left:0; right:0; height:4mm;
   border-bottom:0.5px solid #bbb;
   background:#f0f0f0;
-  display:grid; grid-template-columns:13mm 13mm 1fr 27mm 21mm 21mm 21mm;
+  display:grid; grid-template-columns:18mm 12mm 1fr 23mm 12mm 11mm 24mm;
   align-items:center; padding:0 1.5mm; font-size:6.5pt; font-weight:bold;
 }
 .tmpl-th2 {
   position:absolute; top:33mm; left:0; right:0; height:3.5mm;
   border-bottom:1.2px solid #888;
   background:#f0f0f0;
-  display:grid; grid-template-columns:13mm 13mm 1fr 27mm 21mm 21mm 21mm;
+  display:grid; grid-template-columns:18mm 12mm 1fr 23mm 12mm 11mm 24mm;
   align-items:center; padding:0 1.5mm; font-size:6.5pt; font-weight:bold; text-align:center;
 }
 .bdr { border-right:0.5px solid #bbb; }
@@ -5589,7 +5908,7 @@ body {
   position:absolute; top:77.5mm; left:0; right:0; height:5mm;
   border-top:1px solid #bbb; border-bottom:1px solid #bbb;
   background:#f8f8f8;
-  display:grid; grid-template-columns:13mm 13mm 1fr 27mm 21mm 21mm 21mm;
+  display:grid; grid-template-columns:18mm 12mm 1fr 23mm 12mm 11mm 24mm;
   align-items:center; padding:0 1.5mm; font-size:6pt; color:#aaa;
 }
 
@@ -5625,49 +5944,46 @@ body {
 
 /* Número sequencial — campo grande do bloco timbrado */
 .d-num {
-  position:absolute; top:14.5mm; right:4mm;
-  font-size:16pt; font-weight:bold; letter-spacing:3px;
+  position:absolute; top:22mm; right:4mm;
+  font-size:11pt; font-weight:bold; letter-spacing:2px;
   text-align:right; width:46mm;
 }
 
-/* Cliente — linha 1 */
-.d-senhor    { position:absolute; top:22.5mm; left:28mm;  font-size:8pt; max-width:120mm; overflow:hidden; white-space:nowrap; }
-.d-fecha     { position:absolute; top:22.5mm; left:155mm; font-size:8pt; }
-.d-check     { position:absolute; top:22mm;   left:187mm; font-size:8.5pt; font-weight:bold; }
-.d-check-cred{ position:absolute; top:22mm;   left:198mm; font-size:8.5pt; font-weight:bold; }
+/* Cliente — linha 1 (retângulo 27.3mm–40.5mm, sem rótulos pré-impressos) */
+.d-senhor    { position:absolute; top:calc(30mm + var(--cli-top)); left:calc(8mm   + var(--cli-left)); font-size:7.5pt; max-width:130mm; overflow:hidden; white-space:nowrap; padding-left:var(--cli-pad-l); padding-right:var(--cli-pad-r); }
+.d-fecha     { position:absolute; top:calc(30mm + var(--cli-top)); left:calc(148mm + var(--cli-left)); font-size:7.5pt; }
+.d-check     { position:absolute; top:calc(30mm + var(--cli-top)); left:calc(186mm + var(--cli-left)); font-size:8pt; font-weight:bold; }
+.d-check-cred{ position:absolute; top:calc(30mm + var(--cli-top)); left:calc(197mm + var(--cli-left)); font-size:8pt; font-weight:bold; }
 /* Cliente — linha 2 */
-.d-direc     { position:absolute; top:27mm;   left:28mm;  font-size:8pt; max-width:110mm; overflow:hidden; white-space:nowrap; }
-.d-tel       { position:absolute; top:27mm;   left:152mm; font-size:8pt; max-width:25mm; overflow:hidden; white-space:nowrap; }
-.d-ruc-cli   { position:absolute; top:27mm;   left:183mm; font-size:8pt; max-width:25mm; overflow:hidden; white-space:nowrap; }
+.d-direc     { position:absolute; top:calc(36mm + var(--cli-top)); left:calc(8mm   + var(--cli-left)); font-size:7.5pt; max-width:130mm; overflow:hidden; white-space:nowrap; padding-left:var(--cli-pad-l); padding-right:var(--cli-pad-r); }
+.d-tel       { position:absolute; top:calc(36mm + var(--cli-top)); left:calc(148mm + var(--cli-left)); font-size:7.5pt; max-width:28mm; overflow:hidden; white-space:nowrap; }
+.d-ruc-cli   { position:absolute; top:calc(36mm + var(--cli-top)); left:calc(178mm + var(--cli-left)); font-size:7.5pt; max-width:25mm; overflow:hidden; white-space:nowrap; }
 
-/* Linhas de itens — alinhadas às linhas pré-impressas */
-.d-items  { position:absolute; top:37mm; left:0; width:210mm; }
+/* Linhas de itens — alinhadas à área de items do formulário (48.3mm–94.7mm) */
+.d-items  { position:absolute; top:calc(48.3mm + var(--items-top)); left:calc(6.77mm + var(--items-left)); width:196.26mm; }
 .d-row {
   display:grid;
-  grid-template-columns:13mm 13mm 1fr 27mm 21mm 21mm 21mm;
-  height:4.6mm; align-items:center; padding:0 1.5mm; font-size:7.5pt;
+  grid-template-columns:18mm 12mm 1fr 23mm 12mm 11mm 24mm;
+  height:5mm; align-items:center; padding:0 var(--items-pad-r) 0 var(--items-pad-l); font-size:7.5pt;
 }
 .tc { text-align:center; }
 .tr { text-align:right; padding-right:0.5mm; }
 .tl { padding-left:1mm; overflow:hidden; white-space:nowrap; }
 
-/* Subtotal coluna 10% */
+/* Linha de total — logo após os itens (itens terminam em 83.3mm) */
 .d-sub {
-  position:absolute; top:77.5mm; left:0; width:210mm;
-  display:grid; grid-template-columns:13mm 13mm 1fr 27mm 21mm 21mm 21mm;
-  height:5mm; align-items:center; padding:0 1.5mm; font-size:7.5pt; font-weight:bold;
+  position:absolute; top:83.5mm; left:6.77mm; width:196.26mm;
+  display:grid; grid-template-columns:18mm 12mm 1fr 23mm 12mm 11mm 24mm;
+  height:5.5mm; align-items:center; padding:0 var(--pad-right) 0 var(--pad-left); font-size:7.5pt; font-weight:bold;
+  border-top: 0.8px solid #000;
 }
 
-/* Total geral (canto dir da linha de Total:) */
-.d-total { position:absolute; top:83mm; right:2mm; font-size:9.5pt; font-weight:bold; text-align:right; width:45mm; }
-
-/* Total extenso (após rótulo pré-impresso "Total Letras:") */
-.d-letras { position:absolute; top:88mm; left:22mm; font-size:7pt; width:108mm; line-height:1.3; }
-
-/* Valores IVA — após rótulos pré-impressos */
-.d-iva5      { position:absolute; top:91.5mm; left:113mm; font-size:7.5pt; }
-.d-iva10     { position:absolute; top:91.5mm; left:162mm; font-size:7.5pt; }
-.d-iva-total { position:absolute; top:95mm;   left:162mm; font-size:7.5pt; }
+/* Linha IVA 10% */
+.d-iva-row {
+  position:absolute; top:89.3mm; left:6.77mm; width:196.26mm;
+  display:grid; grid-template-columns:18mm 12mm 1fr 23mm 12mm 11mm 24mm;
+  height:5mm; align-items:center; padding:0 var(--pad-right) 0 var(--pad-left); font-size:6.5pt;
+}
 
 /* ═══════════════════════════════════════════════════════════════
    IMPRESSÃO — esconde template, mantém apenas dados
@@ -5676,6 +5992,8 @@ body {
   body { background:transparent !important; padding:0 !important; width:210mm !important; }
   .factura { box-shadow:none !important; }
   .tmpl { display:none !important; }
+  #calib-panel { display:none !important; }
+  .d-num { display:none !important; }
 }
 @page { size:A4; margin:0; }
 </style>
@@ -5698,13 +6016,13 @@ body {
     <div class="d-num">${seqNum}</div>
 
     <!-- Cliente -->
-    <div class="d-senhor">${cliNome}${_ultimaContaMesa ? ' — Mesa ' + _ultimaContaMesa : ''}</div>
-    <div class="d-fecha">${dataFmt} ${horaFmt}</div>
+    <div class="d-senhor"><b>Señor/es:</b> ${cliNome}${_ultimaContaMesa ? ' — Mesa ' + _ultimaContaMesa : ''}</div>
+    <div class="d-fecha">Fecha: ${dataFmt} ${horaFmt}</div>
     <div class="d-check">${contadoX}</div>
     <div class="d-check-cred">${creditoX}</div>
-    ${cliDirec ? `<div class="d-direc">${cliDirec}</div>` : ''}
-    ${cliTel   ? `<div class="d-tel">${cliTel}</div>` : ''}
-    ${cliRuc   ? `<div class="d-ruc-cli">${cliRuc}</div>` : ''}
+    ${cliDirec ? `<div class="d-direc"><b>Dirección:</b> ${cliDirec}</div>` : ''}
+    ${cliTel   ? `<div class="d-tel">Tel: ${cliTel}</div>` : ''}
+    ${cliRuc   ? `<div class="d-ruc-cli">RUC: ${cliRuc}</div>` : ''}
 
     <!-- Itens -->
     <div class="d-items">
@@ -5712,28 +6030,108 @@ body {
       ${fillerRows}
     </div>
 
-    <!-- Subtotal coluna 10% -->
+    <!-- Total -->
     <div class="d-sub">
-      <span></span><span></span><span></span><span></span>
-      <span class="tr"></span><span class="tr"></span>
+      <span></span><span></span>
+      <span class="tl">TOTAL</span>
+      <span></span><span></span><span></span>
       <span class="tr">${fmtGs(total)}</span>
     </div>
 
-    <!-- Total -->
-    <div class="d-total">${fmtGs(total)}</div>
-
-    <!-- Total extenso -->
-    <div class="d-letras">${_numPorExtenso(total)} GUARANÍES. ------</div>
-
-    <!-- IVA -->
-    <div class="d-iva5">${fmtGs(0)}</div>
-    <div class="d-iva10">${fmtGs(iva10)}</div>
-    <div class="d-iva-total">${fmtGs(iva10)}</div>
+    <!-- IVA 10% -->
+    <div class="d-iva-row">
+      <span></span><span></span>
+      <span class="tl">IVA 10% (incluido en total)</span>
+      <span></span><span></span><span></span>
+      <span class="tr">${fmtGs(iva10)}</span>
+    </div>
 
   </div>
 
 </div>
-<script>window.onload = function() { window.print(); }<\/script>
+<div id="calib-panel" style="position:fixed;top:0;left:0;right:0;z-index:9999;background:#0f172a;color:#fff;padding:6px 12px;font-family:Arial,sans-serif;font-size:11px;box-shadow:0 2px 10px rgba(0,0,0,0.5);">
+  <div style="display:flex;align-items:center;gap:8px;flex-wrap:wrap;">
+
+    <span style="font-weight:bold;color:#64748b;font-size:10px;white-space:nowrap;">⚙ CALIBRAÇÃO</span>
+
+    <!-- FORMULÁRIO -->
+    <div style="display:flex;align-items:center;gap:5px;background:#1e293b;border:1px solid #334155;border-radius:5px;padding:3px 8px;">
+      <span style="color:#94a3b8;font-size:10px;font-weight:bold;margin-right:2px;">FORM</span>
+      <label style="display:flex;align-items:center;gap:3px;color:#94a3b8;">↕<input id="adj-top-input" type="number" step="0.5" value="${_adjTop}" style="width:48px;padding:2px 4px;border-radius:3px;border:none;color:#000;font-size:11px;"></label>
+      <label style="display:flex;align-items:center;gap:3px;color:#94a3b8;">↔<input id="adj-left-input" type="number" step="0.5" value="${_adjLeft}" style="width:48px;padding:2px 4px;border-radius:3px;border:none;color:#000;font-size:11px;"></label>
+      <label style="display:flex;align-items:center;gap:3px;color:#94a3b8;">Pad←<input id="pad-left-input" type="number" step="0.5" value="${_padLeft}" style="width:48px;padding:2px 4px;border-radius:3px;border:none;color:#000;font-size:11px;"></label>
+      <label style="display:flex;align-items:center;gap:3px;color:#94a3b8;">Pad→<input id="pad-right-input" type="number" step="0.5" value="${_padRight}" style="width:48px;padding:2px 4px;border-radius:3px;border:none;color:#000;font-size:11px;"></label>
+    </div>
+
+    <!-- CLIENTE -->
+    <div style="display:flex;align-items:center;gap:5px;background:#1e293b;border:1px solid #1e40af;border-radius:5px;padding:3px 8px;">
+      <span style="color:#7dd3fc;font-size:10px;font-weight:bold;margin-right:2px;">CLIENTE</span>
+      <label style="display:flex;align-items:center;gap:3px;color:#7dd3fc;">↕<input id="cli-top-input" type="number" step="0.5" value="${_cliTop}" style="width:48px;padding:2px 4px;border-radius:3px;border:none;color:#000;font-size:11px;"></label>
+      <label style="display:flex;align-items:center;gap:3px;color:#7dd3fc;">↔<input id="cli-left-input" type="number" step="0.5" value="${_cliLeft}" style="width:48px;padding:2px 4px;border-radius:3px;border:none;color:#000;font-size:11px;"></label>
+      <label style="display:flex;align-items:center;gap:3px;color:#7dd3fc;">Pad←<input id="cli-padl-input" type="number" step="0.5" value="${_cliPadL}" style="width:48px;padding:2px 4px;border-radius:3px;border:none;color:#000;font-size:11px;"></label>
+      <label style="display:flex;align-items:center;gap:3px;color:#7dd3fc;">Pad→<input id="cli-padr-input" type="number" step="0.5" value="${_cliPadR}" style="width:48px;padding:2px 4px;border-radius:3px;border:none;color:#000;font-size:11px;"></label>
+    </div>
+
+    <!-- ITENS -->
+    <div style="display:flex;align-items:center;gap:5px;background:#1e293b;border:1px solid #166534;border-radius:5px;padding:3px 8px;">
+      <span style="color:#86efac;font-size:10px;font-weight:bold;margin-right:2px;">ITENS</span>
+      <label style="display:flex;align-items:center;gap:3px;color:#86efac;">↕<input id="items-top-input" type="number" step="0.5" value="${_itemsTop}" style="width:48px;padding:2px 4px;border-radius:3px;border:none;color:#000;font-size:11px;"></label>
+      <label style="display:flex;align-items:center;gap:3px;color:#86efac;">↔<input id="items-left-input" type="number" step="0.5" value="${_itemsLeft}" style="width:48px;padding:2px 4px;border-radius:3px;border:none;color:#000;font-size:11px;"></label>
+      <label style="display:flex;align-items:center;gap:3px;color:#86efac;">Pad←<input id="items-padl-input" type="number" step="0.5" value="${_itemsPadL}" style="width:48px;padding:2px 4px;border-radius:3px;border:none;color:#000;font-size:11px;"></label>
+      <label style="display:flex;align-items:center;gap:3px;color:#86efac;">Pad→<input id="items-padr-input" type="number" step="0.5" value="${_itemsPadR}" style="width:48px;padding:2px 4px;border-radius:3px;border:none;color:#000;font-size:11px;"></label>
+    </div>
+
+    <button onclick="aplicarAjuste()" style="background:#3b82f6;color:#fff;border:none;padding:4px 14px;border-radius:5px;cursor:pointer;font-size:12px;font-weight:bold;">Aplicar</button>
+    <span style="color:#475569;font-size:10px;">+ = desce / direita</span>
+    <button onclick="window.print()" style="margin-left:auto;background:#22c55e;color:#fff;border:none;padding:5px 18px;border-radius:5px;cursor:pointer;font-size:13px;font-weight:bold;">🖨 Imprimir</button>
+  </div>
+</div>
+<script>
+function aplicarAjuste() {
+  var top       = parseFloat(document.getElementById('adj-top-input').value)    || 0;
+  var left      = parseFloat(document.getElementById('adj-left-input').value)   || 0;
+  var padL      = parseFloat(document.getElementById('pad-left-input').value);
+  var padR      = parseFloat(document.getElementById('pad-right-input').value);
+  var cTop      = parseFloat(document.getElementById('cli-top-input').value)    || 0;
+  var cLeft     = parseFloat(document.getElementById('cli-left-input').value)   || 0;
+  var cPadL     = parseFloat(document.getElementById('cli-padl-input').value);
+  var cPadR     = parseFloat(document.getElementById('cli-padr-input').value);
+  if (isNaN(cPadL)) cPadL = 0;
+  if (isNaN(cPadR)) cPadR = 0;
+  var iTop      = parseFloat(document.getElementById('items-top-input').value)  || 0;
+  var iLeft     = parseFloat(document.getElementById('items-left-input').value) || 0;
+  var iPadL     = parseFloat(document.getElementById('items-padl-input').value);
+  var iPadR     = parseFloat(document.getElementById('items-padr-input').value);
+  if (isNaN(padL))  padL  = 1.5;
+  if (isNaN(padR))  padR  = 1.5;
+  if (isNaN(iPadL)) iPadL = 1.5;
+  if (isNaN(iPadR)) iPadR = 1.5;
+  document.documentElement.style.setProperty('--adj-top',     top   + 'mm');
+  document.documentElement.style.setProperty('--adj-left',    left  + 'mm');
+  document.documentElement.style.setProperty('--pad-left',    padL  + 'mm');
+  document.documentElement.style.setProperty('--pad-right',   padR  + 'mm');
+  document.documentElement.style.setProperty('--cli-top',     cTop  + 'mm');
+  document.documentElement.style.setProperty('--cli-left',    cLeft + 'mm');
+  document.documentElement.style.setProperty('--cli-pad-l',   cPadL + 'mm');
+  document.documentElement.style.setProperty('--cli-pad-r',   cPadR + 'mm');
+  document.documentElement.style.setProperty('--items-top',   iTop  + 'mm');
+  document.documentElement.style.setProperty('--items-left',  iLeft + 'mm');
+  document.documentElement.style.setProperty('--items-pad-l', iPadL + 'mm');
+  document.documentElement.style.setProperty('--items-pad-r', iPadR + 'mm');
+  localStorage.setItem('facturaAdjTop',    top);
+  localStorage.setItem('facturaAdjLeft',   left);
+  localStorage.setItem('facturaPadLeft',   padL);
+  localStorage.setItem('facturaPadRight',  padR);
+  localStorage.setItem('facturaCliTop',    cTop);
+  localStorage.setItem('facturaCliLeft',   cLeft);
+  localStorage.setItem('facturaCliPadL',   cPadL);
+  localStorage.setItem('facturaCliPadR',   cPadR);
+  localStorage.setItem('facturaItemsTop',  iTop);
+  localStorage.setItem('facturaItemsLeft', iLeft);
+  localStorage.setItem('facturaItemsPadL', iPadL);
+  localStorage.setItem('facturaItemsPadR', iPadR);
+}
+<\/script>
 </body>
 </html>`;
 
@@ -6446,7 +6844,7 @@ function balcaoFinalizarBuilder() {
   else balcaoCarrinho.push({ nome: nomeFinal, preco, quantidade: 1 });
   balcaoRenderCarrinho();
   mostrarToast(`🍕 ${sabores} adicionado!`);
-  balcaoMostrarInicio();
+  balcaoMostrarCategorias();
 }
 
 function balcaoAddSimple(nome, preco) {
@@ -7684,11 +8082,11 @@ function atualizarCardNaTela(pedido) {
 
 // ── Socket.IO ─────────────────────────────────────────────────────────────────
 function assinarSalas() {
-  if (userRole === 'restaurante') {
+  if (userRole === 'restaurante' || userRole === 'caixa') {
     socket.emit('assinar:restaurante', jwtToken);
   } else {
     socket.emit('assinar:admin', token);
-    restaurantes.forEach(r => socket.emit('assinar', r.slugWhatsapp));
+    restaurantes.forEach(r => socket.emit('assinar', r.slugWhatsapp || r.slug));
   }
 }
 
@@ -8023,6 +8421,16 @@ function catTemPrecosPadrao(catTamanhos) {
   return (catTamanhos || []).some(t => t.preco > 0);
 }
 
+function lookupSkuByNome(nome) {
+  if (!cardapioData || !nome) return null;
+  for (const cat of cardapioData) {
+    for (const p of (cat.produtos || [])) {
+      if (p.sku && p.nome && nome.toLowerCase().includes(p.nome.toLowerCase())) return p.sku;
+    }
+  }
+  return null;
+}
+
 function mostrarToast(msg) {
   const t = document.getElementById('toast');
   t.textContent = msg;
@@ -8051,10 +8459,11 @@ function tocarSom() {
 let secaoAtual = 'pedidos';
 
 function mostrarSecao(secao) {
+  if (!temPermissao(secao)) { mostrarToast('⛔ Sem permissão para acessar esta seção'); return; }
   secaoAtual = secao;
   const mainScroll = document.getElementById('main-scroll');
   if (mainScroll) mainScroll.scrollTop = 0;
-  ['pedidos', 'conversas', 'clientes', 'cardapio', 'configuracoes', 'motoboys', 'garcons', 'estacoes', 'crm', 'metricas', 'estoque', 'financeiro', 'caixa', 'comprovantes', 'facturas', 'links', 'cozinha-painel', 'motoboy-painel', 'ventas-historial', 'ventas-reportes'].forEach(s => {
+  ['pedidos', 'conversas', 'clientes', 'cardapio', 'configuracoes', 'motoboys', 'garcons', 'estacoes', 'crm', 'metricas', 'estoque', 'receitas', 'financeiro', 'caixa', 'comprovantes', 'facturas', 'links', 'cozinha-painel', 'motoboy-painel', 'ventas-historial', 'ventas-reportes', 'usuarios'].forEach(s => {
     document.getElementById(`secao-${s}`).classList.toggle('hidden', secao !== s);
   });
   // mesas, balcão e notificações estão dentro do contexto pedidos — garante estado correto ao navegar
@@ -8076,7 +8485,7 @@ function mostrarSecao(secao) {
   if (statusBar) statusBar.classList.toggle('hidden', secao !== 'pedidos' || pedidosViewAtual !== 'kanban');
 
   // Sidebar active state
-  ['pedidos', 'conversas', 'clientes', 'cardapio', 'configuracoes', 'motoboys', 'garcons', 'estacoes', 'crm', 'metricas', 'estoque', 'financeiro', 'caixa', 'comprovantes', 'facturas', 'links', 'cozinha-painel', 'motoboy-painel', 'ventas-historial', 'ventas-reportes'].forEach(s => {
+  ['pedidos', 'conversas', 'clientes', 'cardapio', 'configuracoes', 'motoboys', 'garcons', 'estacoes', 'crm', 'metricas', 'estoque', 'receitas', 'financeiro', 'caixa', 'comprovantes', 'facturas', 'links', 'cozinha-painel', 'motoboy-painel', 'ventas-historial', 'ventas-reportes', 'usuarios'].forEach(s => {
     const el = document.getElementById(`nav-${s}`);
     if (!el) return;
     el.classList.remove('sidebar-nav-active');
@@ -8110,6 +8519,7 @@ function mostrarSecao(secao) {
   if (secao === 'crm') iniciarCRM();
   if (secao === 'metricas') iniciarMetricas();
   if (secao === 'estoque') carregarEstoque();
+  if (secao === 'receitas') carregarSecaoReceitas();
   if (secao === 'financeiro') iniciarFinanceiro();
   if (secao === 'caixa') { carregarCaixa(); if (caixaTabAtual === 'notificacoes') renderHistoricoNotif(); }
   if (secao === 'comprovantes') carregarComprovantes();
@@ -8120,6 +8530,7 @@ function mostrarSecao(secao) {
   if (secao === 'restaurantes-admin') carregarListaRestaurantes();
   if (secao === 'ventas-historial') iniciarVentasHistorial();
   if (secao === 'ventas-reportes') iniciarVentasReportes();
+  if (secao === 'usuarios') carregarUsuarios();
 }
 
 // ── Conversas ─────────────────────────────────────────────────────────────────
@@ -9044,6 +9455,7 @@ function renderizarCardapio(categoriasRaw) {
           <span class="font-semibold text-gray-800 truncate">${cat.nome}</span>
           <span class="text-xs bg-gray-100 text-gray-500 px-2 py-0.5 rounded-full shrink-0">${numProdutos} ${numProdutos === 1 ? 'produto' : 'produtos'}</span>
           ${cat.tipoTamanhos && cat.tipoTamanhos !== 'simples' ? `<span class="text-xs bg-gray-100 text-gray-500 px-2 py-0.5 rounded-full shrink-0">${{pizza:'🍕 Pizza',porcao:'🍽️ Porção',custom:'⚙️ Custom'}[cat.tipoTamanhos]||''}</span>` : ''}
+          ${cat.skuPrefixo ? `<span class="text-xs font-mono bg-blue-50 text-blue-600 border border-blue-200 px-2 py-0.5 rounded-full shrink-0 font-semibold tracking-wide">SKU: ${cat.skuPrefixo}</span>` : ''}
           ${inativa ? `<span class="text-xs bg-gray-200 text-gray-500 px-2 py-0.5 rounded-full shrink-0">${inativaLabel}</span>` : ''}
         </div>
         <div class="flex gap-1.5 shrink-0 ml-2 items-center" onclick="event.stopPropagation()">
@@ -9199,6 +9611,7 @@ function renderizarProdutoLinha(p, catTamanhos = [], catNome = '') {
         ${p.imagemUrl ? `<img src="${p.imagemUrl}" class="w-10 h-10 object-cover rounded-lg border border-gray-200 shrink-0 ${inativo ? 'opacity-50' : ''}">` : (() => { const isPizza = /pizza/i.test(p.nome) || /pizza/i.test(catNome); return `<div class="w-10 h-10 rounded-lg border border-dashed border-gray-200 shrink-0 flex items-center justify-center text-base">${isPizza ? '🍕' : '📷'}</div>`; })()}
         <div class="min-w-0">
           <span class="text-sm font-medium ${inativo ? 'text-gray-400 line-through' : 'text-gray-800'}">${p.nome}</span>
+          ${p.sku ? `<span class="text-[10px] font-mono bg-blue-50 text-blue-600 border border-blue-200 px-1.5 py-0.5 rounded font-semibold tracking-wide ml-1">${p.sku}</span>` : ''}
           ${p.descricao ? `<span class="text-xs text-gray-400 ml-2">— ${p.descricao}</span>` : ''}
           ${inativo ? '<span class="text-xs bg-gray-200 text-gray-500 px-1.5 py-0.5 rounded ml-1">Oculto</span>' : ''}
           ${precoTexto ? `<p class="text-xs ${precoClass(inativo)} mt-0.5">${precoTexto}</p>` : ''}
@@ -9295,10 +9708,35 @@ function _initPorcaoRowsCat(rows) {
   });
 }
 
+async function gerarSkusAutomaticos() {
+  const rid = cardapioRestauranteId;
+  if (!rid) { mostrarToast('Selecione um restaurante primeiro'); return; }
+  if (!confirm('Gerar SKUs automaticamente para todos os produtos sem SKU?\n\nApenas categorias com Prefixo SKU configurado serão processadas.')) return;
+  const btn = document.getElementById('btn-gerar-skus');
+  btn.disabled = true;
+  btn.textContent = 'Gerando...';
+  try {
+    const res = await fetch(`/admin/cardapio/${rid}/gerar-skus`, {
+      method: 'POST',
+      headers: getHeaders(),
+    });
+    const json = await res.json();
+    if (!res.ok) throw new Error(json.error || 'Erro desconhecido');
+    mostrarToast(`✅ ${json.data.total} produto(s) receberam SKU!`);
+    await carregarCardapio();
+  } catch (e) {
+    mostrarToast('Erro ao gerar SKUs: ' + e.message);
+  } finally {
+    btn.disabled = false;
+    btn.innerHTML = '🏷️ Gerar SKUs';
+  }
+}
+
 function abrirModalCategoria() {
   cardapioModalCatId = null;
   document.getElementById('modal-categoria-titulo').textContent = t('card.nova-cat-modal');
   document.getElementById('cat-nome').value = '';
+  document.getElementById('cat-sku-prefixo').value = '';
   document.getElementById('cat-id').value = '';
   document.getElementById('cat-estacao-tipo').value = 'GERAL';
   document.getElementById('cat-canal-salao').checked = true;
@@ -9361,6 +9799,7 @@ function editarCategoria(id) {
   cardapioModalCatId = id;
   document.getElementById('modal-categoria-titulo').textContent = t('card.editar-cat');
   document.getElementById('cat-nome').value = cat.nome;
+  document.getElementById('cat-sku-prefixo').value = cat.skuPrefixo || '';
   document.getElementById('cat-id').value = id;
   document.getElementById('cat-estacao-tipo').value = cat.estacaoTipo || 'GERAL';
   const canaisAtivos = Array.isArray(cat.canais) ? cat.canais : ['SALAO', 'DELIVERY', 'WEB'];
@@ -9448,7 +9887,8 @@ async function salvarCategoria() {
 
     const estacaoTipo = document.getElementById('cat-estacao-tipo').value || 'GERAL';
     const canais = ['SALAO', 'DELIVERY', 'WEB'].filter(c => document.getElementById(`cat-canal-${c.toLowerCase()}`).checked);
-    const body = JSON.stringify({ nome, tamanhos, tipoTamanhos, bordas, estacaoTipo, canais });
+    const skuPrefixo = document.getElementById('cat-sku-prefixo').value.trim().toUpperCase() || null;
+    const body = JSON.stringify({ nome, tamanhos, tipoTamanhos, bordas, estacaoTipo, canais, skuPrefixo });
     let res;
     if (id) {
       res = await fetch(`/admin/cardapio/categorias/${id}`, { method: 'PATCH', headers: getHeaders({ 'Content-Type': 'application/json' }), body });
@@ -9644,6 +10084,7 @@ function abrirModalProduto(categoriaId) {
   document.getElementById('modal-produto-titulo').textContent = t('card.novo-prod-modal');
   document.getElementById('prod-nome').value = '';
   document.getElementById('prod-descricao').value = '';
+  document.getElementById('prod-sku-display').classList.add('hidden');
   document.getElementById('prod-preco').value = '0';
   document.getElementById('prod-id').value = '';
   document.getElementById('prod-categoria-id').value = categoriaId;
@@ -9795,6 +10236,15 @@ function editarProduto(id) {
   document.getElementById('prod-categoria-id').value = '';
   document.getElementById('prod-nome').value = produto.nome;
   document.getElementById('prod-descricao').value = produto.descricao || '';
+  const skuDisplay = document.getElementById('prod-sku-display');
+  if (produto.sku) {
+    document.getElementById('prod-sku-badge').textContent = produto.sku;
+    skuDisplay.classList.remove('hidden');
+    skuDisplay.classList.add('flex');
+  } else {
+    skuDisplay.classList.add('hidden');
+    skuDisplay.classList.remove('flex');
+  }
   _resetProdFoto(produto.imagemUrl || null);
 
   const temCatSizes = catTipo !== 'simples' && catTamanhos.length > 0;
@@ -10415,7 +10865,10 @@ function renderizarMetricas(data) {
       options: {
         indexAxis: 'y',
         responsive: true, maintainAspectRatio: false,
-        plugins: { legend: { display: true, position: 'top', labels: { boxWidth: 10, font: { size: 11 } } } },
+        plugins: {
+          legend: { display: true, position: 'top', labels: { boxWidth: 10, font: { size: 11 } } },
+          tooltip: { callbacks: { title: (ctxArr) => { const item = items[ctxArr[0].dataIndex]; return item.sku ? `[${item.sku}] ${item.nome}` : item.nome; } } },
+        },
         scales: {
           xQtd: { type: 'linear', position: 'top', beginAtZero: true, ticks: { precision: 0, font: { size: 10 } } },
           xFat: { type: 'linear', position: 'bottom', beginAtZero: true, grid: { drawOnChartArea: false }, ticks: { font: { size: 10 } } },
@@ -10455,7 +10908,10 @@ function renderizarMetricas(data) {
       el.innerHTML = data.bottomItens.map(item => `
         <div>
           <div class="flex justify-between text-xs text-gray-600 mb-0.5">
-            <span class="truncate mr-2">${item.nome}</span>
+            <span class="flex items-center gap-1 truncate mr-2">
+              ${item.sku ? `<span class="font-mono text-[10px] bg-blue-50 text-blue-600 border border-blue-200 px-1 rounded shrink-0">${item.sku}</span>` : ''}
+              <span class="truncate">${item.nome}</span>
+            </span>
             <span class="font-semibold text-red-500 shrink-0">${item.quantidade}x</span>
           </div>
           <div class="w-full bg-gray-100 rounded-full h-1.5">
@@ -12706,6 +13162,7 @@ function renderizarEstoque() {
         <div class="flex items-center gap-2">
           ${alertaBaixo ? '<span class="inline-block w-2 h-2 rounded-full bg-red-400 shrink-0 animate-pulse" title="Estoque baixo"></span>' : ''}
           <span class="font-medium text-gray-800 text-sm">${item.nome}</span>
+          ${item.sku ? `<span class="text-[10px] font-mono bg-blue-50 text-blue-600 border border-blue-200 px-1.5 py-0.5 rounded font-semibold tracking-wide shrink-0">${item.sku}</span>` : ''}
         </div>
       </td>
       <td class="px-4 py-3 text-sm text-gray-500">${CAT_ICON[item.categoria] || ''} ${item.categoria}</td>
@@ -12742,6 +13199,7 @@ function abrirModalEstoqueItem(item = null) {
   document.getElementById('est-form-min').value = item?.quantidadeMinima ?? 0;
   document.getElementById('est-form-preco').value = item?.precoUnitario ?? 0;
   document.getElementById('est-form-forn').value = item?.fornecedor || '';
+  document.getElementById('est-form-sku').value = item?.sku || '';
   document.getElementById('est-item-erro').classList.add('hidden');
   document.getElementById('modal-estoque-item').classList.remove('hidden');
 }
@@ -12764,10 +13222,11 @@ async function salvarItemEstoque() {
   const quantidadeMinima = document.getElementById('est-form-min').value;
   const precoUnitario = document.getElementById('est-form-preco').value;
   const fornecedor = document.getElementById('est-form-forn').value.trim();
+  const sku = document.getElementById('est-form-sku').value.trim().toUpperCase() || null;
   const erro = document.getElementById('est-item-erro');
   if (!nome) { erro.textContent = 'Nome é obrigatório.'; erro.classList.remove('hidden'); return; }
 
-  const payload = { nome, categoria, unidade, quantidadeAtual, quantidadeMinima, precoUnitario, fornecedor };
+  const payload = { nome, categoria, unidade, quantidadeAtual, quantidadeMinima, precoUnitario, fornecedor, sku };
   const url = estoqueItemEditando
     ? `/admin/estoque/${estoqueItemEditando.id}`
     : `/admin/estoque?restauranteId=${restauranteAtual}`;
@@ -12863,6 +13322,299 @@ async function abrirHistoricoEstoque(id, nome) {
 
 function fecharHistoricoEstoque() {
   document.getElementById('modal-estoque-hist').classList.add('hidden');
+}
+
+// ── Receitas & CMV ────────────────────────────────────────────────────────────
+let _receitaCardapio = null;
+let _receitaEstoque = [];
+let _receitaAtual = { produtoId: null, tamanhoId: null, preco: 0 };
+
+function fmtReceita(v) {
+  const moeda = getMoeda();
+  const temDec = ['R$', '$', '€'].includes(moeda);
+  return temDec ? `${moeda} ${Number(v).toFixed(2).replace('.', ',')}` : `${moeda} ${Math.round(v).toLocaleString()}`;
+}
+
+async function carregarSecaoReceitas() {
+  if (!restauranteAtual) return;
+  await Promise.all([_carregarCardapioReceita(), _carregarEstoqueReceita()]);
+  mostrarAbaReceita('editor');
+}
+
+async function _carregarCardapioReceita() {
+  try {
+    const res = await fetch(`/admin/cardapio/${restauranteAtual}`, { headers: getHeaders() });
+    if (!res.ok) return;
+    const json = await res.json();
+    _receitaCardapio = { categorias: json.data || [] };
+    const sel = document.getElementById('receita-sel-categoria');
+    if (!sel) return;
+    sel.innerHTML = '<option value="">— Categoria —</option>';
+    for (const cat of (_receitaCardapio.categorias || [])) {
+      if (cat.ativo === false) continue;
+      sel.innerHTML += `<option value="${cat.id}">${cat.nome}</option>`;
+    }
+  } catch (e) { console.error('[receita]', e.message); }
+}
+
+async function _carregarEstoqueReceita() {
+  try {
+    const res = await fetch(`/admin/estoque?restauranteId=${restauranteAtual}`, { headers: getHeaders() });
+    if (!res.ok) return;
+    const { data } = await res.json();
+    _receitaEstoque = (data || []).filter(i => i.ativo !== false);
+    const sel = document.getElementById('receita-add-estoque');
+    if (!sel) return;
+    sel.innerHTML = '<option value="">— Selecione —</option>';
+    for (const item of _receitaEstoque) {
+      sel.innerHTML += `<option value="${item.id}">${item.nome} (${item.unidade})</option>`;
+    }
+  } catch (e) { console.error('[receita]', e.message); }
+}
+
+function receitaCarregarProdutos() {
+  const catId = document.getElementById('receita-sel-categoria').value;
+  const selProd = document.getElementById('receita-sel-produto');
+  const selTam = document.getElementById('receita-sel-tamanho');
+  selProd.innerHTML = '<option value="">— Produto —</option>';
+  selTam.innerHTML = '<option value="">— Tamanho —</option>';
+  _receitaEsconderItens();
+  if (!catId || !_receitaCardapio) return;
+  const cat = (_receitaCardapio.categorias || []).find(c => c.id === catId);
+  for (const prod of (cat?.produtos || [])) {
+    if (prod.ativo === false) continue;
+    selProd.innerHTML += `<option value="${prod.id}">${prod.nome}</option>`;
+  }
+}
+
+function receitaCarregarTamanhos() {
+  const catId = document.getElementById('receita-sel-categoria').value;
+  const prodId = document.getElementById('receita-sel-produto').value;
+  const selTam = document.getElementById('receita-sel-tamanho');
+  selTam.innerHTML = '<option value="">— Tamanho —</option>';
+  _receitaEsconderItens();
+  if (!prodId || !_receitaCardapio) return;
+  const cat = (_receitaCardapio.categorias || []).find(c => c.id === catId);
+  const prod = (cat?.produtos || []).find(p => p.id === prodId);
+  if (!prod) return;
+  if (!prod.tamanhos || prod.tamanhos.length === 0) {
+    receitaCarregarItens();
+    return;
+  }
+  for (const tam of prod.tamanhos) {
+    selTam.innerHTML += `<option value="${tam.id}">${tam.nome} — ${fmtReceita(tam.preco)}</option>`;
+  }
+}
+
+function _receitaEsconderItens() {
+  document.getElementById('receita-custo-box').classList.add('hidden');
+  document.getElementById('receita-itens-box').classList.add('hidden');
+  document.getElementById('receita-selecione-msg').classList.remove('hidden');
+  _receitaAtual = { produtoId: null, tamanhoId: null, preco: 0 };
+}
+
+async function receitaCarregarItens() {
+  const catId = document.getElementById('receita-sel-categoria').value;
+  const prodId = document.getElementById('receita-sel-produto').value;
+  const tamId = document.getElementById('receita-sel-tamanho').value;
+  if (!prodId) return;
+
+  const cat = (_receitaCardapio?.categorias || []).find(c => c.id === catId);
+  const prod = (cat?.produtos || []).find(p => p.id === prodId);
+  if (!prod) return;
+
+  let preco = prod.preco || 0;
+  let nomeTam = null;
+  if (tamId) {
+    const tam = (prod.tamanhos || []).find(t => t.id === tamId);
+    if (tam) { preco = tam.preco; nomeTam = tam.nome; }
+  } else if (prod.tamanhos && prod.tamanhos.length > 0) {
+    mostrarToast('Selecione um tamanho');
+    return;
+  }
+
+  try {
+    const res = await fetch(`/admin/receitas?restauranteId=${restauranteAtual}`, { headers: getHeaders() });
+    const { data } = await res.json();
+    const itens = (data || []).filter(ri =>
+      ri.produtoId === prodId && (ri.tamanhoId || null) === (tamId || null)
+    );
+    _receitaAtual = { produtoId: prodId, tamanhoId: tamId || null, preco };
+    _receitaRenderizar(prod.nome, nomeTam, preco, itens);
+  } catch (e) { mostrarToast('Erro ao carregar receita'); }
+}
+
+function _receitaRenderizar(nomeProd, nomeTam, preco, itens) {
+  const label = nomeTam ? `${nomeProd} - ${nomeTam}` : nomeProd;
+  document.getElementById('receita-produto-label').textContent = label;
+
+  const custo = itens.reduce((s, ri) => s + ri.quantidade * (ri.itemEstoque?.precoUnitario || 0), 0);
+  const margem = preco - custo;
+  const cmvPct = preco > 0 ? (custo / preco) * 100 : 0;
+
+  document.getElementById('receita-custo-val').textContent = fmtReceita(custo);
+  document.getElementById('receita-preco-val').textContent = fmtReceita(preco);
+  document.getElementById('receita-margem-val').textContent = fmtReceita(margem);
+  document.getElementById('receita-cmvpct-val').textContent = `${cmvPct.toFixed(1)}%`;
+
+  const margemEl = document.getElementById('receita-margem-val');
+  margemEl.className = `text-xl font-bold ${margem >= 0 ? 'text-green-600' : 'text-red-500'}`;
+
+  document.getElementById('receita-custo-box').classList.remove('hidden');
+  document.getElementById('receita-itens-box').classList.remove('hidden');
+  document.getElementById('receita-selecione-msg').classList.add('hidden');
+
+  const tbody = document.getElementById('receita-itens-tbody');
+  const vazio = document.getElementById('receita-itens-vazio');
+  tbody.innerHTML = '';
+  if (itens.length === 0) { vazio.classList.remove('hidden'); return; }
+  vazio.classList.add('hidden');
+
+  for (const ri of itens) {
+    const custoItem = ri.quantidade * (ri.itemEstoque?.precoUnitario || 0);
+    const tr = document.createElement('tr');
+    tr.className = 'hover:bg-gray-50 transition';
+    tr.innerHTML = `
+      <td class="px-4 py-3 font-medium text-gray-800">${ri.itemEstoque?.nome || '?'}</td>
+      <td class="px-4 py-3 text-center">
+        <input type="number" step="0.001" min="0.001" value="${ri.quantidade}"
+          class="w-24 text-center border border-gray-200 rounded-lg px-2 py-1 text-sm focus:outline-none focus:ring-2 focus:ring-orange-400"
+          onchange="receitaAtualizarQtd('${ri.id}', this.value)">
+      </td>
+      <td class="px-4 py-3 text-center text-gray-400 text-xs">${ri.itemEstoque?.unidade || ''}</td>
+      <td class="px-4 py-3 text-right text-gray-500 text-xs">${fmtReceita(ri.itemEstoque?.precoUnitario || 0)}</td>
+      <td class="px-4 py-3 text-right font-semibold text-gray-700">${fmtReceita(custoItem)}</td>
+      <td class="px-4 py-3 text-center">
+        <button onclick="receitaRemoverIngrediente('${ri.id}')" class="text-red-400 hover:text-red-600 transition text-base">✕</button>
+      </td>`;
+    tbody.appendChild(tr);
+  }
+}
+
+async function receitaAdicionarIngrediente() {
+  if (!_receitaAtual.produtoId) { mostrarToast('Selecione um produto primeiro'); return; }
+  const estoqueId = document.getElementById('receita-add-estoque').value;
+  const qtd = parseFloat(document.getElementById('receita-add-qtd').value);
+  if (!estoqueId) { mostrarToast('Selecione um ingrediente'); return; }
+  if (!qtd || qtd <= 0) { mostrarToast('Informe uma quantidade válida'); return; }
+  try {
+    const res = await fetch('/admin/receitas', {
+      method: 'POST',
+      headers: { ...getHeaders(), 'Content-Type': 'application/json' },
+      body: JSON.stringify({
+        restauranteId: restauranteAtual,
+        produtoId: _receitaAtual.produtoId,
+        tamanhoId: _receitaAtual.tamanhoId || null,
+        itemEstoqueId: estoqueId,
+        quantidade: qtd,
+      }),
+    });
+    if (!res.ok) { const e = await res.json(); mostrarToast(e.error || 'Erro ao adicionar'); return; }
+    document.getElementById('receita-add-qtd').value = '';
+    document.getElementById('receita-add-estoque').value = '';
+    await receitaCarregarItens();
+    mostrarToast('✅ Ingrediente adicionado');
+  } catch (e) { mostrarToast('Erro ao adicionar ingrediente'); }
+}
+
+async function receitaAtualizarQtd(id, qtd) {
+  try {
+    await fetch(`/admin/receitas/${id}`, {
+      method: 'PUT',
+      headers: { ...getHeaders(), 'Content-Type': 'application/json' },
+      body: JSON.stringify({ quantidade: parseFloat(qtd) }),
+    });
+    await receitaCarregarItens();
+  } catch (e) { mostrarToast('Erro ao atualizar'); }
+}
+
+async function receitaRemoverIngrediente(id) {
+  try {
+    await fetch(`/admin/receitas/${id}`, { method: 'DELETE', headers: getHeaders() });
+    await receitaCarregarItens();
+    mostrarToast('✅ Ingrediente removido');
+  } catch (e) { mostrarToast('Erro ao remover'); }
+}
+
+function mostrarAbaReceita(aba) {
+  const editor = document.getElementById('receita-aba-editor');
+  const cmv = document.getElementById('receita-aba-cmv');
+  const btnEd = document.getElementById('btn-aba-editor');
+  const btnCmv = document.getElementById('btn-aba-cmv');
+  const ativo = 'text-xs font-semibold px-4 py-2 rounded-xl bg-orange-500 text-white transition';
+  const inativo = 'text-xs font-semibold px-4 py-2 rounded-xl bg-white text-gray-600 border border-gray-200 hover:border-orange-400 hover:text-orange-500 transition';
+  if (aba === 'editor') {
+    editor.classList.remove('hidden'); cmv.classList.add('hidden');
+    btnEd.className = ativo; btnCmv.className = inativo;
+  } else {
+    editor.classList.add('hidden'); cmv.classList.remove('hidden');
+    btnEd.className = inativo; btnCmv.className = ativo;
+    carregarCmv();
+  }
+}
+
+async function carregarCmv() {
+  if (!restauranteAtual) return;
+  try {
+    const res = await fetch(`/admin/receitas/cmv?restauranteId=${restauranteAtual}`, { headers: getHeaders() });
+    if (!res.ok) return;
+    const { data } = await res.json();
+
+    const comReceita = data.filter(i => i.temReceita).length;
+    const semReceita = data.filter(i => !i.temReceita).length;
+    const comPct = data.filter(i => i.temReceita && i.cmvPct !== null);
+    const cmvMedio = comPct.length ? comPct.reduce((s, i) => s + i.cmvPct, 0) / comPct.length : 0;
+
+    document.getElementById('cmv-kpi-medio').textContent = comPct.length ? `${cmvMedio.toFixed(1)}%` : '—';
+    document.getElementById('cmv-kpi-com-receita').textContent = comReceita;
+    document.getElementById('cmv-kpi-sem-receita').textContent = semReceita;
+
+    const tbody = document.getElementById('cmv-tbody');
+    tbody.innerHTML = '';
+    for (const it of data) {
+      const cmvColor = it.cmvPct === null ? 'text-gray-300' :
+        it.cmvPct > 35 ? 'text-red-600 font-bold' :
+        it.cmvPct > 25 ? 'text-orange-500 font-bold' : 'text-green-600 font-bold';
+      const margemColor = it.margem < 0 ? 'text-red-500' : 'text-green-600';
+      const tr = document.createElement('tr');
+      tr.className = 'hover:bg-gray-50 transition';
+      tr.innerHTML = `
+        <td class="px-4 py-2 text-xs text-gray-400">${it.categoriaNome}</td>
+        <td class="px-4 py-2 font-medium text-gray-800">${it.produtoNome}</td>
+        <td class="px-4 py-2 text-center text-gray-500 text-xs">${it.tamanhoNome || '—'}</td>
+        <td class="px-4 py-2 text-right text-gray-700">${fmtReceita(it.preco)}</td>
+        <td class="px-4 py-2 text-right text-gray-700">${it.temReceita ? fmtReceita(it.custo) : '<span class="text-gray-300 text-xs">sem receita</span>'}</td>
+        <td class="px-4 py-2 text-right ${it.temReceita ? margemColor : 'text-gray-300'}">${it.temReceita ? fmtReceita(it.margem) : '—'}</td>
+        <td class="px-4 py-2 text-right ${cmvColor}">${it.cmvPct !== null ? it.cmvPct.toFixed(1) + '%' : '—'}</td>
+        <td class="px-4 py-2 text-center">
+          <button onclick="irParaReceita('${it.produtoId}','${it.tamanhoId || ''}')"
+            class="text-xs px-2 py-1 rounded-lg border transition ${it.temReceita ? 'text-orange-500 border-orange-200 hover:border-orange-400' : 'text-gray-400 border-gray-200 hover:border-orange-400 hover:text-orange-500'}">
+            ${it.temReceita ? '✏️ Editar' : '+ Criar'}
+          </button>
+        </td>`;
+      tbody.appendChild(tr);
+    }
+  } catch (e) { mostrarToast('Erro ao carregar CMV'); }
+}
+
+function irParaReceita(produtoId, tamanhoId) {
+  mostrarAbaReceita('editor');
+  if (!_receitaCardapio) return;
+  for (const cat of (_receitaCardapio.categorias || [])) {
+    const prod = (cat.produtos || []).find(p => p.id === produtoId);
+    if (!prod) continue;
+    document.getElementById('receita-sel-categoria').value = cat.id;
+    receitaCarregarProdutos();
+    document.getElementById('receita-sel-produto').value = produtoId;
+    receitaCarregarTamanhos();
+    if (tamanhoId) {
+      setTimeout(() => {
+        document.getElementById('receita-sel-tamanho').value = tamanhoId;
+        receitaCarregarItens();
+      }, 50);
+    }
+    break;
+  }
 }
 
 // ── Financeiro ────────────────────────────────────────────────────────────────
@@ -13046,6 +13798,37 @@ window.addEventListener('DOMContentLoaded', () => {
           localStorage.removeItem('user_role');
         });
     }
+  } else if (savedRole === 'caixa') {
+    const savedJwt = localStorage.getItem('jwt_token');
+    if (savedJwt) {
+      jwtToken = savedJwt;
+      userRole = 'caixa';
+      try {
+        const payload = JSON.parse(atob(savedJwt.split('.')[1]));
+        userPermissoes = payload.permissoes || [];
+        restauranteInfo = { id: payload.restauranteId, nome: '', slug: payload.slug };
+      } catch {}
+      try {
+        const saved = localStorage.getItem('user_permissoes');
+        if (saved) userPermissoes = JSON.parse(saved);
+      } catch {}
+      fetch('/admin/restaurantes', { headers: { 'Authorization': `Bearer ${savedJwt}` } })
+        .then(r => r.ok ? r.json() : null)
+        .then(d => {
+          if (!d) {
+            localStorage.removeItem('jwt_token');
+            localStorage.removeItem('user_role');
+            localStorage.removeItem('user_permissoes');
+            return;
+          }
+          if (d.data?.length) {
+            const r = d.data[0];
+            restauranteInfo = { id: r.id, nome: r.nome, slug: r.slugWhatsapp, moeda: r.moeda };
+          }
+          iniciarDashboard();
+        })
+        .catch(() => {});
+    }
   } else if (savedRole === 'admin') {
     const savedToken = localStorage.getItem('admin_token');
     if (savedToken) {
@@ -13060,6 +13843,145 @@ window.addEventListener('DOMContentLoaded', () => {
     }
   }
 });
+
+// ══ USUÁRIOS DO PAINEL ════════════════════════════════════════════════════════
+
+const PERMISSOES_DISPONIVEIS = [
+  { key: 'pedidos',      label: '🛒 Pedidos' },
+  { key: 'caixa',        label: '💵 Caixa' },
+  { key: 'conversas',    label: '💬 Conversas' },
+  { key: 'clientes',     label: '👥 Clientes' },
+  { key: 'cardapio',     label: '🍽 Cardápio' },
+  { key: 'garcons',      label: '🧑‍🍳 Garçons' },
+  { key: 'motoboys',     label: '🛵 Motoboys' },
+  { key: 'estacoes',     label: '📺 Estações' },
+  { key: 'crm',          label: '🎯 CRM' },
+  { key: 'ventas',       label: '📋 Vendas' },
+  { key: 'metricas',     label: '📊 Métricas' },
+  { key: 'estoque',      label: '📦 Estoque' },
+  { key: 'financeiro',   label: '💰 Financeiro' },
+  { key: 'cozinha',      label: '👨‍🍳 Cozinha' },
+  { key: 'configuracoes',label: '⚙️ Configurações' },
+];
+
+let usuarioEditando = null;
+
+async function carregarUsuarios() {
+  if (!restauranteAtual) return;
+  const res = await fetch(`/admin/usuarios/${restauranteAtual}`, { headers: getHeaders() });
+  const lista = document.getElementById('usuarios-lista');
+  const vazio = document.getElementById('usuarios-vazio');
+  if (!res.ok) { lista.innerHTML = ''; vazio.classList.remove('hidden'); return; }
+  const usuarios = await res.json();
+  vazio.classList.toggle('hidden', usuarios.length > 0);
+  lista.innerHTML = usuarios.map(u => `
+    <div class="bg-white rounded-2xl border border-gray-100 shadow-sm p-4 flex items-center justify-between gap-3">
+      <div class="flex items-center gap-3">
+        <div class="w-9 h-9 rounded-full bg-blue-100 flex items-center justify-center text-blue-600 font-bold text-sm shrink-0">
+          ${u.nome.charAt(0).toUpperCase()}
+        </div>
+        <div>
+          <p class="font-semibold text-gray-800 text-sm">${u.nome}</p>
+          <p class="text-xs text-gray-400">@${u.login}</p>
+          <div class="flex flex-wrap gap-1 mt-1">
+            ${(u.permissoes || []).map(p => {
+              const pd = PERMISSOES_DISPONIVEIS.find(x => x.key === p);
+              return pd ? `<span class="text-xs bg-blue-50 text-blue-600 px-1.5 py-0.5 rounded-md">${pd.label}</span>` : '';
+            }).join('')}
+            ${(u.permissoes || []).length === 0 ? '<span class="text-xs text-gray-300">sem permissões</span>' : ''}
+          </div>
+        </div>
+      </div>
+      <div class="flex items-center gap-2 shrink-0">
+        <span class="text-xs px-2 py-0.5 rounded-full font-medium ${u.ativo ? 'bg-green-100 text-green-700' : 'bg-red-100 text-red-400'}">${u.ativo ? 'Ativo' : 'Inativo'}</span>
+        <button onclick="abrirModalEditarUsuario(${JSON.stringify(u).replace(/"/g, '&quot;')})"
+          class="text-xs bg-gray-100 hover:bg-gray-200 text-gray-600 px-3 py-1.5 rounded-lg transition font-medium">Editar</button>
+        <button onclick="excluirUsuario('${u.id}', '${u.nome}')"
+          class="text-xs bg-red-50 hover:bg-red-100 text-red-500 px-3 py-1.5 rounded-lg transition font-medium">Excluir</button>
+      </div>
+    </div>
+  `).join('');
+}
+
+function _renderPermissoesGrid(selecionadas = []) {
+  const grid = document.getElementById('u-permissoes-grid');
+  grid.innerHTML = PERMISSOES_DISPONIVEIS.map(p => `
+    <label class="flex items-center gap-2 cursor-pointer select-none">
+      <input type="checkbox" value="${p.key}" ${selecionadas.includes(p.key) ? 'checked' : ''}
+        class="w-4 h-4 accent-blue-500">
+      <span class="text-sm text-gray-700">${p.label}</span>
+    </label>
+  `).join('');
+}
+
+function abrirModalNovoUsuario() {
+  usuarioEditando = null;
+  document.getElementById('modal-usuario-titulo').textContent = 'Novo Usuário';
+  document.getElementById('u-nome').value = '';
+  document.getElementById('u-login').value = '';
+  document.getElementById('u-senha').value = '';
+  document.getElementById('u-senha-label').textContent = 'Senha';
+  document.getElementById('u-ativo-row').classList.add('hidden');
+  document.getElementById('u-erro').classList.add('hidden');
+  _renderPermissoesGrid([]);
+  document.getElementById('modal-usuario').classList.remove('hidden');
+}
+
+function abrirModalEditarUsuario(u) {
+  usuarioEditando = u;
+  document.getElementById('modal-usuario-titulo').textContent = 'Editar Usuário';
+  document.getElementById('u-nome').value = u.nome;
+  document.getElementById('u-login').value = u.login;
+  document.getElementById('u-senha').value = '';
+  document.getElementById('u-senha-label').textContent = 'Nova senha (deixe vazio para não alterar)';
+  document.getElementById('u-ativo').checked = u.ativo;
+  document.getElementById('u-ativo-row').classList.remove('hidden');
+  document.getElementById('u-erro').classList.add('hidden');
+  _renderPermissoesGrid(u.permissoes || []);
+  document.getElementById('modal-usuario').classList.remove('hidden');
+}
+
+function fecharModalUsuario() {
+  document.getElementById('modal-usuario').classList.add('hidden');
+  usuarioEditando = null;
+}
+
+async function salvarUsuario() {
+  const nome = document.getElementById('u-nome').value.trim();
+  const login = document.getElementById('u-login').value.trim();
+  const senha = document.getElementById('u-senha').value;
+  const ativo = document.getElementById('u-ativo').checked;
+  const permissoes = Array.from(document.querySelectorAll('#u-permissoes-grid input[type=checkbox]:checked')).map(el => el.value);
+  const erro = document.getElementById('u-erro');
+  erro.classList.add('hidden');
+
+  if (!nome || !login) { erro.textContent = 'Nome e login são obrigatórios'; erro.classList.remove('hidden'); return; }
+  if (!usuarioEditando && !senha) { erro.textContent = 'Senha obrigatória para novo usuário'; erro.classList.remove('hidden'); return; }
+
+  const body = { nome, login, permissoes, restauranteId: restauranteAtual };
+  if (senha) body.senha = senha;
+  if (usuarioEditando) body.ativo = ativo;
+
+  const url = usuarioEditando ? `/admin/usuarios/${usuarioEditando.id}` : '/admin/usuarios';
+  const method = usuarioEditando ? 'PUT' : 'POST';
+  const res = await fetch(url, { method, headers: getHeaders({ 'Content-Type': 'application/json' }), body: JSON.stringify(body) });
+  if (!res.ok) {
+    const j = await res.json();
+    erro.textContent = j.error || 'Erro ao salvar';
+    erro.classList.remove('hidden');
+    return;
+  }
+  fecharModalUsuario();
+  carregarUsuarios();
+  mostrarToast(`✅ Usuário ${usuarioEditando ? 'atualizado' : 'criado'} com sucesso!`);
+}
+
+async function excluirUsuario(id, nome) {
+  if (!confirm(`Excluir o usuário "${nome}"?`)) return;
+  const res = await fetch(`/admin/usuarios/${id}`, { method: 'DELETE', headers: getHeaders() });
+  if (res.ok) { carregarUsuarios(); mostrarToast('✅ Usuário excluído'); }
+  else { const j = await res.json(); mostrarToast('❌ ' + (j.error || 'Erro ao excluir')); }
+}
 
 // ══ VENTAS ════════════════════════════════════════════════════════════════════
 
@@ -13369,14 +14291,18 @@ async function carregarReportes() {
     });
     const top = Object.entries(iMap).sort((a,b)=>b[1].qtd-a[1].qtd).slice(0,10);
     const maxQ = top[0]?.[1].qtd||1;
-    document.getElementById('rep-top-itens').innerHTML = top.map(([nome,v])=>`
-      <div>
+    document.getElementById('rep-top-itens').innerHTML = top.map(([nome,v])=>{
+      const sku = lookupSkuByNome(nome);
+      return `<div>
         <div class="flex justify-between text-xs mb-1">
-          <span class="text-gray-700 font-medium truncate max-w-[180px]">${nome}</span>
+          <span class="flex items-center gap-1 truncate mr-2">
+            ${sku ? `<span class="font-mono text-[10px] bg-blue-50 text-blue-600 border border-blue-200 px-1 rounded shrink-0">${sku}</span>` : ''}
+            <span class="text-gray-700 font-medium truncate">${nome}</span>
+          </span>
           <span class="text-gray-400 shrink-0 ml-2">${v.qtd}× · ${fmtV(v.valor)}</span>
         </div>
         <div class="h-1.5 rounded-full bg-gray-100"><div class="h-1.5 rounded-full bg-blue-400" style="width:${Math.round(v.qtd/maxQ*100)}%"></div></div>
-      </div>`).join('') || '<p class="text-xs text-gray-400">Sem itens no período.</p>';
+      </div>`;}).join('') || '<p class="text-xs text-gray-400">Sem itens no período.</p>';
 
     // Tabela diária
     const porDia = {};

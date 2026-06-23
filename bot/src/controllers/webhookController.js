@@ -2,7 +2,7 @@ const fs = require("fs");
 const path = require("path");
 const { processarMensagem } = require("../services/claudeService");
 const { criarOuBuscarSessao, atualizarSessao, salvarMensagem, buscarSessaoFinalizada, buscarTelefoneDoLID, buscarJidCompleto, buscarNomeContato } = require("../services/sessaoService");
-const { enviarMensagem, enviarImagem, enviarDocumento, baixarMidiaBase64 } = require("../services/evolutionService");
+const { enviarPresence, enviarMensagem, enviarImagem, enviarDocumento, baixarMidiaBase64 } = require("../services/evolutionService");
 const { finalizarPedido, salvarComprovante, buscarPedidoAtivoDaSessao, buscarTodosOsPedidosAtivos, buscarPedidoEntregueNaoPago, formatNumPedido } = require("../services/pedidoService");
 const { transcreverAudio } = require("../services/transcricaoService");
 const { buscarContextoFidelidade } = require("../services/cardapioService");
@@ -14,15 +14,15 @@ const _sessoesFotosEnviadas = new Set();
 
 // ── Detecção de idioma ────────────────────────────────────────────────────────
 
-function detectarIdioma(mensagens) {
-  const texto = (mensagens || [])
+function detectarIdioma(mensagens, textoAtual = "") {
+  const msgs = (mensagens || [])
     .filter(m => m.role === "cliente")
     .slice(0, 5)
-    .map(m => m.conteudo)
-    .join(" ")
-    .toLowerCase();
-  // Apenas palavras exclusivamente espanholas (não existem no português brasileiro)
-  return /\b(hola|quiero|buenos|gracias|también|necesito|cuanto|cuánto|tengo|puedo|soy|hoy|voy|dónde|cómo)\b/.test(texto) ? "es" : "pt";
+    .map(m => m.conteudo);
+  if (textoAtual) msgs.push(textoAtual);
+  const texto = msgs.join(" ").toLowerCase();
+  // Palavras exclusivamente espanholas (não existem no português brasileiro)
+  return /\b(hola|buenas|buenos|quiero|gracias|también|tambien|necesito|cuánto|cuanto|tengo|puedo|soy|hoy|voy|dónde|donde|cómo|mucho|muchos|muchas|señor|señora|precio|precios)\b/.test(texto) ? "es" : "pt";
 }
 
 const T = {
@@ -65,7 +65,9 @@ function detectarMetodoPagamento(mensagens) {
 
 // Extrai o valor numérico de uma resposta informal de troco
 // Ex: "200 mil guarani" → 200000, "200.000" → 200000, "250000" → 250000
-function parsearValorTroco(texto) {
+// Para moedas inteiras (G$), "200" é interpretado como 200.000
+function parsearValorTroco(texto, moeda = "R$") {
+  const moedaInteira = !["R$", "$", "€"].includes(moeda);
   // "X mil" → multiplica por 1000 (ex: "200 mil", "100 mil guaranies")
   const milMatch = texto.match(/(\d[\d.]*)\s*mil/i);
   if (milMatch) {
@@ -76,7 +78,10 @@ function parsearValorTroco(texto) {
   const apenasDigitos = texto.replace(/[^\d]/g, "");
   if (!apenasDigitos) return null;
   const valor = parseInt(apenasDigitos, 10);
-  return !isNaN(valor) && valor > 0 ? valor : null;
+  if (isNaN(valor) || valor <= 0) return null;
+  // Para G$ e similares: valor < 1000 representa milhares (ex: "200" = 200.000)
+  if (moedaInteira && valor < 1000) return valor * 1000;
+  return valor;
 }
 
 function formatarTroco(valorNumerico, moeda) {
@@ -173,6 +178,14 @@ function deduplicar(messageId) {
   return false;
 }
 
+function calcularDelayDigitando(chars) {
+  if (chars <= 20) return 650;
+  if (chars <= 60) return 1500;
+  if (chars <= 150) return 3000;
+  if (chars <= 300) return 5000;
+  return 7000;
+}
+
 // ── Controller principal ──────────────────────────────────────────────────────
 
 /**
@@ -239,6 +252,7 @@ async function receberMensagem(req, res) {
     }
   }
 
+  let idioma = "pt";
   try {
     // ── Comprovante: imagem/PDF enviado após pedido finalizado ────────────────
     // Deve ser checado ANTES de criarOuBuscarSessao (que ignora sessões FINALIZADO)
@@ -300,8 +314,7 @@ async function receberMensagem(req, res) {
         const sessaoFinaliz = await buscarSessaoFinalizada(clienteNumero, restaurante.id);
         const numFmt = formatNumPedido(pedidoNaoPago);
         const textoEntrada = extrairTexto(mensagem) || "";
-        const idiomaMsg = detectarIdioma(sessaoFinaliz?.mensagens || []) ||
-          (/\b(hola|quiero|buenos|gracias|también|necesito|cuanto|cuánto|tengo|puedo|soy|hoy|voy|dónde|cómo)\b/i.test(textoEntrada) ? "es" : "pt");
+        const idiomaMsg = detectarIdioma(sessaoFinaliz?.mensagens || [], textoEntrada);
         const msg = idiomaMsg === "es"
           ? `⏳ Tu pedido *#${numFmt}* está pendiente de confirmación de pago.\n\nEnvíanos el comprobante de transferencia para confirmar tu pedido. 📲`
           : `⏳ Seu pedido *#${numFmt}* aguarda confirmação de pagamento.\n\nEnvie o comprovante de transferência aqui para finalizarmos. 📲`;
@@ -345,8 +358,7 @@ async function receberMensagem(req, res) {
         const sessaoFinaliz2 = await buscarSessaoFinalizada(clienteNumero, restaurante.id);
         const numFmt = formatNumPedido(pedidoNaoPago);
         const textoEntrada = extrairTexto(mensagem) || "";
-        const idiomaMsg2 = detectarIdioma(sessaoFinaliz2?.mensagens || []) ||
-          (/\b(hola|quiero|buenos|gracias|también|necesito|cuanto|cuánto|tengo|puedo|soy|hoy|voy|dónde|cómo)\b/i.test(textoEntrada) ? "es" : "pt");
+        const idiomaMsg2 = detectarIdioma(sessaoFinaliz2?.mensagens || [], textoEntrada);
         const msgNaoPago = idiomaMsg2 === "es"
           ? `⏳ Tu pedido *#${numFmt}* está pendiente de confirmación de pago.\n\nEnvíanos el comprobante de transferencia para confirmar tu pedido. 📲`
           : `⏳ Seu pedido *#${numFmt}* aguarda confirmação de pagamento.\n\nEnvie o comprovante de transferência aqui para finalizarmos. 📲`;
@@ -364,8 +376,6 @@ async function receberMensagem(req, res) {
       }
     }
 
-    const idioma = detectarIdioma(sessao.mensagens || []);
-
     // ── b) Extrair texto/áudio ────────────────────────────────────────────────
     let textoCliente = extrairTexto(mensagem);
 
@@ -377,6 +387,9 @@ async function receberMensagem(req, res) {
         console.log(`[webhook] transcrição: "${textoCliente}"`);
       }
     }
+
+    // Detecta idioma após extração de texto (inclui mensagem atual para acertar na 1ª interação)
+    idioma = detectarIdioma(sessao.mensagens || [], textoCliente || "");
 
     // ── c) Verificar horário de atendimento ──────────────────────────────────
     const horario = verificarHorario(restaurante.horarioAtendimento);
@@ -587,8 +600,8 @@ async function receberMensagem(req, res) {
       let trocoFormatado = null;
       let trocoDevolver = null;
       if (!semTroco) {
-        const valorTroco = parsearValorTroco(textoCliente);
         const moeda = restaurante.moeda || "R$";
+        const valorTroco = parsearValorTroco(textoCliente, moeda);
         trocoFormatado = valorTroco !== null
           ? formatarTroco(valorTroco, moeda)
           : textoCliente.trim(); // fallback: texto original se não conseguir parsear
@@ -656,13 +669,71 @@ async function receberMensagem(req, res) {
       return;
     }
 
+    // ── g) Rastreamento de pedido por número (#D6, pedido D6, etc.) ──────────
+    // Intercepta ANTES do Claude para garantir resposta correta independente
+    // do estado da sessão ou do formato do clienteNumero armazenado.
+    const trackMatch = textoCliente.match(/(?:pedido[^\d#]*#?|#)\s*([DBMdbm])\s*(\d+)/i);
+    if (trackMatch) {
+      const numDia = parseInt(trackMatch[2], 10);
+      const pedidoRastrear = await _prisma.pedido.findFirst({
+        where: { restauranteId: restaurante.id, numeroDia: numDia },
+      });
+      if (pedidoRastrear) {
+        const stMsgs = {
+          pt: {
+            NOVO: "Aguardando confirmação do restaurante. Em breve retornaremos! 🍽️",
+            CONFIRMADO: "Confirmado! O restaurante já está preparando. 👨‍🍳",
+            PAGO: "Pagamento confirmado! O restaurante está preparando. 👨‍🍳",
+            PREPARANDO: "Sendo preparado com carinho! Logo ficará pronto. ⏳",
+            AGUARDANDO_DESPACHO: "Pronto! Aguardando o motoboy para a entrega. 📦",
+            EM_CAMINHO: "A caminho! O motoboy está na sua direção. 🛵",
+            SAIU_PARA_ENTREGA: "Saiu para entrega! O motoboy está a caminho. 🛵",
+            PRONTO_PARA_RETIRADA: "Pronto para retirada no balcão! 🏪",
+            ENTREGUE: "Pedido entregue! Obrigado pela preferência. 😊",
+            CANCELADO: "Pedido cancelado. Em caso de dúvidas, entre em contato conosco.",
+            padrao: "Em andamento. Em breve temos novidades! 😊",
+          },
+          es: {
+            NOVO: "Esperando confirmación del restaurante. ¡Pronto te avisamos! 🍽️",
+            CONFIRMADO: "¡Confirmado! El restaurante ya lo está preparando. 👨‍🍳",
+            PAGO: "¡Pago confirmado! El restaurante está preparando. 👨‍🍳",
+            PREPARANDO: "¡Se está preparando con cariño! Ya casi está listo. ⏳",
+            AGUARDANDO_DESPACHO: "¡Listo! Esperando al repartidor para la entrega. 📦",
+            EM_CAMINHO: "¡En camino! El repartidor ya va hacia ti. 🛵",
+            SAIU_PARA_ENTREGA: "¡Salió para entrega! El repartidor ya va en camino. 🛵",
+            PRONTO_PARA_RETIRADA: "¡Listo para retirarlo en el mostrador! 🏪",
+            ENTREGUE: "¡Pedido entregado! ¡Gracias por tu preferencia! 😊",
+            CANCELADO: "Pedido cancelado. Si tienes dudas, contacta al restaurante.",
+            padrao: "En proceso. ¡Pronto te enviamos novedades! 😊",
+          },
+        };
+        const numFmt = formatNumPedido(pedidoRastrear);
+        const statusMsg = stMsgs[idioma][pedidoRastrear.status] || stMsgs[idioma].padrao;
+        const respostaTrack = `📦 *Pedido #${numFmt}*\n\n${statusMsg}`;
+        await salvarMensagem(sessao.id, "cliente", textoCliente);
+        await salvarMensagem(sessao.id, "bot", respostaTrack);
+        const agoraT = new Date();
+        io?.to("admin").emit("conversa:mensagem", { sessaoId: sessao.id, mensagem: { role: "cliente", conteudo: textoCliente, createdAt: agoraT } });
+        io?.to("admin").emit("conversa:mensagem", { sessaoId: sessao.id, mensagem: { role: "bot", conteudo: respostaTrack, createdAt: agoraT } });
+        io?.to(`restaurante:${restaurante.slugWhatsapp}`).emit("conversa:mensagem", { sessaoId: sessao.id, mensagem: { role: "cliente", conteudo: textoCliente, createdAt: agoraT } });
+        io?.to(`restaurante:${restaurante.slugWhatsapp}`).emit("conversa:mensagem", { sessaoId: sessao.id, mensagem: { role: "bot", conteudo: respostaTrack, createdAt: agoraT } });
+        await enviarMensagem(remoteJid, respostaTrack, instanceName);
+        return;
+      }
+    }
+
     const { resposta, novoEstado, carrinhoAtualizado, pedidoPronto, tipoEntrega, mostrarFotos } =
-      await processarMensagem(sessao, textoCliente, restaurante, cardapio, fidelidade, promocoes);
+      await processarMensagem(sessao, textoCliente, restaurante, cardapio, fidelidade, promocoes, idioma);
 
     if (!resposta) {
       console.warn(`[webhook] resposta vazia do Claude para ${clienteNumero} — ignorando envio`);
       return;
     }
+
+    // Mostra "digitando..." por duração proporcional ao tamanho da resposta
+    const delayDigitando = calcularDelayDigitando(resposta.length);
+    await enviarPresence(remoteJid, "composing", instanceName, delayDigitando);
+    await new Promise((resolve) => setTimeout(resolve, delayDigitando));
 
     // ── e) Persistir ──────────────────────────────────────────────────────────
     await Promise.all([
@@ -748,11 +819,10 @@ async function receberMensagem(req, res) {
   } catch (err) {
     console.error(`[webhook] erro (${restaurante.slugWhatsapp}):`, err.message);
     try {
-      await enviarMensagem(
-        remoteJid,
-        "Desculpe, tive um probleminha aqui. Pode repetir sua mensagem? 😅",
-        instanceName
-      );
+      const msgErro = idioma === "es"
+        ? "Disculpa, tuve un problema. ¿Puedes repetir tu mensaje? 😅"
+        : "Desculpe, tive um probleminha aqui. Pode repetir sua mensagem? 😅";
+      await enviarMensagem(remoteJid, msgErro, instanceName);
     } catch {
       // silencioso
     }

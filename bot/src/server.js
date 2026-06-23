@@ -97,7 +97,7 @@ io.on("connection", (socket) => {
       const jwt = require("jsonwebtoken");
       const secret = process.env.JWT_SECRET || process.env.ADMIN_TOKEN;
       const payload = jwt.verify(jwtToken, secret);
-      if (payload.role === "restaurante") {
+      if (payload.role === "restaurante" || payload.role === "caixa") {
         socket.join("admin"); // recebe os mesmos eventos, o front filtra por restauranteId
         socket.join(`restaurante:${payload.slug}`);
       }

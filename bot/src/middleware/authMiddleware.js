@@ -20,17 +20,21 @@ function authMiddleware(req, res, next) {
     return next();
   }
 
-  // Dono do restaurante via JWT
+  // Dono do restaurante ou usuário do painel (caixa) via JWT
   const authHeader = req.headers["authorization"];
   if (authHeader?.startsWith("Bearer ")) {
     const token = authHeader.slice(7);
     try {
       const payload = jwt.verify(token, JWT_SECRET);
-      if (payload.role !== "restaurante") {
-        return res.status(403).json({ error: "Acesso negado" });
+      if (payload.role === "restaurante") {
+        req.user = { role: "restaurante", restauranteId: payload.restauranteId, slug: payload.slug, email: payload.email };
+        return next();
       }
-      req.user = { role: "restaurante", restauranteId: payload.restauranteId, slug: payload.slug, email: payload.email };
-      return next();
+      if (payload.role === "caixa") {
+        req.user = { role: "caixa", restauranteId: payload.restauranteId, slug: payload.slug, usuarioId: payload.usuarioId, permissoes: payload.permissoes || [] };
+        return next();
+      }
+      return res.status(403).json({ error: "Acesso negado" });
     } catch {
       return res.status(401).json({ error: "Token inválido ou expirado" });
     }

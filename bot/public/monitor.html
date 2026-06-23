@@ -1,0 +1,887 @@
+<!DOCTYPE html>
+<html lang="pt-BR">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no">
+  <title>Monitor — Pizzaria</title>
+  <meta name="apple-mobile-web-app-capable" content="yes">
+  <meta name="apple-mobile-web-app-status-bar-style" content="default">
+  <meta name="theme-color" content="#f97316">
+  <script src="https://cdn.tailwindcss.com"></script>
+  <style>
+    * { -webkit-tap-highlight-color: transparent; box-sizing: border-box; }
+    body { overscroll-behavior: none; -webkit-font-smoothing: antialiased; }
+    .tab-content { display: none; }
+    .tab-content.active { display: block; }
+
+    /* Status colors */
+    .s-novo      { background:#fff7ed; color:#ea580c; border-color:#fed7aa; }
+    .s-confirmado{ background:#eff6ff; color:#2563eb; border-color:#bfdbfe; }
+    .s-em_preparo{ background:#fefce8; color:#b45309; border-color:#fde68a; }
+    .s-pronto    { background:#f0fdf4; color:#15803d; border-color:#bbf7d0; }
+    .s-em_caminho{ background:#faf5ff; color:#6d28d9; border-color:#ddd6fe; }
+    .s-entregue  { background:#f8fafc; color:#64748b; border-color:#e2e8f0; }
+    .s-cancelado { background:#fff1f2; color:#be123c; border-color:#fecdd3; }
+
+    .bl-novo      { border-left-color:#f97316; }
+    .bl-confirmado{ border-left-color:#3b82f6; }
+    .bl-em_preparo{ border-left-color:#eab308; }
+    .bl-pronto    { border-left-color:#22c55e; }
+    .bl-em_caminho{ border-left-color:#a855f7; }
+    .bl-entregue  { border-left-color:#cbd5e1; }
+    .bl-cancelado { border-left-color:#f43f5e; }
+
+    @keyframes slideUp   { from{opacity:0;transform:translateY(14px)} to{opacity:1;transform:translateY(0)} }
+    @keyframes fadeIn    { from{opacity:0} to{opacity:1} }
+    @keyframes pulseBadge{ 0%,100%{opacity:1} 50%{opacity:.4} }
+    .slide-up   { animation: slideUp   .25s ease both; }
+    .fade-in    { animation: fadeIn    .2s  ease both; }
+    .pulse-badge{ animation: pulseBadge 1.4s infinite; }
+
+    #tab-body { padding-bottom: env(safe-area-inset-bottom, 0px); }
+    nav       { padding-bottom: env(safe-area-inset-bottom, 0px); }
+
+    ::-webkit-scrollbar       { width:4px; }
+    ::-webkit-scrollbar-thumb { background:#cbd5e1; border-radius:9999px; }
+    ::-webkit-scrollbar-track { background:transparent; }
+  </style>
+</head>
+<body class="bg-gray-100 text-gray-900 font-sans">
+
+<!-- ══════════════════════════════ LOGIN ═══════════════════════════════════ -->
+<div id="login-screen" class="min-h-screen flex items-center justify-center p-5 bg-gradient-to-br from-orange-50 via-white to-orange-100">
+  <div class="bg-white rounded-2xl shadow-2xl p-7 w-full max-w-sm">
+    <div class="text-center mb-6">
+      <div class="text-5xl mb-3">🍕</div>
+      <h1 class="text-2xl font-extrabold text-gray-800">Monitor</h1>
+      <p class="text-gray-400 text-sm mt-1">Acompanhe remotamente a pizzaria</p>
+    </div>
+    <input id="login-email" type="email" placeholder="Email" autocomplete="email"
+      class="w-full border border-gray-300 rounded-xl px-4 py-3 mb-3 text-sm focus:outline-none focus:ring-2 focus:ring-orange-400"
+      onkeydown="if(event.key==='Enter')document.getElementById('login-senha').focus()">
+    <input id="login-senha" type="password" placeholder="Senha" autocomplete="current-password"
+      class="w-full border border-gray-300 rounded-xl px-4 py-3 mb-4 text-sm focus:outline-none focus:ring-2 focus:ring-orange-400"
+      onkeydown="if(event.key==='Enter')fazerLogin()">
+    <button onclick="fazerLogin()" id="login-btn"
+      class="w-full bg-orange-500 active:bg-orange-700 text-white rounded-xl py-3 font-bold text-sm transition">
+      Entrar
+    </button>
+    <p id="login-erro" class="text-red-500 text-sm mt-3 text-center hidden">Credenciais inválidas</p>
+  </div>
+</div>
+
+<!-- ══════════════════════════════ APP ════════════════════════════════════ -->
+<div id="app" class="hidden fixed inset-0 flex flex-col bg-gray-100">
+
+  <!-- HEADER -->
+  <header class="bg-white border-b border-gray-200 px-4 py-2.5 flex items-center justify-between shrink-0 z-10">
+    <div class="flex items-center gap-2.5 min-w-0">
+      <span class="text-xl shrink-0">🍕</span>
+      <div class="min-w-0">
+        <p id="header-nome" class="font-bold text-sm text-gray-800 leading-tight truncate">Carregando…</p>
+        <div class="flex items-center gap-1.5">
+          <span id="socket-dot" class="w-1.5 h-1.5 rounded-full bg-gray-300 shrink-0 transition-colors"></span>
+          <span id="socket-label" class="text-xs text-gray-400">Conectando…</span>
+          <span id="last-update" class="text-xs text-gray-300 ml-1"></span>
+        </div>
+      </div>
+    </div>
+    <div class="flex items-center gap-1 shrink-0">
+      <button onclick="recarregarTudo()" title="Atualizar"
+        class="p-2 text-gray-400 hover:text-gray-600 rounded-xl hover:bg-gray-100 active:bg-gray-200 transition">
+        <svg id="refresh-icon" class="w-5 h-5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+          <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2"
+            d="M4 4v5h.582m15.356 2A8.001 8.001 0 004.582 9m0 0H9m11 11v-5h-.581m0 0a8.003 8.003 0 01-15.357-2m15.357 2H15"/>
+        </svg>
+      </button>
+      <button onclick="sair()" title="Sair"
+        class="p-2 text-gray-400 hover:text-red-500 rounded-xl hover:bg-red-50 active:bg-red-100 transition">
+        <svg class="w-5 h-5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+          <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2"
+            d="M17 16l4-4m0 0l-4-4m4 4H7m6 4v1a3 3 0 01-3 3H6a3 3 0 01-3-3V7a3 3 0 013-3h4a3 3 0 013 3v1"/>
+        </svg>
+      </button>
+    </div>
+  </header>
+
+  <!-- TAB BODY (scrollable) -->
+  <main id="tab-body" class="flex-1 overflow-y-auto overflow-x-hidden">
+
+    <!-- ─── DASHBOARD ─────────────────────────────────────────────────────── -->
+    <div id="tab-dashboard" class="tab-content active p-4 space-y-4">
+
+      <!-- Stats grid -->
+      <div id="stats-grid" class="grid grid-cols-2 gap-3">
+        <div class="col-span-2 bg-white rounded-2xl p-4 shadow-sm animate-pulse h-20"></div>
+        <div class="bg-white rounded-2xl p-4 shadow-sm animate-pulse h-20"></div>
+        <div class="bg-white rounded-2xl p-4 shadow-sm animate-pulse h-20"></div>
+      </div>
+
+      <!-- Últimos pedidos -->
+      <div class="bg-white rounded-2xl shadow-sm overflow-hidden">
+        <div class="px-4 py-3 border-b border-gray-100 flex items-center justify-between">
+          <h2 class="font-bold text-sm text-gray-700">Últimos pedidos</h2>
+          <button onclick="mudarTab('pedidos')" class="text-xs text-orange-500 font-semibold">Ver todos →</button>
+        </div>
+        <div id="dash-ultimos" class="divide-y divide-gray-50">
+          <p class="text-xs text-gray-400 text-center py-6">Carregando…</p>
+        </div>
+      </div>
+
+    </div>
+
+    <!-- ─── PEDIDOS ────────────────────────────────────────────────────────── -->
+    <div id="tab-pedidos" class="tab-content p-4 space-y-3">
+      <div class="flex items-center justify-between">
+        <h2 class="font-bold text-gray-700">Pedidos de Hoje</h2>
+        <span id="pedidos-count" class="text-xs text-gray-400"></span>
+      </div>
+      <div id="pedidos-list">
+        <p class="text-xs text-gray-400 text-center py-8">Carregando…</p>
+      </div>
+    </div>
+
+    <!-- ─── MESAS ──────────────────────────────────────────────────────────── -->
+    <div id="tab-mesas" class="tab-content p-4">
+      <div class="flex items-center justify-between mb-3">
+        <h2 class="font-bold text-gray-700">Mesas</h2>
+        <span id="mesas-resumo" class="text-xs text-gray-400"></span>
+      </div>
+      <div id="mesas-grid" class="grid grid-cols-5 gap-2">
+        <p class="col-span-5 text-xs text-gray-400 text-center py-8">Carregando…</p>
+      </div>
+    </div>
+
+    <!-- ─── MOTOBOYS ───────────────────────────────────────────────────────── -->
+    <div id="tab-motoboys" class="tab-content p-4 space-y-4">
+      <h2 class="font-bold text-gray-700">Motoboys</h2>
+
+      <div>
+        <h3 class="text-xs font-bold uppercase tracking-wide text-purple-600 mb-2">Em entrega agora</h3>
+        <div id="entregas-ativas" class="space-y-2">
+          <p class="text-xs text-gray-400">Nenhuma entrega ativa</p>
+        </div>
+      </div>
+
+      <div>
+        <h3 class="text-xs font-bold uppercase tracking-wide text-gray-400 mb-2">Ranking hoje</h3>
+        <div id="motoboys-ranking" class="space-y-2">
+          <p class="text-xs text-gray-400 text-center py-3">Carregando…</p>
+        </div>
+      </div>
+    </div>
+
+    <!-- ─── COZINHA ────────────────────────────────────────────────────────── -->
+    <div id="tab-cozinha" class="tab-content p-4">
+      <h2 class="font-bold text-gray-700 mb-3">Cozinha</h2>
+      <div id="cozinha-list" class="space-y-2">
+        <p class="text-xs text-gray-400 text-center py-8">Carregando…</p>
+      </div>
+    </div>
+
+  </main>
+
+  <!-- BOTTOM NAV -->
+  <nav class="bg-white border-t border-gray-200 grid grid-cols-5 shrink-0 z-10">
+    <button onclick="mudarTab('dashboard')" id="nav-dashboard"
+      class="nav-btn flex flex-col items-center justify-center py-2.5 gap-0.5 text-orange-500">
+      <svg class="w-5 h-5" fill="currentColor" viewBox="0 0 20 20">
+        <path d="M3 4a1 1 0 011-1h12a1 1 0 011 1v2a1 1 0 01-1 1H4a1 1 0 01-1-1V4zm0 6a1 1 0 011-1h6a1 1 0 011 1v6a1 1 0 01-1 1H4a1 1 0 01-1-1v-6zm10 0a1 1 0 011-1h2a1 1 0 011 1v6a1 1 0 01-1 1h-2a1 1 0 01-1-1v-6z"/>
+      </svg>
+      <span class="text-[10px] font-semibold">Painel</span>
+    </button>
+    <button onclick="mudarTab('pedidos')" id="nav-pedidos"
+      class="nav-btn flex flex-col items-center justify-center py-2.5 gap-0.5 text-gray-400 relative">
+      <svg class="w-5 h-5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+        <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2"
+          d="M9 5H7a2 2 0 00-2 2v12a2 2 0 002 2h10a2 2 0 002-2V7a2 2 0 00-2-2h-2M9 5a2 2 0 002 2h2a2 2 0 002-2M9 5a2 2 0 012-2h2a2 2 0 012 2"/>
+      </svg>
+      <span class="text-[10px] font-semibold">Pedidos</span>
+      <span id="nav-badge" class="hidden absolute top-1.5 right-3 min-w-[16px] h-4 bg-red-500 text-white text-[9px] font-bold rounded-full flex items-center justify-center px-0.5 pulse-badge">0</span>
+    </button>
+    <button onclick="mudarTab('mesas')" id="nav-mesas"
+      class="nav-btn flex flex-col items-center justify-center py-2.5 gap-0.5 text-gray-400">
+      <svg class="w-5 h-5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+        <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2"
+          d="M3 10h18M3 14h18M10 6v12M14 6v12M5 6h14a2 2 0 012 2v8a2 2 0 01-2 2H5a2 2 0 01-2-2V8a2 2 0 012-2z"/>
+      </svg>
+      <span class="text-[10px] font-semibold">Mesas</span>
+    </button>
+    <button onclick="mudarTab('motoboys')" id="nav-motoboys"
+      class="nav-btn flex flex-col items-center justify-center py-2.5 gap-0.5 text-gray-400 relative">
+      <span class="text-[18px] leading-5">🛵</span>
+      <span class="text-[10px] font-semibold">Motoboys</span>
+      <span id="nav-badge-motoboy" class="hidden absolute top-1.5 right-3 min-w-[16px] h-4 bg-purple-500 text-white text-[9px] font-bold rounded-full flex items-center justify-center px-0.5">0</span>
+    </button>
+    <button onclick="mudarTab('cozinha')" id="nav-cozinha"
+      class="nav-btn flex flex-col items-center justify-center py-2.5 gap-0.5 text-gray-400 relative">
+      <span class="text-[18px] leading-5">🍳</span>
+      <span class="text-[10px] font-semibold">Cozinha</span>
+      <span id="nav-badge-cozinha" class="hidden absolute top-1.5 right-3 min-w-[16px] h-4 bg-yellow-500 text-white text-[9px] font-bold rounded-full flex items-center justify-center px-0.5">0</span>
+    </button>
+  </nav>
+
+</div>
+
+<!-- ════════════ TOAST ════════════ -->
+<div id="toast" class="hidden fixed top-4 left-4 right-4 z-50 max-w-sm mx-auto bg-gray-900 text-white rounded-2xl px-4 py-3 shadow-2xl slide-up">
+  <p id="toast-msg" class="text-sm font-medium"></p>
+</div>
+
+<!-- ════════════ MODAL ════════════ -->
+<div id="modal" class="hidden fixed inset-0 z-40 flex items-end">
+  <div class="absolute inset-0 bg-black/50 backdrop-blur-sm" onclick="fecharModal()"></div>
+  <div class="relative w-full bg-white rounded-t-3xl px-5 pt-5 pb-6 max-h-[85vh] overflow-y-auto shadow-2xl">
+    <div class="w-10 h-1 bg-gray-200 rounded-full mx-auto mb-4"></div>
+    <div id="modal-content"></div>
+    <button onclick="fecharModal()" class="mt-4 w-full py-3 rounded-2xl bg-gray-100 text-gray-600 font-semibold text-sm active:bg-gray-200">
+      Fechar
+    </button>
+  </div>
+</div>
+
+<script src="/socket.io/socket.io.js"></script>
+<script>
+// ══════════════════════════════════════════════════════════════════════════════
+// STATE
+// ══════════════════════════════════════════════════════════════════════════════
+const S = {
+  token: null,
+  slug: null,
+  restaurante: null,
+  tab: 'dashboard',
+  pedidos: [],     // today's orders cache
+  novos: 0,        // unread new orders badge
+};
+
+// ══════════════════════════════════════════════════════════════════════════════
+// UTILS
+// ══════════════════════════════════════════════════════════════════════════════
+const $ = id => document.getElementById(id);
+
+function fmt(val, moeda) {
+  const m = moeda || (S.restaurante && S.restaurante.moeda) || 'Gs.';
+  if (val === null || val === undefined) return '—';
+  const n = Number(val);
+  return m + ' ' + n.toLocaleString('pt-BR', { maximumFractionDigits: 0 });
+}
+
+function fmtHora(dt) {
+  return new Date(dt).toLocaleTimeString('pt-BR', { hour: '2-digit', minute: '2-digit' });
+}
+
+function fmtData(dt) {
+  return new Date(dt).toLocaleDateString('pt-BR', { day: '2-digit', month: '2-digit' });
+}
+
+function tempoDecorrido(dt) {
+  const mins = Math.floor((Date.now() - new Date(dt).getTime()) / 60000);
+  if (mins < 1)  return 'agora';
+  if (mins < 60) return mins + 'min';
+  return Math.floor(mins / 60) + 'h' + (mins % 60 ? String(mins % 60).padStart(2,'0') : '');
+}
+
+const STATUS_LABEL = {
+  NOVO:'Novo', CONFIRMADO:'Confirmado', EM_PREPARO:'Em preparo',
+  PRONTO:'Pronto', EM_CAMINHO:'Em caminho', ENTREGUE:'Entregue', CANCELADO:'Cancelado'
+};
+const STATUS_CLS = s => 's-' + (s||'novo').toLowerCase().replace('_', '_');
+
+function statusTag(s) {
+  return `<span class="text-xs font-semibold px-2 py-0.5 rounded-full border ${STATUS_CLS(s)}">${STATUS_LABEL[s] || s}</span>`;
+}
+
+function blClass(s) {
+  const m = { NOVO:'bl-novo', CONFIRMADO:'bl-confirmado', EM_PREPARO:'bl-em_preparo',
+    PRONTO:'bl-pronto', EM_CAMINHO:'bl-em_caminho', ENTREGUE:'bl-entregue', CANCELADO:'bl-cancelado' };
+  return m[s] || 'bl-entregue';
+}
+
+// ── Toast ──
+let _toastTimer;
+function toast(msg, dur = 3500) {
+  $('toast-msg').textContent = msg;
+  const el = $('toast');
+  el.classList.remove('hidden');
+  el.classList.add('slide-up');
+  clearTimeout(_toastTimer);
+  _toastTimer = setTimeout(() => el.classList.add('hidden'), dur);
+}
+
+// ── Modal ──
+function fecharModal() { $('modal').classList.add('hidden'); }
+
+// ══════════════════════════════════════════════════════════════════════════════
+// AUTH
+// ══════════════════════════════════════════════════════════════════════════════
+async function fazerLogin() {
+  const email = $('login-email').value.trim();
+  const senha = $('login-senha').value;
+  $('login-erro').classList.add('hidden');
+  const btn = $('login-btn');
+  btn.textContent = 'Entrando…';
+  btn.disabled = true;
+
+  try {
+    const r = await fetch('/auth/login', {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ email, senha }),
+    });
+    const data = await r.json();
+    if (!r.ok) {
+      $('login-erro').textContent = data.error || 'Credenciais inválidas';
+      $('login-erro').classList.remove('hidden');
+      return;
+    }
+    S.token      = data.token;
+    S.restaurante = data.restaurante;
+    S.slug       = data.restaurante.slug;
+    localStorage.setItem('mon_token', S.token);
+    localStorage.setItem('mon_rest',  JSON.stringify(S.restaurante));
+    iniciarApp();
+  } catch(e) {
+    $('login-erro').textContent = 'Erro de conexão';
+    $('login-erro').classList.remove('hidden');
+  } finally {
+    btn.textContent = 'Entrar';
+    btn.disabled = false;
+  }
+}
+
+function sair() {
+  localStorage.removeItem('mon_token');
+  localStorage.removeItem('mon_rest');
+  location.reload();
+}
+
+// ══════════════════════════════════════════════════════════════════════════════
+// HTTP HELPERS
+// ══════════════════════════════════════════════════════════════════════════════
+async function api(path) {
+  try {
+    const r = await fetch(path, { headers: { Authorization: 'Bearer ' + S.token } });
+    if (r.status === 401) { sair(); return null; }
+    if (!r.ok) return null;
+    return r.json();
+  } catch(e) { return null; }
+}
+
+async function apiPatch(path, body) {
+  try {
+    const r = await fetch(path, {
+      method: 'PATCH',
+      headers: { 'Content-Type': 'application/json', Authorization: 'Bearer ' + S.token },
+      body: JSON.stringify(body),
+    });
+    if (r.status === 401) { sair(); return null; }
+    return r.json();
+  } catch(e) { return null; }
+}
+
+// ══════════════════════════════════════════════════════════════════════════════
+// APP BOOT
+// ══════════════════════════════════════════════════════════════════════════════
+function iniciarApp() {
+  $('login-screen').classList.add('hidden');
+  $('app').classList.remove('hidden');
+  $('header-nome').textContent = S.restaurante.nome || 'Pizzaria';
+  conectarSocket();
+  recarregarTudo();
+  setInterval(recarregarTudo, 60000); // auto-refresh every 60s
+}
+
+async function recarregarTudo() {
+  const icon = $('refresh-icon');
+  icon.style.animation = 'spin 0.8s linear infinite';
+  await Promise.all([
+    carregarDashboard(),
+    carregarPedidos(),
+    carregarMesas(),
+    carregarMotoboys(),
+    carregarCozinha(),
+  ]);
+  icon.style.animation = '';
+  const now = new Date();
+  $('last-update').textContent = '· ' + now.toLocaleTimeString('pt-BR', { hour:'2-digit', minute:'2-digit' });
+}
+
+// ══════════════════════════════════════════════════════════════════════════════
+// SOCKET
+// ══════════════════════════════════════════════════════════════════════════════
+function conectarSocket() {
+  const socket = io({ transports: ['websocket', 'polling'] });
+
+  socket.on('connect', () => {
+    $('socket-dot').className   = 'w-1.5 h-1.5 rounded-full bg-green-500 shrink-0 transition-colors';
+    $('socket-label').textContent = 'Online';
+    socket.emit('assinar:restaurante', S.token);
+  });
+
+  socket.on('disconnect', () => {
+    $('socket-dot').className   = 'w-1.5 h-1.5 rounded-full bg-red-400 shrink-0 transition-colors';
+    $('socket-label').textContent = 'Desconectado';
+  });
+
+  socket.on('pedido:novo', data => {
+    const pedido = data.pedido || data;
+
+    // Prepend to local cache if today
+    const hoje = new Date().toISOString().slice(0, 10);
+    const pedDia = new Date(pedido.createdAt || Date.now()).toISOString().slice(0, 10);
+    if (pedDia === hoje) {
+      S.pedidos.unshift(pedido);
+      renderizarPedidos();
+    }
+
+    // Badges
+    if (S.tab !== 'pedidos') {
+      S.novos++;
+      atualizarBadge('nav-badge', S.novos);
+    }
+
+    // Refresh stats + mesas + cozinha
+    carregarDashboard();
+    carregarMesas();
+    carregarCozinha();
+
+    // Alert
+    const ori = pedido.origem === 'MESA'   ? '🪑 Mesa ' + pedido.mesa
+              : pedido.origem === 'BALCAO' ? '🏪 Balcão'
+              : '📱 WhatsApp';
+    toast('🔔 Novo pedido! ' + ori + ' — ' + fmt(pedido.total));
+    vibrar();
+    tocarAlerta();
+  });
+
+  socket.on('pedido:atualizado', pedido => {
+    const idx = S.pedidos.findIndex(p => p.id === pedido.id);
+    if (idx >= 0) S.pedidos[idx] = { ...S.pedidos[idx], ...pedido };
+    renderizarPedidos();
+    carregarMesas();
+    carregarCozinha();
+  });
+
+  socket.on('mesa:fechamento-resolvido', () => carregarMesas());
+}
+
+function vibrar() {
+  try { navigator.vibrate && navigator.vibrate([200, 100, 200]); } catch(e){}
+}
+
+function tocarAlerta() {
+  try {
+    const ctx = new (window.AudioContext || window.webkitAudioContext)();
+    const gain = ctx.createGain();
+    gain.gain.setValueAtTime(0.25, ctx.currentTime);
+    gain.connect(ctx.destination);
+    [{ t:0, f:660 }, { t:.15, f:660 }, { t:.3, f:880 }].forEach(({ t, f }) => {
+      const osc = ctx.createOscillator();
+      osc.frequency.value = f;
+      osc.connect(gain);
+      osc.start(ctx.currentTime + t);
+      osc.stop(ctx.currentTime + t + 0.12);
+    });
+  } catch(e){}
+}
+
+// ══════════════════════════════════════════════════════════════════════════════
+// NAVIGATION
+// ══════════════════════════════════════════════════════════════════════════════
+function mudarTab(tab) {
+  S.tab = tab;
+  document.querySelectorAll('.tab-content').forEach(el => el.classList.remove('active'));
+  document.querySelectorAll('.nav-btn').forEach(el => {
+    el.classList.remove('text-orange-500');
+    el.classList.add('text-gray-400');
+  });
+  $('tab-' + tab).classList.add('active');
+  const btn = $('nav-' + tab);
+  if (btn) { btn.classList.remove('text-gray-400'); btn.classList.add('text-orange-500'); }
+
+  if (tab === 'pedidos')  { S.novos = 0; atualizarBadge('nav-badge', 0); }
+}
+
+function atualizarBadge(id, n) {
+  const el = $(id);
+  if (!el) return;
+  if (n > 0) {
+    el.textContent = n > 99 ? '99+' : n;
+    el.classList.remove('hidden');
+    el.classList.add('flex');
+  } else {
+    el.classList.add('hidden');
+    el.classList.remove('flex');
+  }
+}
+
+// ══════════════════════════════════════════════════════════════════════════════
+// TAB: DASHBOARD
+// ══════════════════════════════════════════════════════════════════════════════
+async function carregarDashboard() {
+  const data = await api('/admin/stats');
+  if (!data) return;
+  const s = data.data;
+
+  const ticketMedio = s.pedidosHoje > 0 ? fmt(s.faturamentoHoje / s.pedidosHoje) : '—';
+
+  $('stats-grid').innerHTML = `
+    <div class="col-span-2 bg-gradient-to-br from-orange-500 to-orange-600 rounded-2xl p-4 shadow-sm text-white slide-up">
+      <p class="text-xs opacity-80 mb-1">Faturamento Hoje</p>
+      <p class="text-3xl font-extrabold leading-tight">${fmt(s.faturamentoHoje)}</p>
+      <p class="text-xs opacity-70 mt-1">Total geral: ${fmt(s.faturamentoTotal)}</p>
+    </div>
+    <div class="bg-white rounded-2xl p-4 shadow-sm slide-up">
+      <p class="text-xs text-gray-400 mb-1">Pedidos Hoje</p>
+      <p class="text-2xl font-extrabold text-gray-800">${s.pedidosHoje}</p>
+      <p class="text-xs text-gray-300 mt-1">Total: ${s.totalPedidos}</p>
+    </div>
+    <div class="bg-white rounded-2xl p-4 shadow-sm slide-up">
+      <p class="text-xs text-gray-400 mb-1">Em Aberto</p>
+      <p class="text-2xl font-extrabold text-blue-600">${s.emAberto}</p>
+      <p class="text-xs text-gray-300 mt-1">&nbsp;</p>
+    </div>
+    <div class="bg-white rounded-2xl p-4 shadow-sm slide-up">
+      <p class="text-xs text-gray-400 mb-1">Ticket Médio</p>
+      <p class="text-lg font-bold text-gray-700">${ticketMedio}</p>
+    </div>
+    <div class="bg-white rounded-2xl p-4 shadow-sm slide-up">
+      <p class="text-xs text-gray-400 mb-1">Sessões Ativas</p>
+      <p class="text-lg font-bold text-gray-700">${s.sessoesAtivas}</p>
+    </div>
+  `;
+
+  // Last 6 orders mini-list
+  const pedData = await api('/admin/pedidos?limite=6');
+  if (!pedData) return;
+  const pedidos = pedData.data;
+  if (!pedidos.length) {
+    $('dash-ultimos').innerHTML = '<p class="text-xs text-gray-400 text-center py-5">Nenhum pedido ainda</p>';
+    return;
+  }
+  $('dash-ultimos').innerHTML = pedidos.map(p => miniCard(p)).join('');
+}
+
+function miniCard(p) {
+  const ori = p.origem === 'MESA'   ? '🪑 Mesa ' + p.mesa
+            : p.origem === 'BALCAO' ? '🏪 Balcão'
+            : '📱 ' + (p.clienteNome || p.clienteNumero || 'WhatsApp');
+  return `
+    <div class="flex items-center justify-between px-4 py-2.5 hover:bg-gray-50 active:bg-gray-100 transition cursor-pointer"
+      onclick="abrirDetalhe('${p.id}')">
+      <div class="flex items-center gap-2.5 min-w-0">
+        ${statusTag(p.status)}
+        <span class="text-sm text-gray-700 truncate">${ori}</span>
+      </div>
+      <div class="text-right shrink-0 ml-2">
+        <p class="text-sm font-bold text-gray-800">${fmt(p.total)}</p>
+        <p class="text-xs text-gray-400">${fmtHora(p.createdAt)}</p>
+      </div>
+    </div>
+  `;
+}
+
+// ══════════════════════════════════════════════════════════════════════════════
+// TAB: PEDIDOS
+// ══════════════════════════════════════════════════════════════════════════════
+async function carregarPedidos() {
+  const hoje = new Date().toISOString().slice(0, 10);
+  const data = await api('/admin/pedidos?limite=100&inicio=' + hoje);
+  if (!data) return;
+  S.pedidos = data.data;
+  renderizarPedidos();
+}
+
+function renderizarPedidos() {
+  const container = $('pedidos-list');
+  $('pedidos-count').textContent = S.pedidos.length + ' pedido' + (S.pedidos.length !== 1 ? 's' : '');
+
+  if (!S.pedidos.length) {
+    container.innerHTML = '<p class="text-xs text-gray-400 text-center py-10">Nenhum pedido hoje</p>';
+    return;
+  }
+  container.innerHTML = '<div class="space-y-3">' + S.pedidos.map(p => pedidoCard(p)).join('') + '</div>';
+}
+
+function pedidoCard(p) {
+  const ori = p.origem === 'MESA'   ? '🪑 Mesa ' + p.mesa
+            : p.origem === 'BALCAO' ? '🏪 Balcão'
+            : '📱 ' + (p.clienteNome || p.clienteNumero || '');
+  const itens = Array.isArray(p.itens) ? p.itens : [];
+  const itensTexto = itens.slice(0,3).map(i => (i.quantidade > 1 ? i.quantidade + '× ' : '') + i.nome).join(' · ');
+  const mais = itens.length > 3 ? ` +${itens.length - 3}` : '';
+
+  const confirmBtn = p.status === 'NOVO'
+    ? `<button onclick="confirmarPedido('${p.id}',event)"
+         class="mt-2.5 w-full bg-blue-500 active:bg-blue-700 text-white text-xs font-bold py-2 rounded-xl transition">
+         ✓ Confirmar pedido
+       </button>`
+    : '';
+
+  return `
+    <div class="bg-white rounded-2xl shadow-sm p-3.5 border-l-4 ${blClass(p.status)} slide-up cursor-pointer"
+      onclick="abrirDetalhe('${p.id}')">
+      <div class="flex items-start justify-between gap-2">
+        <div class="flex-1 min-w-0">
+          <div class="flex items-center gap-2 mb-1.5 flex-wrap">
+            ${statusTag(p.status)}
+            ${p.pago ? '<span class="text-xs bg-green-100 text-green-700 px-1.5 py-0.5 rounded-full font-semibold">✓ Pago</span>' : ''}
+          </div>
+          <p class="text-sm font-bold text-gray-800">${ori}</p>
+          ${itensTexto ? `<p class="text-xs text-gray-400 mt-0.5 truncate">${itensTexto}${mais}</p>` : ''}
+          ${p.motoboyNome ? `<p class="text-xs text-purple-600 mt-0.5">🛵 ${p.motoboyNome}</p>` : ''}
+        </div>
+        <div class="text-right shrink-0">
+          <p class="text-base font-extrabold text-gray-800">${fmt(p.total)}</p>
+          <p class="text-xs text-gray-400">${fmtHora(p.createdAt)}</p>
+        </div>
+      </div>
+      ${confirmBtn}
+    </div>
+  `;
+}
+
+async function confirmarPedido(id, e) {
+  e && e.stopPropagation();
+  const r = await apiPatch('/admin/pedidos/' + id + '/status', { status: 'CONFIRMADO' });
+  if (r && r.data) {
+    toast('✅ Pedido confirmado!');
+    const idx = S.pedidos.findIndex(p => p.id === id);
+    if (idx >= 0) { S.pedidos[idx].status = 'CONFIRMADO'; renderizarPedidos(); }
+    fecharModal();
+  }
+}
+
+function abrirDetalhe(id) {
+  const p = S.pedidos.find(x => x.id === id);
+  if (!p) return;
+  const itens = Array.isArray(p.itens) ? p.itens : [];
+  const ori = p.origem === 'MESA'   ? '🪑 Mesa ' + p.mesa
+            : p.origem === 'BALCAO' ? '🏪 Balcão'
+            : '📱 ' + (p.clienteNome || p.clienteNumero || '');
+
+  $('modal-content').innerHTML = `
+    <div class="mb-3">
+      <div class="flex items-center justify-between mb-2 flex-wrap gap-2">
+        ${statusTag(p.status)}
+        <span class="text-xs text-gray-400">${fmtData(p.createdAt)} ${fmtHora(p.createdAt)}</span>
+      </div>
+      <h3 class="text-xl font-extrabold text-gray-800 mb-0.5">${ori}</h3>
+      ${p.motoboyNome ? `<p class="text-sm text-purple-600">🛵 ${p.motoboyNome}</p>` : ''}
+      ${p.localizacao  ? `<p class="text-xs text-gray-500 mt-1">📍 ${p.localizacao}</p>` : ''}
+    </div>
+    <div class="border-t border-gray-100 py-3 space-y-2">
+      ${itens.map(i => `
+        <div class="flex justify-between text-sm">
+          <span class="text-gray-700">${i.quantidade || 1}× ${i.nome}</span>
+          <span class="font-semibold text-gray-800">${fmt(i.preco * (i.quantidade || 1))}</span>
+        </div>
+        ${i.obs ? `<p class="text-xs text-orange-600 ml-4">↳ ${i.obs}</p>` : ''}
+      `).join('')}
+    </div>
+    <div class="border-t border-gray-100 pt-3 flex justify-between items-center">
+      <span class="font-bold text-gray-700">Total</span>
+      <span class="text-xl font-extrabold text-orange-600">${fmt(p.total)}</span>
+    </div>
+    ${p.metodoPagamento ? `<p class="text-sm text-gray-400 mt-1">Pagamento: ${p.metodoPagamento}${p.pago ? ' ✓' : ''}</p>` : ''}
+    ${p.status === 'NOVO' ? `
+      <button onclick="confirmarPedido('${p.id}',event)"
+        class="mt-4 w-full bg-blue-500 active:bg-blue-700 text-white font-bold py-3.5 rounded-2xl">
+        ✓ Confirmar pedido
+      </button>` : ''}
+  `;
+  $('modal').classList.remove('hidden');
+}
+
+// ══════════════════════════════════════════════════════════════════════════════
+// TAB: MESAS
+// ══════════════════════════════════════════════════════════════════════════════
+async function carregarMesas() {
+  const data = await api('/admin/mesas');
+  if (!data) return;
+  const mesas = data.mesas;
+  const ocupadas = mesas.filter(m => m.pedido);
+  const livres   = mesas.filter(m => !m.pedido && m.mesa <= 30).length;
+
+  $('mesas-resumo').textContent = ocupadas.length + ' ocupada' + (ocupadas.length !== 1 ? 's' : '') + ' · ' + livres + ' livre' + (livres !== 1 ? 's' : '');
+
+  $('mesas-grid').innerHTML = mesas.map(m => {
+    if (!m.pedido && m.mesa > 30) return '';
+    const ocup    = !!m.pedido;
+    const fechSol = m.pedido?.fechamentoSolicitado;
+    if (ocup) {
+      const cls = fechSol
+        ? 'bg-amber-100 border-2 border-amber-400 text-amber-800'
+        : 'bg-blue-100 border-2 border-blue-400 text-blue-800';
+      return `
+        <div class="aspect-square rounded-xl flex flex-col items-center justify-center text-xs font-bold ${cls} cursor-pointer active:opacity-70 transition"
+          onclick="verMesa(${m.mesa})">
+          <span class="text-base font-extrabold">${m.mesa}</span>
+          <span class="text-[9px] mt-0.5">${fechSol ? '⚑ fechar' : '●'}</span>
+        </div>`;
+    }
+    return `
+      <div class="aspect-square rounded-xl flex items-center justify-center text-xs font-semibold bg-white border border-gray-200 text-gray-400">
+        ${m.mesa}
+      </div>`;
+  }).join('');
+}
+
+async function verMesa(num) {
+  const data = await api('/admin/mesas/' + num + '/resumo');
+  if (!data) { toast('Mesa sem pedidos ativos'); return; }
+  const itens = Array.isArray(data.itens) ? data.itens : [];
+  $('modal-content').innerHTML = `
+    <h3 class="text-xl font-extrabold text-gray-800 mb-4">🪑 Mesa ${num}</h3>
+    <div class="space-y-2 mb-4">
+      ${itens.map(i => `
+        <div class="flex justify-between text-sm">
+          <span class="text-gray-700">${i.quantidade || 1}× ${i.nome}</span>
+          <span class="font-semibold">${fmt(i.preco * (i.quantidade || 1))}</span>
+        </div>`).join('')}
+    </div>
+    <div class="border-t border-gray-100 pt-3 flex justify-between font-bold text-base">
+      <span>Total</span>
+      <span class="text-orange-600 text-xl font-extrabold">${fmt(data.total)}</span>
+    </div>
+  `;
+  $('modal').classList.remove('hidden');
+}
+
+// ══════════════════════════════════════════════════════════════════════════════
+// TAB: MOTOBOYS
+// ══════════════════════════════════════════════════════════════════════════════
+async function carregarMotoboys() {
+  const [despachos, entregasData] = await Promise.all([
+    api('/admin/motoboys/despachos'),
+    api('/admin/pedidos?status=EM_CAMINHO&limite=20'),
+  ]);
+
+  // Active deliveries (EM_CAMINHO)
+  const ativas = entregasData?.data || [];
+  atualizarBadge('nav-badge-motoboy', ativas.length);
+
+  if (!ativas.length) {
+    $('entregas-ativas').innerHTML = '<p class="text-xs text-gray-400 py-1">Nenhuma entrega ativa no momento</p>';
+  } else {
+    $('entregas-ativas').innerHTML = ativas.map(p => `
+      <div class="bg-purple-50 border border-purple-200 rounded-2xl p-3.5 slide-up">
+        <div class="flex justify-between items-start">
+          <div class="min-w-0">
+            <p class="text-sm font-bold text-purple-800">🛵 ${p.motoboyNome || 'Sem motoboy'}</p>
+            <p class="text-xs text-gray-600 mt-0.5">${p.clienteNome || p.clienteNumero || ''}</p>
+            ${p.localizacao ? `<p class="text-xs text-gray-500 mt-0.5">📍 ${p.localizacao}</p>` : ''}
+          </div>
+          <div class="text-right shrink-0 ml-2">
+            <p class="text-sm font-extrabold text-purple-700">${fmt(p.total)}</p>
+            <p class="text-xs text-gray-400">${tempoDecorrido(p.createdAt)}</p>
+          </div>
+        </div>
+      </div>
+    `).join('');
+  }
+
+  // Ranking
+  const ranking = despachos?.data || [];
+  if (!ranking.length) {
+    $('motoboys-ranking').innerHTML = '<p class="text-xs text-gray-400 text-center py-3">Nenhum motoboy cadastrado</p>';
+    return;
+  }
+  $('motoboys-ranking').innerHTML = ranking.map((m, i) => `
+    <div class="bg-white rounded-2xl p-3.5 flex items-center justify-between shadow-sm slide-up">
+      <div class="flex items-center gap-3">
+        <span class="w-8 h-8 rounded-full bg-gray-100 flex items-center justify-center text-sm font-bold text-gray-500 shrink-0">${i + 1}</span>
+        <div>
+          <p class="text-sm font-bold text-gray-800">${m.motoboyNome}</p>
+          <p class="text-xs text-gray-400">Mês: ${m.mes} · Total: ${m.total}</p>
+        </div>
+      </div>
+      <div class="text-right">
+        <p class="text-xl font-extrabold text-gray-800">${m.hoje}</p>
+        <p class="text-xs text-gray-400">hoje</p>
+      </div>
+    </div>
+  `).join('');
+}
+
+// ══════════════════════════════════════════════════════════════════════════════
+// TAB: COZINHA
+// ══════════════════════════════════════════════════════════════════════════════
+async function carregarCozinha() {
+  // status=CONFIRMADO returns everything not NOVO/CANCELADO
+  const data = await api('/admin/pedidos?status=CONFIRMADO&limite=60');
+  if (!data) return;
+  const pedidos = data.data.filter(p => !['CANCELADO', 'ENTREGUE'].includes(p.status));
+  const emAberto = pedidos.filter(p => p.status === 'EM_PREPARO').length;
+  atualizarBadge('nav-badge-cozinha', emAberto);
+
+  if (!pedidos.length) {
+    $('cozinha-list').innerHTML = `
+      <div class="text-center py-12">
+        <p class="text-3xl mb-2">✅</p>
+        <p class="text-sm text-gray-500 font-semibold">Cozinha em dia!</p>
+      </div>`;
+    return;
+  }
+
+  const grupos = { EM_PREPARO: [], CONFIRMADO: [], PRONTO: [] };
+  pedidos.forEach(p => { if (grupos[p.status]) grupos[p.status].push(p); });
+
+  const secoes = [
+    { key: 'EM_PREPARO', icon: '🔥', label: 'Em preparo' },
+    { key: 'PRONTO',     icon: '✅', label: 'Prontos para sair' },
+    { key: 'CONFIRMADO', icon: '📋', label: 'Aguardando preparo' },
+  ];
+
+  let html = '';
+  secoes.forEach(({ key, icon, label }) => {
+    const lista = grupos[key];
+    if (!lista.length) return;
+    html += `<h3 class="text-xs font-bold uppercase tracking-wide text-gray-500 mb-2 mt-4">${icon} ${label} (${lista.length})</h3>`;
+    lista.forEach(p => {
+      const itens = Array.isArray(p.itens) ? p.itens : [];
+      const ori = p.origem === 'MESA'   ? '🪑 Mesa ' + p.mesa
+                : p.origem === 'BALCAO' ? '🏪 Balcão'
+                : '📱 Delivery';
+      const mins  = Math.floor((Date.now() - new Date(p.createdAt).getTime()) / 60000);
+      const tempoClass = mins > 30 ? 'text-red-600 font-extrabold'
+                       : mins > 15 ? 'text-orange-500 font-bold'
+                       :             'text-gray-400';
+      html += `
+        <div class="bg-white rounded-2xl shadow-sm p-3.5 border-l-4 ${blClass(p.status)} mb-2 slide-up">
+          <div class="flex justify-between items-center mb-2">
+            <span class="text-sm font-extrabold text-gray-800">${ori}</span>
+            <span class="text-sm ${tempoClass}">${mins}min</span>
+          </div>
+          <div class="space-y-0.5">
+            ${itens.map(i => `<p class="text-xs text-gray-600">${i.quantidade || 1}× ${i.nome}${i.obs ? ' <span class="text-orange-500">· ' + i.obs + '</span>' : ''}</p>`).join('')}
+          </div>
+        </div>`;
+    });
+  });
+  $('cozinha-list').innerHTML = html;
+}
+
+// ══════════════════════════════════════════════════════════════════════════════
+// CSS spin helper
+// ══════════════════════════════════════════════════════════════════════════════
+const style = document.createElement('style');
+style.textContent = '@keyframes spin { to { transform: rotate(360deg); } }';
+document.head.appendChild(style);
+
+// ══════════════════════════════════════════════════════════════════════════════
+// BOOT — restore session from localStorage
+// ══════════════════════════════════════════════════════════════════════════════
+(function boot() {
+  const token = localStorage.getItem('mon_token');
+  const rest  = localStorage.getItem('mon_rest');
+  if (token) {
+    S.token       = token;
+    S.restaurante = rest ? JSON.parse(rest) : { nome: 'Pizzaria', slug: '' };
+    S.slug        = S.restaurante.slug || '';
+    iniciarApp();
+  }
+})();
+</script>
+</body>
+</html>

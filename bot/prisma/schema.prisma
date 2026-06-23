@@ -156,6 +156,9 @@ model Sessao {
   pedido              Pedido?
   ultimaAtividade DateTime    @default(now())
   createdAt       DateTime    @default(now())
+
+  @@index([restauranteId])
+  @@index([clienteNumero, restauranteId])
 }
 
 model Mensagem {
@@ -165,6 +168,8 @@ model Mensagem {
   role      String // "cliente" ou "bot"
   conteudo  String
   createdAt DateTime @default(now())
+
+  @@index([sessaoId])
 }
 
 model Pedido {
@@ -195,6 +200,9 @@ model Pedido {
   facturaNumero  String?    // número da factura legal emitida para este pedido
   createdAt      DateTime   @default(now())
   updatedAt      DateTime   @updatedAt
+
+  @@index([restauranteId, createdAt(sort: Desc)])
+  @@index([restauranteId, status])
 }
 
 model ClienteFidelidade {

@@ -239,6 +239,46 @@ function iniciarJobLembreteComprovante() {
   log("job de lembrete de comprovante agendado (*/5 * * * *)");
 }
 
+// ── Job 5: Limpeza de mensagens antigas (toda segunda às 02:00) ───────────────
+
+function iniciarJobLimpezaMensagens() {
+  cron.schedule("0 2 * * 1", async () => {
+    log("iniciando limpeza de mensagens antigas...");
+    try {
+      const limite30d = new Date(Date.now() - 30 * 24 * 60 * 60 * 1000);
+      const limite60d = new Date(Date.now() - 60 * 24 * 60 * 60 * 1000);
+
+      // 1. Apaga Mensagem de sessões finalizadas há mais de 30 dias
+      const sessoesAntigas = await prisma.sessao.findMany({
+        where: { estado: "FINALIZADO", updatedAt: { lt: limite30d } },
+        select: { id: true },
+      });
+      const sessaoIds = sessoesAntigas.map(s => s.id);
+
+      let mensagensApagadas = 0;
+      if (sessaoIds.length > 0) {
+        const result = await prisma.mensagem.deleteMany({
+          where: { sessaoId: { in: sessaoIds } },
+        });
+        mensagensApagadas = result.count;
+      }
+
+      // 2. Apaga mensagens da Evolution API com mais de 60 dias
+      // (tabela "Message" gerenciada pela Evolution, mesmo banco)
+      const evResult = await prisma.$executeRawUnsafe(
+        `DELETE FROM "Message" WHERE "createdAt" < $1`,
+        limite60d
+      );
+
+      log(`limpeza concluída — ${mensagensApagadas} mensagens do bot apagadas, ${evResult} mensagens da Evolution apagadas`);
+    } catch (err) {
+      log(`ERRO na limpeza de mensagens: ${err.message}`);
+    }
+  }, { timezone: "America/Sao_Paulo" });
+
+  log("job de limpeza de mensagens agendado (toda segunda às 02:00)");
+}
+
 // ── Exporta e inicializa ──────────────────────────────────────────────────────
 
 function iniciarJobs() {
@@ -246,6 +286,7 @@ function iniciarJobs() {
   iniciarJobRelatorio();
   iniciarJobLembrete();
   iniciarJobLembreteComprovante();
+  iniciarJobLimpezaMensagens();
 }
 
 module.exports = { iniciarJobs, gerarRelatorio };

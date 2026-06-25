@@ -1727,7 +1727,6 @@
             <table class="w-full text-sm">
               <thead class="bg-gray-50 text-xs text-gray-400 uppercase sticky top-0">
                 <tr>
-                  <th class="text-left px-4 py-3">Categoria</th>
                   <th class="text-left px-4 py-3">Produto</th>
                   <th class="text-center px-4 py-3">Tamanho</th>
                   <th class="text-right px-4 py-3">Preço venda</th>
@@ -13571,28 +13570,50 @@ async function carregarCmv() {
 
     const tbody = document.getElementById('cmv-tbody');
     tbody.innerHTML = '';
+
+    const porCategoria = {};
     for (const it of data) {
-      const cmvColor = it.cmvPct === null ? 'text-gray-300' :
-        it.cmvPct > 35 ? 'text-red-600 font-bold' :
-        it.cmvPct > 25 ? 'text-orange-500 font-bold' : 'text-green-600 font-bold';
-      const margemColor = it.margem < 0 ? 'text-red-500' : 'text-green-600';
-      const tr = document.createElement('tr');
-      tr.className = 'hover:bg-gray-50 transition';
-      tr.innerHTML = `
-        <td class="px-4 py-2 text-xs text-gray-400">${it.categoriaNome}</td>
-        <td class="px-4 py-2 font-medium text-gray-800">${it.produtoNome}</td>
-        <td class="px-4 py-2 text-center text-gray-500 text-xs">${it.tamanhoNome || '—'}</td>
-        <td class="px-4 py-2 text-right text-gray-700">${fmtReceita(it.preco)}</td>
-        <td class="px-4 py-2 text-right text-gray-700">${it.temReceita ? fmtReceita(it.custo) : '<span class="text-gray-300 text-xs">sem receita</span>'}</td>
-        <td class="px-4 py-2 text-right ${it.temReceita ? margemColor : 'text-gray-300'}">${it.temReceita ? fmtReceita(it.margem) : '—'}</td>
-        <td class="px-4 py-2 text-right ${cmvColor}">${it.cmvPct !== null ? it.cmvPct.toFixed(1) + '%' : '—'}</td>
-        <td class="px-4 py-2 text-center">
-          <button onclick="irParaReceita('${it.produtoId}','${it.tamanhoId || ''}')"
-            class="text-xs px-2 py-1 rounded-lg border transition ${it.temReceita ? 'text-orange-500 border-orange-200 hover:border-orange-400' : 'text-gray-400 border-gray-200 hover:border-orange-400 hover:text-orange-500'}">
-            ${it.temReceita ? '✏️ Editar' : '+ Criar'}
-          </button>
+      const cat = it.categoriaNome || 'Sem categoria';
+      if (!porCategoria[cat]) porCategoria[cat] = [];
+      porCategoria[cat].push(it);
+    }
+
+    for (const [catNome, itens] of Object.entries(porCategoria)) {
+      const catComPct = itens.filter(i => i.temReceita && i.cmvPct !== null);
+      const catCmvMedio = catComPct.length ? catComPct.reduce((s, i) => s + i.cmvPct, 0) / catComPct.length : null;
+      const trCat = document.createElement('tr');
+      trCat.className = 'bg-orange-50 border-t-2 border-orange-100';
+      trCat.innerHTML = `
+        <td colspan="7" class="px-4 py-2">
+          <div class="flex items-center justify-between">
+            <span class="text-xs font-bold text-orange-600 uppercase tracking-wide">${catNome}</span>
+            ${catCmvMedio !== null ? `<span class="text-xs text-gray-400">CMV médio: <span class="font-bold text-orange-500">${catCmvMedio.toFixed(1)}%</span></span>` : ''}
+          </div>
         </td>`;
-      tbody.appendChild(tr);
+      tbody.appendChild(trCat);
+
+      for (const it of itens) {
+        const cmvColor = it.cmvPct === null ? 'text-gray-300' :
+          it.cmvPct > 35 ? 'text-red-600 font-bold' :
+          it.cmvPct > 25 ? 'text-orange-500 font-bold' : 'text-green-600 font-bold';
+        const margemColor = it.margem < 0 ? 'text-red-500' : 'text-green-600';
+        const tr = document.createElement('tr');
+        tr.className = 'hover:bg-gray-50 transition';
+        tr.innerHTML = `
+          <td class="px-4 py-2 font-medium text-gray-800">${it.produtoNome}</td>
+          <td class="px-4 py-2 text-center text-gray-500 text-xs">${it.tamanhoNome || '—'}</td>
+          <td class="px-4 py-2 text-right text-gray-700">${fmtReceita(it.preco)}</td>
+          <td class="px-4 py-2 text-right text-gray-700">${it.temReceita ? fmtReceita(it.custo) : '<span class="text-gray-300 text-xs">sem receita</span>'}</td>
+          <td class="px-4 py-2 text-right ${it.temReceita ? margemColor : 'text-gray-300'}">${it.temReceita ? fmtReceita(it.margem) : '—'}</td>
+          <td class="px-4 py-2 text-right ${cmvColor}">${it.cmvPct !== null ? it.cmvPct.toFixed(1) + '%' : '—'}</td>
+          <td class="px-4 py-2 text-center">
+            <button onclick="irParaReceita('${it.produtoId}','${it.tamanhoId || ''}')"
+              class="text-xs px-2 py-1 rounded-lg border transition ${it.temReceita ? 'text-orange-500 border-orange-200 hover:border-orange-400' : 'text-gray-400 border-gray-200 hover:border-orange-400 hover:text-orange-500'}">
+              ${it.temReceita ? '✏️ Editar' : '+ Criar'}
+            </button>
+          </td>`;
+        tbody.appendChild(tr);
+      }
     }
   } catch (e) { mostrarToast('Erro ao carregar CMV'); }
 }

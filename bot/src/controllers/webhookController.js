@@ -12,6 +12,25 @@ const _prisma = new PrismaClient();
 // Sessões que já receberam fotos do cardápio nesta conversa — impede reenvio automático duplicado
 const _sessoesFotosEnviadas = new Set();
 
+// ── Debounce + presença (typing) ─────────────────────────────────────────────
+const _buffer = new Map();         // chave → { textos[], timer, contexto }
+const _presence = new Map();       // chave → { composing: bool, at: number }
+const _processing = new Set();     // clientes com Claude em andamento
+const _cancelPendente = new Map(); // chave → { pedidoId, numFmt, expira }
+
+function _chaveCliente(num, restauranteId) {
+  return `${num}:${restauranteId}`;
+}
+
+async function _aguardarNaoDigitando(chave, maxMs = 5000) {
+  const inicio = Date.now();
+  while (Date.now() - inicio < maxMs) {
+    const p = _presence.get(chave);
+    if (!p || !p.composing || (Date.now() - p.at) > 15000) return;
+    await new Promise(r => setTimeout(r, 300));
+  }
+}
+
 // ── Detecção de idioma ────────────────────────────────────────────────────────
 
 function detectarIdioma(mensagens, textoAtual = "") {
@@ -205,6 +224,17 @@ async function receberMensagem(req, res) {
   // Restaurante e cardápio já resolvidos pelo tenantMiddleware
   const restaurante = req.restaurante;
   const cardapio = req.cardapio;
+
+  // Atualiza estado de presença (digitando) por cliente
+  if (evento.event === 'presence.update') {
+    const presences = evento.data?.presences || {};
+    for (const [jid, info] of Object.entries(presences)) {
+      const num = jid.replace(/@\S+$/, '');
+      const chave = _chaveCliente(num, restaurante.id);
+      _presence.set(chave, { composing: info.lastKnownPresence === 'composing', at: Date.now() });
+    }
+    return;
+  }
 
   // Só processa mensagens recebidas
   if (evento.event !== "messages.upsert") return;
@@ -722,6 +752,150 @@ async function receberMensagem(req, res) {
       }
     }
 
+    // ── Cancelamento de pedido pelo cliente ──────────────────────────────────────
+    // Usa sessao.clienteNumero (já normalizado) — igual ao valor salvo no Pedido
+    const _chaveCnl = _chaveCliente(sessao.clienteNumero, restaurante.id);
+    const _numPedido = sessao.clienteNumero;
+
+    // 1) Confirmação pendente: cliente respondeu à pergunta de confirmação
+    if (_cancelPendente.has(_chaveCnl)) {
+      const pendente = _cancelPendente.get(_chaveCnl);
+      _cancelPendente.delete(_chaveCnl);
+      if (Date.now() < pendente.expira && /^\s*(sim|s|yes|s[ií])\s*$/i.test(textoCliente)) {
+        await _prisma.pedido.update({ where: { id: pendente.pedidoId }, data: { status: 'CANCELADO' } });
+        const msgCnl = idioma === 'es'
+          ? `✅ Tu pedido *#${pendente.numFmt}* fue cancelado.\n\n¿Deseas hacer un nuevo pedido? 😊`
+          : `✅ Seu pedido *#${pendente.numFmt}* foi cancelado com sucesso.\n\nDeseja fazer um novo pedido? 😊`;
+        await salvarMensagem(sessao.id, 'cliente', textoCliente);
+        await salvarMensagem(sessao.id, 'bot', msgCnl);
+        const agoraCnl = new Date();
+        io?.to('admin').emit('pedido:atualizado', { pedidoId: pendente.pedidoId, status: 'CANCELADO' });
+        io?.to(`restaurante:${restaurante.slugWhatsapp}`).emit('pedido:atualizado', { pedidoId: pendente.pedidoId, status: 'CANCELADO' });
+        io?.to('admin').emit('conversa:mensagem', { sessaoId: sessao.id, mensagem: { role: 'cliente', conteudo: textoCliente, createdAt: agoraCnl } });
+        io?.to(`restaurante:${restaurante.slugWhatsapp}`).emit('conversa:mensagem', { sessaoId: sessao.id, mensagem: { role: 'cliente', conteudo: textoCliente, createdAt: agoraCnl } });
+        io?.to('admin').emit('conversa:mensagem', { sessaoId: sessao.id, mensagem: { role: 'bot', conteudo: msgCnl, createdAt: agoraCnl } });
+        io?.to(`restaurante:${restaurante.slugWhatsapp}`).emit('conversa:mensagem', { sessaoId: sessao.id, mensagem: { role: 'bot', conteudo: msgCnl, createdAt: agoraCnl } });
+        await atualizarSessao(sessao.id, { estado: 'INICIO', carrinho: [] });
+        await enviarMensagem(remoteJid, msgCnl, instanceName);
+        return;
+      } else if (Date.now() < pendente.expira) {
+        // Cliente respondeu algo diferente de "sim" — cancelamento descartado
+        const msgAbort = idioma === 'es'
+          ? `Ok, tu pedido *#${pendente.numFmt}* sigue activo. 👍`
+          : `Ok, seu pedido *#${pendente.numFmt}* continua ativo. 👍`;
+        await salvarMensagem(sessao.id, 'cliente', textoCliente);
+        await salvarMensagem(sessao.id, 'bot', msgAbort);
+        const agoraAb = new Date();
+        io?.to('admin').emit('conversa:mensagem', { sessaoId: sessao.id, mensagem: { role: 'cliente', conteudo: textoCliente, createdAt: agoraAb } });
+        io?.to(`restaurante:${restaurante.slugWhatsapp}`).emit('conversa:mensagem', { sessaoId: sessao.id, mensagem: { role: 'cliente', conteudo: textoCliente, createdAt: agoraAb } });
+        io?.to('admin').emit('conversa:mensagem', { sessaoId: sessao.id, mensagem: { role: 'bot', conteudo: msgAbort, createdAt: agoraAb } });
+        io?.to(`restaurante:${restaurante.slugWhatsapp}`).emit('conversa:mensagem', { sessaoId: sessao.id, mensagem: { role: 'bot', conteudo: msgAbort, createdAt: agoraAb } });
+        await enviarMensagem(remoteJid, msgAbort, instanceName);
+        return;
+      }
+      // Expirado (> 2 min): cai no fluxo normal
+    }
+
+    // 2) Cliente pediu cancelamento — perguntar confirmação
+    if (/\bcancel[ae]r?\b|cancela\b|desisto\b|n[aã]o quero mais\b|quiero cancelar\b/i.test(textoCliente)) {
+      const pedidoCancelavel = await _prisma.pedido.findFirst({
+        where: { clienteNumero: _numPedido, restauranteId: restaurante.id, status: { in: ['NOVO', 'CONFIRMADO'] } },
+        orderBy: { createdAt: 'desc' },
+      });
+      if (pedidoCancelavel) {
+        const numFmt = formatNumPedido(pedidoCancelavel);
+        _cancelPendente.set(_chaveCnl, { pedidoId: pedidoCancelavel.id, numFmt, expira: Date.now() + 120_000 });
+        const msgConf = idioma === 'es'
+          ? `⚠️ ¿Confirmas que deseas cancelar el pedido *#${numFmt}*?\n\nResponde *SIM* para confirmar o *NÃO* para mantener el pedido.`
+          : `⚠️ Confirma o cancelamento do pedido *#${numFmt}*?\n\nResponda *SIM* para cancelar ou *NÃO* para manter o pedido.`;
+        await salvarMensagem(sessao.id, 'cliente', textoCliente);
+        await salvarMensagem(sessao.id, 'bot', msgConf);
+        const agoraConf = new Date();
+        io?.to('admin').emit('conversa:mensagem', { sessaoId: sessao.id, mensagem: { role: 'cliente', conteudo: textoCliente, createdAt: agoraConf } });
+        io?.to(`restaurante:${restaurante.slugWhatsapp}`).emit('conversa:mensagem', { sessaoId: sessao.id, mensagem: { role: 'cliente', conteudo: textoCliente, createdAt: agoraConf } });
+        io?.to('admin').emit('conversa:mensagem', { sessaoId: sessao.id, mensagem: { role: 'bot', conteudo: msgConf, createdAt: agoraConf } });
+        io?.to(`restaurante:${restaurante.slugWhatsapp}`).emit('conversa:mensagem', { sessaoId: sessao.id, mensagem: { role: 'bot', conteudo: msgConf, createdAt: agoraConf } });
+        await enviarMensagem(remoteJid, msgConf, instanceName);
+        return;
+      }
+      const pedidoEmPreparo = await _prisma.pedido.findFirst({
+        where: { clienteNumero: _numPedido, restauranteId: restaurante.id, status: { in: ['PREPARANDO', 'AGUARDANDO_DESPACHO', 'EM_CAMINHO', 'SAIU_PARA_ENTREGA', 'PRONTO_PARA_RETIRADA'] } },
+        orderBy: { createdAt: 'desc' },
+      });
+      if (pedidoEmPreparo) {
+        const numFmt = formatNumPedido(pedidoEmPreparo);
+        const msg = idioma === 'es'
+          ? `⚠️ Tu pedido *#${numFmt}* ya está en preparación y no puede ser cancelado.\n\nPara cualquier consulta, comunícate directamente con el restaurante. 📞`
+          : `⚠️ Seu pedido *#${numFmt}* já está em preparo e não pode mais ser cancelado.\n\nPara dúvidas, entre em contato diretamente com o restaurante. 📞`;
+        await salvarMensagem(sessao.id, 'cliente', textoCliente);
+        await salvarMensagem(sessao.id, 'bot', msg);
+        const agoraPrp = new Date();
+        io?.to('admin').emit('conversa:mensagem', { sessaoId: sessao.id, mensagem: { role: 'cliente', conteudo: textoCliente, createdAt: agoraPrp } });
+        io?.to(`restaurante:${restaurante.slugWhatsapp}`).emit('conversa:mensagem', { sessaoId: sessao.id, mensagem: { role: 'cliente', conteudo: textoCliente, createdAt: agoraPrp } });
+        io?.to('admin').emit('conversa:mensagem', { sessaoId: sessao.id, mensagem: { role: 'bot', conteudo: msg, createdAt: agoraPrp } });
+        io?.to(`restaurante:${restaurante.slugWhatsapp}`).emit('conversa:mensagem', { sessaoId: sessao.id, mensagem: { role: 'bot', conteudo: msg, createdAt: agoraPrp } });
+        await enviarMensagem(remoteJid, msg, instanceName);
+        return;
+      }
+      // Sem pedido ativo — cai no Claude para responder naturalmente
+    }
+
+    // ── Debounce + espera de digitação: acumula mensagens antes de chamar o Claude ──
+    const _chave = _chaveCliente(clienteNumero, restaurante.id);
+    let _entry = _buffer.get(_chave);
+    if (_entry) {
+      clearTimeout(_entry.timer);
+      _entry.textos.push(textoCliente);
+    } else {
+      _entry = { textos: [textoCliente], sessao, fidelidade, promocoes, restaurante, cardapio, remoteJid, instanceName, idioma, io, clienteNumero };
+      _buffer.set(_chave, _entry);
+    }
+    _entry.timer = setTimeout(async () => {
+      // Se já há processamento em curso para este cliente, o while loop vai buscar
+      // as mensagens do buffer assim que o Claude terminar — não dispara outro
+      if (_processing.has(_chave)) return;
+
+      const toProcess = _buffer.get(_chave);
+      if (!toProcess) return; // já foi consumido pelo while loop
+      _buffer.delete(_chave);
+      await _aguardarNaoDigitando(_chave);
+
+      _processing.add(_chave);
+      let current = toProcess;
+      try {
+        while (current) {
+          await _processarComClaude(current.textos.join('\n'), current);
+          // Coleta mensagens que chegaram durante o processamento
+          const next = _buffer.get(_chave);
+          if (next) {
+            clearTimeout(next.timer);
+            _buffer.delete(_chave);
+            await _aguardarNaoDigitando(_chave);
+            current = next;
+          } else {
+            current = null;
+          }
+        }
+      } finally {
+        _processing.delete(_chave);
+      }
+    }, 3000);
+
+  } catch (err) {
+    console.error(`[webhook] erro (${restaurante.slugWhatsapp}):`, err.message);
+    try {
+      const msgErro = idioma === "es"
+        ? "Disculpa, tuve un problema. ¿Puedes repetir tu mensaje? 😅"
+        : "Desculpe, tive um probleminha aqui. Pode repetir sua mensagem? 😅";
+      await enviarMensagem(remoteJid, msgErro, instanceName);
+    } catch {
+      // silencioso
+    }
+  }
+}
+
+async function _processarComClaude(textoCliente, { sessao, fidelidade, promocoes, restaurante, cardapio, remoteJid, instanceName, idioma, io, clienteNumero }) {
+  try {
     const { resposta, novoEstado, carrinhoAtualizado, pedidoPronto, tipoEntrega, mostrarFotos } =
       await processarMensagem(sessao, textoCliente, restaurante, cardapio, fidelidade, promocoes, idioma);
 
@@ -730,37 +904,22 @@ async function receberMensagem(req, res) {
       return;
     }
 
-    // Mostra "digitando..." por duração proporcional ao tamanho da resposta
     const delayDigitando = calcularDelayDigitando(resposta.length);
     await enviarPresence(remoteJid, "composing", instanceName, delayDigitando);
     await new Promise((resolve) => setTimeout(resolve, delayDigitando));
 
-    // ── e) Persistir ──────────────────────────────────────────────────────────
     await Promise.all([
       salvarMensagem(sessao.id, "cliente", textoCliente),
       salvarMensagem(sessao.id, "bot", resposta),
     ]);
-    await atualizarSessao(sessao.id, {
-      estado: novoEstado,
-      carrinho: carrinhoAtualizado,
-    });
+    await atualizarSessao(sessao.id, { estado: novoEstado, carrinho: carrinhoAtualizado });
 
-    // Emite mensagens em tempo real para o painel (cliente e bot)
     const agora = new Date();
-    io?.to("admin").emit("conversa:mensagem", {
-      sessaoId: sessao.id,
-      mensagem: { role: "cliente", conteudo: textoCliente, createdAt: agora },
-    });
-    io?.to("admin").emit("conversa:mensagem", {
-      sessaoId: sessao.id,
-      mensagem: { role: "bot", conteudo: resposta, createdAt: agora },
-    });
+    io?.to("admin").emit("conversa:mensagem", { sessaoId: sessao.id, mensagem: { role: "cliente", conteudo: textoCliente, createdAt: agora } });
+    io?.to("admin").emit("conversa:mensagem", { sessaoId: sessao.id, mensagem: { role: "bot", conteudo: resposta, createdAt: agora } });
 
-    // ── f) Responder ao cliente ───────────────────────────────────────────────
     await enviarMensagem(remoteJid, resposta, instanceName);
 
-    // ── g) Enviar fotos do cardápio quando Claude sinalizar ───────────────────
-    // Guard: envia apenas uma vez por sessão via sinal automático do Claude
     if (mostrarFotos && restaurante.cardapioPdfUrl && !_sessoesFotosEnviadas.has(sessao.id)) {
       let fotos = null;
       try {
@@ -770,16 +929,13 @@ async function receberMensagem(req, res) {
 
       if (fotos) {
         _sessoesFotosEnviadas.add(sessao.id);
-        for (const url of fotos) {
-          await enviarImagem(remoteJid, url, "", instanceName);
-        }
+        for (const url of fotos) await enviarImagem(remoteJid, url, "", instanceName);
       } else if (/\.(jpg|jpeg|png|webp)$/i.test(restaurante.cardapioPdfUrl)) {
         _sessoesFotosEnviadas.add(sessao.id);
         await enviarImagem(remoteJid, restaurante.cardapioPdfUrl, "", instanceName);
       }
     }
 
-    // ── g) Pedido pronto → finalizar direto se pagamento já foi informado ───────
     if (pedidoPronto && novoEstado === "FINALIZADO") {
       sessao.carrinho = carrinhoAtualizado;
       const localizacao = tipoEntrega === "retirada" ? "Retirada no balcão" : textoCliente;
@@ -803,29 +959,21 @@ async function receberMensagem(req, res) {
         if (tipoEntrega !== "delivery") io?.to("admin").emit("conversa:encerrada", { sessaoId: sessao.id });
         io?.to(`restaurante:${restaurante.slugWhatsapp}`).emit("pedido:novo", { restauranteId: restaurante.id, pedido });
       } else {
-        await atualizarSessao(sessao.id, {
-          estado: "AGUARDANDO_PAGAMENTO",
-          localizacaoPendente: localizacao,
-        });
+        await atualizarSessao(sessao.id, { estado: "AGUARDANDO_PAGAMENTO", localizacaoPendente: localizacao });
         const msgPagamento = T[idioma].formaPagamentoPedido;
         await salvarMensagem(sessao.id, "bot", msgPagamento);
-        io?.to("admin").emit("conversa:mensagem", {
-          sessaoId: sessao.id,
-          mensagem: { role: "bot", conteudo: msgPagamento, createdAt: new Date() },
-        });
+        io?.to("admin").emit("conversa:mensagem", { sessaoId: sessao.id, mensagem: { role: "bot", conteudo: msgPagamento, createdAt: new Date() } });
         await enviarMensagem(remoteJid, msgPagamento, instanceName);
       }
     }
   } catch (err) {
-    console.error(`[webhook] erro (${restaurante.slugWhatsapp}):`, err.message);
+    console.error(`[webhook] erro Claude (${restaurante.slugWhatsapp}):`, err.message);
     try {
       const msgErro = idioma === "es"
         ? "Disculpa, tuve un problema. ¿Puedes repetir tu mensaje? 😅"
         : "Desculpe, tive um probleminha aqui. Pode repetir sua mensagem? 😅";
       await enviarMensagem(remoteJid, msgErro, instanceName);
-    } catch {
-      // silencioso
-    }
+    } catch {}
   }
 }
 

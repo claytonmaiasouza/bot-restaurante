@@ -33,7 +33,7 @@ body{font-family:-apple-system,BlinkMacSystemFont,'Segoe UI',sans-serif;backgrou
 .login-err{color:#ef4444;font-size:13px;text-align:center;margin-top:10px;min-height:18px}
 /* Header */
 .app-header{background:#fff;padding:12px 16px;display:flex;align-items:center;gap:10px;border-bottom:1.5px solid #f0f0f0;position:sticky;top:0;z-index:50;box-shadow:0 1px 6px rgba(0,0,0,.06)}
-.app-header .back-btn{width:34px;height:34px;border-radius:50%;background:#f6f6f6;border:none;cursor:pointer;font-size:18px;display:flex;align-items:center;justify-content:center;flex-shrink:0}
+.app-header .back-btn{width:38px;height:38px;border-radius:50%;background:#6366f1;border:none;cursor:pointer;display:flex;align-items:center;justify-content:center;flex-shrink:0;box-shadow:0 2px 8px rgba(99,102,241,.35)}
 .header-title{flex:1;font-size:16px;font-weight:700;color:#1a202c}
 .header-badge{background:#6366f1;color:#fff;font-size:12px;font-weight:700;padding:4px 10px;border-radius:20px;white-space:nowrap}
 .garcon-dot{width:12px;height:12px;border-radius:50%;flex-shrink:0;border:2px solid #fff;box-shadow:0 0 0 1px rgba(0,0,0,.1)}
@@ -89,7 +89,7 @@ body{font-family:-apple-system,BlinkMacSystemFont,'Segoe UI',sans-serif;backgrou
 #tab-btn-cesta.ativa{color:#fff;background:#f59e0b;border-color:#f59e0b;box-shadow:0 4px 14px rgba(245,158,11,.35)}
 /* Builder pizza */
 #garcon-bld-content{padding:12px}
-.garcon-bld-footer{background:#fff;border-top:1.5px solid #f0f0f0;padding:12px;position:sticky;bottom:0}
+.garcon-bld-footer{background:#fff;border-top:1.5px solid #f0f0f0;padding:12px;position:fixed;bottom:0;left:0;right:0;z-index:120;box-shadow:0 -2px 12px rgba(0,0,0,.08)}
 .garcon-bld-footer button{width:100%;padding:13px;background:#6366f1;color:#fff;font-size:15px;font-weight:700;border:none;border-radius:12px;cursor:pointer}
 /* Carrinho flutuante */
 #cart-fab{position:fixed;bottom:24px;right:20px;background:#6366f1;color:#fff;border:none;border-radius:50px;padding:12px 20px;font-size:14px;font-weight:700;cursor:pointer;box-shadow:0 4px 20px rgba(99,102,241,.45);display:none;align-items:center;gap:8px;z-index:100}
@@ -202,7 +202,7 @@ body{font-family:-apple-system,BlinkMacSystemFont,'Segoe UI',sans-serif;backgrou
 <!-- ── Screen: Mesa (detalhe) ───────────────────────────────────────────────── -->
 <div id="screen-mesa" class="screen">
   <div class="app-header">
-    <button class="back-btn" onclick="voltarHome()">←</button>
+    <button class="back-btn" onclick="voltarHome()"><svg xmlns="http://www.w3.org/2000/svg" width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="#fff" stroke-width="3" stroke-linecap="round" stroke-linejoin="round"><polyline points="15 18 9 12 15 6"></polyline></svg></button>
     <span class="header-title" id="mesa-titulo">Mesa</span>
     <button id="mesa-notif-bell" class="notif-bell" onclick="abrirProntoSheet()" title="Notificações" style="display:none">
       🔔<span class="notif-bell-badge" id="mesa-notif-badge">0</span>
@@ -238,7 +238,7 @@ body{font-family:-apple-system,BlinkMacSystemFont,'Segoe UI',sans-serif;backgrou
     <div id="tab-cardapio" class="tab-pane" style="display:none;flex-direction:column">
       <!-- Header interno: back + título + progresso -->
       <div id="garcon-app-header" style="background:#fff;border-bottom:1.5px solid #f0f0f0;padding:10px 12px;display:flex;align-items:center;gap:8px">
-        <button id="garcon-back-btn" onclick="garconAppBack()" style="display:none;width:30px;height:30px;border-radius:50%;background:#f3f4f6;border:none;cursor:pointer;font-size:16px">←</button>
+        <button id="garcon-back-btn" onclick="garconAppBack()" style="display:none;width:36px;height:36px;border-radius:50%;background:#6366f1;border:none;cursor:pointer;align-items:center;justify-content:center;box-shadow:0 2px 8px rgba(99,102,241,.35)"><svg xmlns="http://www.w3.org/2000/svg" width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="#fff" stroke-width="3" stroke-linecap="round" stroke-linejoin="round"><polyline points="15 18 9 12 15 6"></polyline></svg></button>
         <span id="garcon-app-titulo" style="flex:1;font-size:14px;font-weight:700;color:#1a202c">Cardápio</span>
         <div id="garcon-prg" style="display:none;font-size:11px;font-weight:700;color:#9ca3af;display:flex;align-items:center;gap:4px">
           <span id="g-prg-1" style="width:20px;height:20px;border-radius:50%;background:#6366f1;color:#fff;display:flex;align-items:center;justify-content:center;font-size:10px">1</span>
@@ -254,10 +254,10 @@ body{font-family:-apple-system,BlinkMacSystemFont,'Segoe UI',sans-serif;backgrou
       </div>
       <div id="garcon-screen-lista" style="display:none;flex:1;overflow-y:auto;position:relative">
         <div id="garcon-lista-items" class="garcon-lista-items" style="padding-bottom:72px"></div>
-        <button onclick="garconAppBack()" style="position:fixed;bottom:24px;left:50%;transform:translateX(-50%);background:#ef4444;color:#fff;border:none;border-radius:12px;padding:14px 36px;font-size:14px;font-weight:700;cursor:pointer;box-shadow:0 4px 16px rgba(239,68,68,.35);z-index:200;white-space:nowrap">← Categorias</button>
+        <button onclick="garconAppBack()" style="position:fixed;bottom:24px;left:50%;transform:translateX(-50%);background:#ef4444;color:#fff;border:none;border-radius:12px;padding:14px 36px;font-size:14px;font-weight:700;cursor:pointer;box-shadow:0 4px 16px rgba(239,68,68,.35);z-index:200;white-space:nowrap;display:flex;align-items:center;gap:8px"><svg xmlns="http://www.w3.org/2000/svg" width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="#fff" stroke-width="3" stroke-linecap="round" stroke-linejoin="round"><polyline points="15 18 9 12 15 6"></polyline></svg> Categorias</button>
       </div>
       <div id="garcon-screen-builder" style="display:none;flex-direction:column;flex:1;min-height:0">
-        <div id="garcon-bld-content" style="flex:1;overflow-y:auto;padding:12px"></div>
+        <div id="garcon-bld-content" style="flex:1;overflow-y:auto;padding:12px 12px 80px"></div>
         <div class="garcon-bld-footer">
           <button id="garcon-bld-btn" onclick="garconAppAvancar()">Próximo →</button>
         </div>
@@ -746,8 +746,8 @@ async function iniciarConfirmacaoCarrinho() {
         return cn.includes('bebida') || cn.includes('refriger') || cn.includes('suco') ||
           cn.includes('jugo') || cn.includes('drink') || cn.includes('cerveja') || cn.includes('cerveza');
       });
+      mudarTab('cardapio');
       if (catBebida) garconAbrirCat(catBebida.id);
-      else mudarTab('cardapio');
       resolve();
     };
     document.getElementById('_beb-nao').onclick = async () => {
@@ -769,6 +769,21 @@ function resetAppCardapio() {
 }
 
 function gNorm(s) { return (s||'').toLowerCase().normalize('NFD').replace(/[̀-ͯ]/g,''); }
+
+function gBordaEmoji(nome) {
+  const n = gNorm(nome);
+  if (/mista|mix/.test(n)) return '🎨';
+  if (/choco|nutella|cacau/.test(n)) return '🍫';
+  if (/doce.*leite|dulce.*leche|caramelo|mel\b/.test(n)) return '🍯';
+  if (/morango|fresa|strawberry/.test(n)) return '🍓';
+  if (/bacon|panceta/.test(n)) return '🥓';
+  if (/calabresa|pepperoni|linguica|salame/.test(n)) return '🌶️';
+  if (/frango|chicken|pollo/.test(n)) return '🍗';
+  if (/atum|tuna/.test(n)) return '🐟';
+  if (/catupiry|cream.?cheese|requeijao|requeijão|philadelphia/.test(n)) return '🧀';
+  if (/cheddar|mussarela|mozzarella|queijo|queso/.test(n)) return '🧀';
+  return '🧀';
+}
 
 function gCatEmoji(nome) {
   const n = gNorm(nome);
@@ -933,25 +948,9 @@ function garconSetPrg(passo, show, temBorda) {
   });
 }
 
-function _gBldFooterScrollMode(enable, threshold=250) {
+function _gBldFooterScrollMode() {
   const footer = document.querySelector('.garcon-bld-footer');
-  const content = document.getElementById('garcon-bld-content');
-  if (!footer || !content) return;
-  if (!enable) { footer.style.display = 'block'; content.onscroll = null; return; }
-  footer.style.display = 'none';
-  content.scrollTop = 0;
-  content.onscroll = function() {
-    if (content.scrollTop >= threshold) {
-      footer.style.display = 'block';
-      content.onscroll = null;
-    }
-  };
-  requestAnimationFrame(() => {
-    if (content.scrollHeight <= content.clientHeight + 10) {
-      footer.style.display = 'block';
-      content.onscroll = null;
-    }
-  });
+  if (footer) footer.style.display = 'block';
 }
 
 function garconRenderTamStep(ehPizza) {
@@ -1033,7 +1032,7 @@ function _gSetPrincipalGarcon(nome) {
 }
 
 function garconRenderSabStep() {
-  _gBldFooterScrollMode(true, 250);
+  _gBldFooterScrollMode(true);
   const content = document.getElementById('garcon-bld-content');
   if (!content || !gAppCat) return;
   const max = gAppPizza.maxSabores || 2;
@@ -1103,10 +1102,16 @@ function garconRenderBordaStep() {
 
   if (gAppPizza.bordaMista) {
     const sel = gAppPizza.bordaMistaSabores;
-    content.innerHTML = `<p style="font-size:13px;font-weight:700;color:#4b5563;margin-bottom:4px">🎨 Borda Mista</p><p style="font-size:11px;color:#9ca3af;margin-bottom:12px">Escolha até 2 sabores de borda</p>`;
+    const selCount = sel.length;
+    content.innerHTML = `
+      <p style="font-size:13px;font-weight:700;color:#4b5563;margin-bottom:4px">🎨 Borda Mista</p>
+      <div style="display:flex;align-items:center;justify-content:space-between;margin-bottom:12px">
+        <p style="font-size:12px;color:#6b7280">Escolha exatamente 2 sabores</p>
+        <span style="font-size:12px;font-weight:700;padding:2px 10px;border-radius:20px;background:${selCount===2?'#dcfce7':'#f3f4f6'};color:${selCount===2?'#16a34a':'#6b7280'}">${selCount}/2</span>
+      </div>`;
     const vBtn = document.createElement('div');
     vBtn.style.cssText = 'display:flex;align-items:center;gap:10px;padding:10px 14px;background:#f9fafb;border:2px solid #e5e7eb;border-radius:12px;margin-bottom:12px;cursor:pointer';
-    vBtn.innerHTML = '<span style="font-size:14px">◀</span><p style="font-size:13px;font-weight:600;color:#4b5563">Escolher outra borda</p>';
+    vBtn.innerHTML = '<svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="#6b7280" stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round"><polyline points="15 18 9 12 15 6"/></svg><p style="font-size:13px;font-weight:600;color:#4b5563">Voltar e escolher outra borda</p>';
     vBtn.onclick = () => { gAppPizza.bordaMista=false; gAppPizza.bordaMistaSabores=[]; gAppPizza.borda=false; gAppPizza.saborBorda=null; gAppPizza.precoBorda=0; garconRenderBordaStep(); };
     content.appendChild(vBtn);
     bordas.filter(b => !/mista/i.test(b.nome)).forEach(b => {
@@ -1114,8 +1119,12 @@ function garconRenderBordaStep() {
       const lotado = !isSel && sel.length >= 2;
       const div = document.createElement('div');
       div.style.cssText = `display:flex;align-items:center;gap:12px;padding:14px;background:${isSel ? '#eef2ff' : '#fff'};border:2px solid ${isSel ? '#6366f1' : '#e5e7eb'};border-radius:14px;margin-bottom:8px;cursor:${lotado ? 'not-allowed' : 'pointer'};opacity:${lotado ? '.4' : '1'}`;
-      div.innerHTML = `<div style="width:24px;height:24px;border-radius:50%;border:2px solid ${isSel ? '#6366f1' : '#d1d5db'};background:${isSel ? '#6366f1' : 'transparent'};display:flex;align-items:center;justify-content:center;font-size:12px;color:#fff;font-weight:800">${isSel ? '✓' : ''}</div><div style="flex:1"><p style="font-size:14px;font-weight:800;color:${isSel ? '#4338ca' : '#1a202c'}">${b.nome}</p></div>`;
-      if (!lotado) div.onclick = () => { const i=sel.indexOf(b.nome); if(i>=0) sel.splice(i,1); else sel.push(b.nome); garconRenderBordaStep(); };
+      div.innerHTML = `<span style="font-size:24px">${gBordaEmoji(b.nome)}</span><div style="flex:1"><p style="font-size:14px;font-weight:800;color:${isSel ? '#4338ca' : '#1a202c'}">${b.nome}</p></div><div style="width:24px;height:24px;border-radius:50%;border:2px solid ${isSel ? '#6366f1' : '#d1d5db'};background:${isSel ? '#6366f1' : 'transparent'};display:flex;align-items:center;justify-content:center;font-size:12px;color:#fff;font-weight:800;flex-shrink:0">${isSel ? '✓' : ''}</div>`;
+      if (!lotado) div.onclick = () => {
+        const i = sel.indexOf(b.nome);
+        if (i >= 0) { sel.splice(i, 1); garconRenderBordaStep(); }
+        else { sel.push(b.nome); if (sel.length === 2) { garconFinalizarPizza(); } else { garconRenderBordaStep(); } }
+      };
       content.appendChild(div);
     });
     return;
@@ -1133,7 +1142,7 @@ function garconRenderBordaStep() {
     const isSel = gAppPizza.borda && gAppPizza.saborBorda === b.nome;
     const div = document.createElement('div');
     div.style.cssText = `display:flex;align-items:center;gap:12px;padding:14px;background:${isSel ? '#eef2ff' : '#fff'};border:2px solid ${isSel ? '#6366f1' : '#e5e7eb'};border-radius:14px;margin-bottom:8px;cursor:pointer`;
-    div.innerHTML = `<span style="font-size:26px">${isMista ? '🎨' : '🧀'}</span><div style="flex:1"><p style="font-size:14px;font-weight:800;color:${isSel ? '#4338ca' : '#1a202c'}">${b.nome}</p><p style="font-size:11px;${extra > 0 ? 'color:#ea580c;font-weight:700' : 'color:#9ca3af'}">${extra > 0 ? '+ ' + fmtPreco(extra) : 'Incluído'}${isMista ? ' · escolha 2 sabores →' : ''}</p></div>`;
+    div.innerHTML = `<span style="font-size:26px">${gBordaEmoji(b.nome)}</span><div style="flex:1"><p style="font-size:14px;font-weight:800;color:${isSel ? '#4338ca' : '#1a202c'}">${b.nome}</p><p style="font-size:11px;${extra > 0 ? 'color:#ea580c;font-weight:700' : 'color:#9ca3af'}">${extra > 0 ? '+ ' + fmtPreco(extra) : 'Incluído'}${isMista ? ' · 2 sabores →' : ''}</p></div>`;
     div.onclick = () => {
       gAppPizza.borda=true; gAppPizza.saborBorda=b.nome; gAppPizza.precoBorda=extra;
       if (isMista) { gAppPizza.bordaMista=true; gAppPizza.bordaMistaSabores=[]; }
@@ -1168,7 +1177,7 @@ function garconAppAvancar() {
     }
   } else if (p === 3) {
     if (gAppPizza.borda && !gAppPizza.saborBorda) { toast('Escolha o sabor da borda 🧀'); return; }
-    if (gAppPizza.bordaMista && gAppPizza.bordaMistaSabores.length < 1) { toast('Escolha pelo menos 1 sabor de borda mista'); return; }
+    if (gAppPizza.bordaMista && gAppPizza.bordaMistaSabores.length < 2) { toast('Escolha 2 sabores para a borda mista 🎨'); return; }
     garconFinalizarPizza();
   }
 }

@@ -27,6 +27,7 @@ model Restaurante {
   instrucoes          String?     // Instruções livres para o agente IA (recheios de borda, regras de tamanho, etc.)
   selfServiceUrl      String?     // URL customizada do self-service web (ex: bit.ly/restaurante) — sobrescreve a URL gerada
   instanceEvolution   String?     // Nome da instância na Evolution API (se diferente do slugWhatsapp)
+  whatsappPublico     String?     // Número exibido/usado em links wa.me pro cliente (se diferente do slugWhatsapp)
   sessoes              Sessao[]
   pedidos              Pedido[]
   turnosCaixa          TurnoCaixa[]

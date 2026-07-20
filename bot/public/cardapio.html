@@ -1830,7 +1830,7 @@ async function finalizar() {
         ? 'Logo nosso entregador estará aí com seu pedido! 🛵'
         : 'Pode vir buscar em alguns minutinhos! 🏃';
     const waMsg = `Olá! Quero acompanhar meu pedido #${numeroPedido}`;
-    document.getElementById('btn-whatsapp-pedido').href = `https://wa.me/${SLUG}?text=${encodeURIComponent(waMsg)}`;
+    document.getElementById('btn-whatsapp-pedido').href = `https://wa.me/${G.rest.whatsappPublico || SLUG}?text=${encodeURIComponent(waMsg)}`;
 
     G.cart = []; sync();
     salvarDadosCliente();

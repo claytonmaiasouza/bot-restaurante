@@ -57,6 +57,7 @@ router.get("/:slug", async (req, res) => {
         taxaEntrega: restaurante.taxaEntrega,
         moeda: restaurante.moeda,
         dadosTransferencia: restaurante.dadosTransferencia || null,
+        whatsappPublico: restaurante.whatsappPublico || restaurante.slugWhatsapp,
       },
       promocoes: promocoesHoje,
       cardapio: restaurante.categorias
